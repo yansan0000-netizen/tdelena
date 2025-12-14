@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRuns } from '@/hooks/useRuns';
+import { useProcessing } from '@/hooks/useProcessing';
 import { useToast } from '@/hooks/use-toast';
 import { Play, Download, Loader2, BarChart3, Calendar, Rows3 } from 'lucide-react';
 import { Run } from '@/lib/types';
@@ -14,9 +15,9 @@ import { Run } from '@/lib/types';
 export default function NewRun() {
   const [file, setFile] = useState<File | null>(null);
   const [mode, setMode] = useState<RunMode>('1C_RAW');
-  const [isProcessing, setIsProcessing] = useState(false);
   const [currentRun, setCurrentRun] = useState<Run | null>(null);
   const { createRun, getRun, updateRunStatus, getDownloadUrl } = useRuns();
+  const { isProcessing, progress, processRun } = useProcessing();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -31,13 +32,18 @@ export default function NewRun() {
       if (updated) {
         setCurrentRun(updated);
         if (updated.status === 'DONE' || updated.status === 'ERROR') {
-          setIsProcessing(false);
+          if (updated.status === 'DONE') {
+            toast({
+              title: 'Обработка завершена!',
+              description: 'Результаты готовы к скачиванию',
+            });
+          }
         }
       }
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [currentRun, getRun]);
+  }, [currentRun, getRun, toast]);
 
   const handleStartRun = async () => {
     if (!file) {
@@ -49,7 +55,7 @@ export default function NewRun() {
       return;
     }
 
-    setIsProcessing(true);
+    // Create run record and upload file
     const runId = await createRun(file, mode);
 
     if (!runId) {
@@ -58,36 +64,41 @@ export default function NewRun() {
         description: 'Не удалось создать запуск',
         variant: 'destructive',
       });
-      setIsProcessing(false);
       return;
     }
 
     // Get the created run
     const run = await getRun(runId);
+    if (!run || !run.input_file_path) {
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось получить данные запуска',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setCurrentRun(run);
 
-    // Simulate processing (в реальности здесь будет вызов обработки)
+    // Set status to PROCESSING
     await updateRunStatus(runId, 'PROCESSING');
     const updatedRun = await getRun(runId);
     setCurrentRun(updatedRun);
 
-    // TODO: Trigger actual processing via Edge Function
-    // For now, simulate completion after delay
-    setTimeout(async () => {
-      await updateRunStatus(runId, 'DONE', {
-        periods_found: 12,
-        rows_processed: 1543,
-        last_period: '2024-12',
-      });
-      const finalRun = await getRun(runId);
-      setCurrentRun(finalRun);
-      setIsProcessing(false);
-      
+    // Start actual processing
+    const success = await processRun(runId, mode, run.input_file_path);
+    
+    if (!success) {
       toast({
-        title: 'Обработка завершена!',
-        description: 'Результаты готовы к скачиванию',
+        title: 'Ошибка обработки',
+        description: 'Проверьте формат файла и попробуйте снова',
+        variant: 'destructive',
       });
-    }, 3000);
+    }
+
+    // Fetch final state
+    const finalRun = await getRun(runId);
+    setCurrentRun(finalRun);
   };
 
   const handleDownload = async (bucket: string, path: string | null, filename: string) => {
@@ -105,7 +116,6 @@ export default function NewRun() {
   const handleReset = () => {
     setFile(null);
     setCurrentRun(null);
-    setIsProcessing(false);
   };
 
   return (
@@ -164,7 +174,7 @@ export default function NewRun() {
             {isProcessing ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
-                Обработка...
+                {progress || 'Обработка...'}
               </>
             ) : (
               <>
@@ -186,11 +196,11 @@ export default function NewRun() {
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Progress indicator for processing */}
-              {currentRun.status === 'PROCESSING' && (
+              {(currentRun.status === 'PROCESSING' || currentRun.status === 'QUEUED') && (
                 <div className="flex items-center gap-3 p-4 bg-primary/5 rounded-lg">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
                   <div>
-                    <p className="font-medium">Обработка файла...</p>
+                    <p className="font-medium">{progress || 'Обработка файла...'}</p>
                     <p className="text-sm text-muted-foreground">
                       Это может занять несколько минут
                     </p>
@@ -284,6 +294,26 @@ export default function NewRun() {
                     </Button>
                   </div>
                 </>
+              )}
+
+              {/* Error state actions */}
+              {currentRun.status === 'ERROR' && (
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => navigate(`/runs/${currentRun.id}`)}
+                  >
+                    Посмотреть логи
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="flex-1"
+                    onClick={handleReset}
+                  >
+                    Попробовать снова
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>
