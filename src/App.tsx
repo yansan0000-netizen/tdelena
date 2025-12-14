@@ -10,6 +10,7 @@ import Auth from "./pages/Auth";
 import NewRun from "./pages/NewRun";
 import RunsList from "./pages/RunsList";
 import RunDetails from "./pages/RunDetails";
+import Documentation from "./pages/Documentation";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/docs" element={<Documentation />} />
             <Route
               path="/new"
               element={

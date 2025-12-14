@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
-import { FileSpreadsheet, History, Plus, LogOut } from 'lucide-react';
+import { FileSpreadsheet, History, Plus, LogOut, BookOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AppLayoutProps {
@@ -22,6 +22,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const navItems = [
     { path: '/new', label: 'Новый расчёт', icon: Plus },
     { path: '/runs', label: 'История', icon: History },
+    { path: '/docs', label: 'Документация', icon: BookOpen },
   ];
 
   return (
