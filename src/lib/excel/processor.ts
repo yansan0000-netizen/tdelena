@@ -115,26 +115,54 @@ export class ExcelProcessor {
     let data = sheetToArray(sheet);
     this.logger.info('DATA', `Загружено строк: ${data.length}`);
 
-    // Step 2: Try to parse period from C2
+    // Step 2: Try to parse period from first few rows (check various cells)
     let periodStart: string | null = null;
     let periodEnd: string | null = null;
     
-    if (data[1] && data[1][2]) {
-      const periodStr = String(data[1][2]);
-      if (periodStr.includes('Период')) {
-        const parsed = parsePeriodString(periodStr);
-        if (parsed.start && parsed.end) {
-          periodStart = parsed.start.toISOString().split('T')[0];
-          periodEnd = parsed.end.toISOString().split('T')[0];
-          this.logger.info('PERIOD', `Найден период: ${periodStart} - ${periodEnd}`);
+    // Search first 5 rows for period info
+    for (let rowIdx = 0; rowIdx < Math.min(5, data.length); rowIdx++) {
+      const row = data[rowIdx];
+      for (let colIdx = 0; colIdx < Math.min(10, row?.length || 0); colIdx++) {
+        const cellValue = row[colIdx];
+        if (cellValue) {
+          const cellStr = String(cellValue);
+          if (cellStr.includes('Период') || cellStr.match(/\d{2}\.\d{2}\.\d{4}\s*[-–—]\s*\d{2}\.\d{2}\.\d{4}/)) {
+            const parsed = parsePeriodString(cellStr);
+            if (parsed.start && parsed.end) {
+              periodStart = parsed.start.toISOString().split('T')[0];
+              periodEnd = parsed.end.toISOString().split('T')[0];
+              this.logger.info('PERIOD', `Найден период в ячейке [${rowIdx}][${colIdx}]: ${periodStart} - ${periodEnd}`);
+              break;
+            }
+          }
         }
       }
+      if (periodStart) break;
     }
 
-    // Step 3: Remove first 5 rows (service info)
-    const rowsToRemove = Math.min(5, data.length - 1);
-    data = data.slice(rowsToRemove);
-    this.logger.action('CLEAN', `Удалено первых строк: ${rowsToRemove}`);
+    // Step 3: Find header row - look for row with month names
+    let headerRowIdx = 0;
+    for (let i = 0; i < Math.min(15, data.length); i++) {
+      const row = data[i];
+      let monthCount = 0;
+      for (const cell of row || []) {
+        if (cell && parseMonthYear(String(cell))) {
+          monthCount++;
+        }
+      }
+      if (monthCount >= 3) { // Found row with multiple months
+        headerRowIdx = i;
+        this.logger.info('HEADERS', `Найдена строка заголовков с месяцами: ${i}`);
+        break;
+      }
+    }
+    
+    // Remove rows before header, but keep info about them
+    const rowsToRemove = Math.max(0, headerRowIdx);
+    if (rowsToRemove > 0) {
+      data = data.slice(rowsToRemove);
+      this.logger.action('CLEAN', `Удалено первых строк до заголовков: ${rowsToRemove}`);
+    }
 
     // Step 4: Process headers (flatten multi-row header)
     const { headers, dataStartRow } = this.flattenHeaders(data);
@@ -458,13 +486,14 @@ export class ExcelProcessor {
 
   /**
    * Detect period columns and return sorted list
+   * Searches for Russian month names with years (e.g., "Октябрь 2024")
    */
   private detectPeriods(headers: string[]): string[] {
     const periods: { label: string; date: Date }[] = [];
 
     for (const header of headers) {
       const parsed = parseMonthYear(header);
-      if (parsed && isQuantityColumn(header)) {
+      if (parsed) {
         const label = formatMonthYear(parsed.month, parsed.year);
         const date = new Date(parsed.year, parsed.month, 1);
         
