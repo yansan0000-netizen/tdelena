@@ -33,6 +33,14 @@ export function useRuns() {
     fetchRuns();
   }, [fetchRuns]);
 
+  // Generate safe filename for storage (ASCII only)
+  const generateSafeFileName = (originalName: string): string => {
+    const ext = originalName.split('.').pop() || 'xlsx';
+    const timestamp = Date.now();
+    const randomStr = Math.random().toString(36).substring(2, 8);
+    return `file_${timestamp}_${randomStr}.${ext}`;
+  };
+
   const createRun = async (file: File, mode: RunMode): Promise<string | null> => {
     if (!user) return null;
 
@@ -43,7 +51,7 @@ export function useRuns() {
         user_id: user.id,
         mode,
         status: 'QUEUED',
-        input_filename: file.name,
+        input_filename: file.name, // Keep original name for display
         log: [],
       })
       .select()
@@ -54,8 +62,9 @@ export function useRuns() {
       return null;
     }
 
-    // Upload file to storage
-    const filePath = `${user.id}/${run.id}/${file.name}`;
+    // Upload file to storage with safe filename
+    const safeFileName = generateSafeFileName(file.name);
+    const filePath = `${user.id}/${run.id}/${safeFileName}`;
     const { error: uploadError } = await supabase.storage
       .from('sales-input')
       .upload(filePath, file);
