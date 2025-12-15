@@ -25,8 +25,10 @@ import {
 import {
   normalizeArticleStrict,
   extractGroupFromArticle,
+  extractGroupCode,
   normalizeCategorySmart,
-  findColIndexFlexible
+  findColIndexFlexible,
+  cleanArticleForDisplay
 } from './categories';
 import { calculateXYZByArticles, getABCXYZRecommendation } from './xyz';
 
@@ -406,28 +408,37 @@ export class ExcelProcessor {
     priceColIdx: number,
     itogoColIdx: number
   ): { rows: RowData[]; headers: string[] } {
+    // Base headers at the beginning, then all original headers
     const baseHeaders = ['Группа товаров', 'Артикул', 'ABC Группа', 'ABC Артикул', 'Категория', 'XYZ-Группа', 'Рекомендация'];
     const newHeaders = [...baseHeaders, ...headers];
     const rows: RowData[] = [];
 
     for (const rawRow of rawRows) {
-      if (!rawRow || rawRow.every(c => c === null || c === '')) continue;
+      // Skip completely empty rows
+      if (!rawRow || rawRow.every(c => c === null || c === undefined || c === '')) continue;
       
-      // Use strict article normalization from script
-      const rawArticle = String(rawRow[articleColIdx] || '');
-      const article = normalizeArticleStrict(rawArticle);
-      if (!article) continue;
-
-      // Extract group from article using script logic
-      const group = extractGroupFromArticle(article);
+      // Get raw article - keep original for display
+      const rawArticle = String(rawRow[articleColIdx] || '').trim();
+      
+      // Skip rows without article (but not rows with article = 0 or numeric)
+      if (!rawArticle) continue;
+      
+      // Clean article for display (keeps original value, just trims)
+      const displayArticle = cleanArticleForDisplay(rawArticle);
+      
+      // Extract group code (first 4 digits) for grouping
+      const groupCode = extractGroupCode(rawArticle);
+      
+      // Extract product group from article
+      const group = extractGroupFromArticle(rawArticle);
       
       // Normalize category using smart category mapping
       const rawCategory = categoryColIdx >= 0 ? String(rawRow[categoryColIdx] || '') : '';
       const category = normalizeCategorySmart(rawCategory);
       
       const row: RowData = {
-        'Группа товаров': group,
-        'Артикул': article,
+        'Группа товаров': groupCode,
+        'Артикул': displayArticle,
         'ABC Группа': '',
         'ABC Артикул': '',
         'Категория': category,
@@ -435,36 +446,46 @@ export class ExcelProcessor {
         'Рекомендация': '',
       };
 
-      // Copy original columns
+      // Copy ALL original columns
       for (let i = 0; i < headers.length; i++) {
         const val = rawRow[i];
         const headerLower = headers[i].toLowerCase();
         
         // Parse numeric columns
         if (isQuantityColumn(headers[i]) || isRevenueColumn(headers[i]) || 
-            headerLower.includes('остаток') || headerLower.includes('цена')) {
+            headerLower.includes('остаток') || headerLower.includes('цена') ||
+            headerLower.includes('кол-во') || headerLower.includes('сумма')) {
           row[headers[i]] = parseNumber(val);
         } else {
           row[headers[i]] = val;
         }
       }
 
-      // Set aggregated revenue
-      if (revenueColIdx >= 0) {
-        row['Выручка'] = parseNumber(rawRow[revenueColIdx]);
+      // Calculate total revenue - prefer "Итого" column, else sum period columns
+      let totalRevenue = 0;
+      
+      // First try to find "Итого Сумма" or similar column
+      const itogoSummaIdx = headers.findIndex(h => {
+        const hl = h.toLowerCase();
+        return hl.includes('итого') && (hl.includes('сумма') || hl.includes('выручка'));
+      });
+      
+      if (itogoSummaIdx >= 0) {
+        totalRevenue = parseNumber(rawRow[itogoSummaIdx]);
+      } else if (revenueColIdx >= 0) {
+        totalRevenue = parseNumber(rawRow[revenueColIdx]);
       } else {
-        // Sum all revenue columns
-        let totalRevenue = 0;
+        // Sum all revenue columns before Итого
         for (let i = 0; i < headers.length; i++) {
-          if (itogoColIdx >= 0 && i >= itogoColIdx) break; // Stop at Итого
+          if (itogoColIdx >= 0 && i >= itogoColIdx) break;
           if (isRevenueColumn(headers[i])) {
             totalRevenue += parseNumber(rawRow[i]);
           }
         }
-        row['Выручка'] = totalRevenue;
       }
+      row['Выручка'] = totalRevenue;
 
-      // Set stock
+      // Set stock from first available stock column
       if (stockColIdx >= 0) {
         row['Остаток'] = parseNumber(rawRow[stockColIdx]);
       }
@@ -477,6 +498,7 @@ export class ExcelProcessor {
       rows.push(row);
     }
 
+    this.logger.info('BUILD', `Обработано строк: ${rows.length}`);
     return { rows, headers: newHeaders };
   }
 

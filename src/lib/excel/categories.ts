@@ -3,8 +3,9 @@
  */
 
 /**
- * Normalize article code - extract clean article with strict rules
+ * Normalize article code for grouping purposes - extract clean article with strict rules
  * Based on normalizeArticleVisual_STRICT_ from the script
+ * This is used for ABC/XYZ grouping, NOT for display
  */
 export function normalizeArticleStrict(rawValue: string | null | undefined): string {
   if (!rawValue) return '';
@@ -15,40 +16,60 @@ export function normalizeArticleStrict(rawValue: string | null | undefined): str
   
   if (!s) return '';
   
-  // Prefix with М if starts with latin M or doesn't start with М
-  if (s[0] === 'M') {
-    s = 'М' + s.slice(1);
-  } else if (s[0] !== 'М') {
-    s = 'М' + s;
+  // For grouping: extract base article (first numeric part)
+  // Example: "10001А" -> "10001", "10001Аа" -> "10001"
+  const match = s.match(/^(\d+)/);
+  if (match) {
+    return match[1];
   }
-  
-  // Remove all lowercase letters (both Latin and Cyrillic)
-  s = s.replace(/[a-zа-яё]+/g, '');
-  
-  // Remove trailing dashes/underscores
-  s = s.replace(/[-_]+$/, '');
   
   return s;
 }
 
 /**
- * Extract product group from normalized article
- * Based on groupFromArticle_ from the script
+ * Clean article for display - keeps original but trims and normalizes whitespace
  */
-export function extractGroupFromArticle(rawNormArticle: string): string {
-  const s = String(rawNormArticle || '').toUpperCase();
+export function cleanArticleForDisplay(rawValue: string | null | undefined): string {
+  if (!rawValue) return '';
+  return String(rawValue).trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * Extract product group from article code
+ * Based on groupFromArticle_ from the script - uses first 4-5 digits
+ */
+export function extractGroupFromArticle(rawArticle: string): string {
+  const s = String(rawArticle || '').trim();
   
-  if (/^МП/.test(s)) return 'женская';
+  // Extract first numeric sequence
+  const match = s.match(/^(\d+)/);
+  if (!match) return 'другая';
   
-  const prefix = s.substring(0, 2);
-  switch (prefix) {
-    case 'М1': return 'мужская';
-    case 'М2': return 'детская';
-    case 'М3': return 'женская';
-    case 'М4': return 'ясельная';
-    case 'М5': return 'другая';
+  const numStr = match[1];
+  
+  // First digit determines main group
+  const firstDigit = numStr[0];
+  
+  switch (firstDigit) {
+    case '1': return 'мужская';
+    case '2': return 'детская';
+    case '3': return 'женская';
+    case '4': return 'ясельная';
+    case '5': return 'другая';
     default: return 'другая';
   }
+}
+
+/**
+ * Extract group code (first 4 digits) for ABC analysis
+ */
+export function extractGroupCode(rawArticle: string): string {
+  const s = String(rawArticle || '').trim();
+  const match = s.match(/^(\d{4,5})/);
+  if (match) {
+    return match[1].substring(0, 4); // First 4 digits
+  }
+  return s.substring(0, 4);
 }
 
 /**

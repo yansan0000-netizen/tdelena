@@ -5,30 +5,63 @@ import { calculateXYZByArticles, getABCXYZRecommendation } from './xyz';
 
 /**
  * Generate processed report Excel file
+ * Output format: Sheet "Данные" with all original columns + calculated fields
  */
 export function generateProcessedReport(data: ProcessedData): Blob {
   const workbook = XLSX.utils.book_new();
 
-  // Sheet 1: Данные
-  const dataHeaders = ['Группа товаров', 'Артикул', 'ABC Группа', 'ABC Артикул', 'Категория', 'XYZ-Группа', 'Рекомендация'];
+  // Sheet 1: Данные - output format matching user's expected structure
+  // First 7 columns are calculated, rest are original data
+  const baseHeaders = [
+    'Группа товаров', 
+    'Артикул', 
+    'ABC Группа', 
+    'ABC Артикул', 
+    'Категория',
+    'XYZ-Группа',
+    'Рекомендация'
+  ];
   
-  const existingHeaders = new Set(dataHeaders);
-  for (const header of data.headers) {
-    if (!existingHeaders.has(header)) {
-      dataHeaders.push(header);
-      existingHeaders.add(header);
+  // Collect all unique headers from data (excluding base headers)
+  const dataHeaders = new Set<string>();
+  for (const row of data.dataSheet) {
+    for (const key of Object.keys(row)) {
+      if (!baseHeaders.includes(key) && key !== 'Выручка' && key !== 'Остаток' && key !== 'Цена') {
+        dataHeaders.add(key);
+      }
     }
   }
-
-  const dataRows = data.dataSheet.map(row => dataHeaders.map(h => row[h] ?? ''));
-  const dataSheet = XLSX.utils.aoa_to_sheet([dataHeaders, ...dataRows]);
+  
+  // Build final headers: base + original
+  const finalHeaders = [...baseHeaders, ...Array.from(dataHeaders)];
+  
+  // Build data rows
+  const dataRows = data.dataSheet.map(row => 
+    finalHeaders.map(h => {
+      const val = row[h];
+      if (val === null || val === undefined) return '';
+      return val;
+    })
+  );
+  
+  const dataSheet = XLSX.utils.aoa_to_sheet([finalHeaders, ...dataRows]);
+  
+  // Set column widths
+  const colWidths = finalHeaders.map(h => ({ wch: Math.max(h.length, 12) }));
+  dataSheet['!cols'] = colWidths;
+  
   XLSX.utils.book_append_sheet(workbook, dataSheet, 'Данные');
 
   // Sheet 2: АБЦ по группам
   if (data.abcByGroups.length > 0) {
     const groupHeaders = ['Группа', 'Категория', 'Выручка', 'Доля %', 'Накопл. доля %', 'ABC'];
     const groupRows = data.abcByGroups.map(item => [
-      item.name, item.category || '', item.revenue, item.share, item.cumulativeShare, item.abc,
+      item.name, 
+      item.category || '', 
+      item.revenue, 
+      Math.round(item.share * 10000) / 100, // Convert to percentage
+      Math.round(item.cumulativeShare * 10000) / 100, 
+      item.abc,
     ]);
     const groupSheet = XLSX.utils.aoa_to_sheet([groupHeaders, ...groupRows]);
     XLSX.utils.book_append_sheet(workbook, groupSheet, 'АБЦ по группам');
@@ -38,7 +71,11 @@ export function generateProcessedReport(data: ProcessedData): Blob {
   if (data.abcByArticles.length > 0) {
     const articleHeaders = ['Артикул', 'Выручка', 'Доля %', 'Накопл. доля %', 'ABC'];
     const articleRows = data.abcByArticles.map(item => [
-      item.name, item.revenue, item.share, item.cumulativeShare, item.abc,
+      item.name, 
+      item.revenue, 
+      Math.round(item.share * 10000) / 100,
+      Math.round(item.cumulativeShare * 10000) / 100, 
+      item.abc,
     ]);
     const articleSheet = XLSX.utils.aoa_to_sheet([articleHeaders, ...articleRows]);
     XLSX.utils.book_append_sheet(workbook, articleSheet, 'АБЦ по артикулам');
@@ -85,20 +122,29 @@ export function generateProductionPlan(data: ProcessedData): Blob {
   ]);
 
   const planSheet = XLSX.utils.aoa_to_sheet([planHeaders, ...planRows]);
+  
+  // Set column widths
+  const planColWidths = planHeaders.map(h => ({ wch: Math.max(h.length, 12) }));
+  planSheet['!cols'] = planColWidths;
+  
   XLSX.utils.book_append_sheet(workbook, planSheet, 'План производства');
 
   // Sheet 2: Сводка
   const summaryHeaders = ['Метрика', 'Значение'];
+  const totalPlan1M = metrics.reduce((s, m) => s + m.planSKU1M, 0);
+  const totalPlan3M = metrics.reduce((s, m) => s + m.planSKU3M, 0);
+  const totalPlan6M = metrics.reduce((s, m) => s + m.planSKU6M, 0);
+  
   const summaryRows = [
     ['Всего артикулов', new Set(metrics.map(m => m.article)).size],
     ['Всего SKU', metrics.length],
     ['Артикулов A', data.abcByArticles.filter(a => a.abc === 'A').length],
     ['Артикулов B', data.abcByArticles.filter(a => a.abc === 'B').length],
     ['Артикулов C', data.abcByArticles.filter(a => a.abc === 'C').length],
-    ['Групп товаров', data.abcByGroups.length],
-    ['Общий план 1М', metrics.reduce((s, m) => s + m.planSKU1M, 0)],
-    ['Общий план 3М', metrics.reduce((s, m) => s + m.planSKU3M, 0)],
-    ['Общий план 6М', metrics.reduce((s, m) => s + m.planSKU6M, 0)],
+    ['Групп товаров', new Set(data.abcByGroups.map(g => g.name)).size],
+    ['Общий план 1М', totalPlan1M],
+    ['Общий план 3М', totalPlan3M],
+    ['Общий план 6М', totalPlan6M],
   ];
   const summarySheet = XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryRows]);
   XLSX.utils.book_append_sheet(workbook, summarySheet, 'Сводка');
