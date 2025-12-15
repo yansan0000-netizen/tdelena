@@ -30,26 +30,44 @@ export function calculateXYZByArticles(
   
   for (let i = 0; i < headers.length; i++) {
     const header = headers[i] || '';
+    const headerLower = header.toLowerCase();
     const hasMonth = parseMonthYear(header);
-    const isQuantity = header.toLowerCase().includes('кол-во') || 
-                       header.toLowerCase().includes('количество');
+    const isQuantity = headerLower.includes('кол-во') || 
+                       headerLower.includes('количество') ||
+                       headerLower.includes('кол.');
     
-    // Accept if it has a month reference OR is explicitly a quantity column with period
+    // Accept if it has a month reference AND is a quantity column
     if (hasMonth && isQuantity) {
       quantityColumns.push({ header, index: i });
     }
   }
 
+  // Fallback: find columns with month + "кол" pattern
   if (quantityColumns.length === 0) {
-    // Fallback: find any columns that look like they contain monthly quantity data
     for (let i = 0; i < headers.length; i++) {
       const header = headers[i] || '';
-      if (parseMonthYear(header) && 
-          (header.toLowerCase().includes('кол') || !header.toLowerCase().includes('выручка'))) {
+      const headerLower = header.toLowerCase();
+      if (parseMonthYear(header) && headerLower.includes('кол')) {
         quantityColumns.push({ header, index: i });
       }
     }
   }
+
+  // Last fallback: any month columns that don't contain "сумма" or "выручка"
+  if (quantityColumns.length === 0) {
+    for (let i = 0; i < headers.length; i++) {
+      const header = headers[i] || '';
+      const headerLower = header.toLowerCase();
+      if (parseMonthYear(header) && 
+          !headerLower.includes('сумма') && 
+          !headerLower.includes('выручка') &&
+          !headerLower.includes('итого')) {
+        quantityColumns.push({ header, index: i });
+      }
+    }
+  }
+
+  console.log(`[XYZ] Found ${quantityColumns.length} quantity columns:`, quantityColumns.map(c => c.header));
 
   // Group data by article and collect monthly quantities
   const articleData = new Map<string, number[]>();

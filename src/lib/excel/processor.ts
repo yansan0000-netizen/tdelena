@@ -311,33 +311,95 @@ export class ExcelProcessor {
    * Detect article column
    */
   private detectArticleColumn(data: (string | number | null)[][], headers: string[]): number {
-    // First try by header names
+    // First try by header names - expanded list
     const articleHeaders = [
       'номенклатура.артикул', 'артикул (исходный)', 'артикул исходный', 
-      'артикул', 'sku', 'код артикула', 'код товара'
+      'артикул', 'sku', 'код артикула', 'код товара', 'номенклатура.код',
+      'код номенклатуры', 'код', 'арт', 'арт.', 'article'
     ];
     
     const idx = findColIndexFlexible(headers, articleHeaders);
-    if (idx >= 0) return idx;
+    if (idx >= 0) {
+      this.logger.info('ARTICLE_COL', `Найдена колонка по заголовку: ${headers[idx]}`);
+      return idx;
+    }
     
-    // Try to find by data pattern
-    const articlePattern = /^\s*(?:М|M)?\s*\d{3,}(?:[\/\-\s]?\d+)*[A-Za-zА-Яа-яёЁ\-]*\s*$/;
-    const sampleRows = data.slice(1, 20);
+    // Try "Номенклатура" column that contains article-like data
+    const nomenclatureIdx = headers.findIndex(h => 
+      h.toLowerCase().includes('номенклатура') && 
+      !h.toLowerCase().includes('группа')
+    );
+    if (nomenclatureIdx >= 0) {
+      this.logger.info('ARTICLE_COL', `Используем колонку "Номенклатура": ${headers[nomenclatureIdx]}`);
+      return nomenclatureIdx;
+    }
+    
+    // Try to find by data pattern - more flexible patterns
+    // Pattern 1: Numeric articles (5+ digits)
+    // Pattern 2: Alphanumeric with possible prefixes
+    const sampleRows = data.slice(1, 30);
+    
+    let bestCol = -1;
+    let bestScore = 0;
     
     for (let col = 0; col < headers.length; col++) {
+      // Skip columns that look like dates, amounts, or totals
+      const headerLower = headers[col].toLowerCase();
+      if (headerLower.includes('дата') || headerLower.includes('итого') || 
+          headerLower.includes('сумма') || headerLower.includes('кол-во') ||
+          headerLower.includes('выручка') || headerLower.includes('остаток')) {
+        continue;
+      }
+      
       let matchCount = 0;
+      let numericCount = 0;
       let uniqueVals = new Set<string>();
       
       for (const row of sampleRows) {
         const val = String(row?.[col] || '').trim();
-        if (val && articlePattern.test(val)) {
+        if (!val) continue;
+        
+        // Check for article-like patterns
+        // Pure numeric (5+ digits)
+        if (/^\d{5,}$/.test(val)) {
+          matchCount++;
+          numericCount++;
+          uniqueVals.add(val);
+        }
+        // Alphanumeric with digits (e.g., "10001А", "М12345")
+        else if (/^[А-Яа-яA-Za-z]?\d{4,}[А-Яа-яA-Za-z]*$/.test(val)) {
+          matchCount++;
+          uniqueVals.add(val);
+        }
+        // With separators (e.g., "100-01-А")
+        else if (/^\d{3,}[\-\/\.]\d+/.test(val)) {
           matchCount++;
           uniqueVals.add(val);
         }
       }
       
-      const score = matchCount * 2 + uniqueVals.size;
-      if (matchCount >= 10 && score > 20) {
+      // Score based on matches and uniqueness
+      const score = matchCount * 2 + uniqueVals.size + (numericCount > 5 ? 10 : 0);
+      if (score > bestScore && matchCount >= 5) {
+        bestScore = score;
+        bestCol = col;
+      }
+    }
+    
+    if (bestCol >= 0) {
+      this.logger.info('ARTICLE_COL', `Найдена колонка по паттерну данных: ${headers[bestCol]} (score: ${bestScore})`);
+      return bestCol;
+    }
+    
+    // Last resort: first column with non-empty unique values
+    for (let col = 0; col < Math.min(5, headers.length); col++) {
+      const uniqueVals = new Set<string>();
+      for (const row of sampleRows) {
+        const val = String(row?.[col] || '').trim();
+        if (val) uniqueVals.add(val);
+      }
+      if (uniqueVals.size > sampleRows.length * 0.7) {
+        this.logger.warn('ARTICLE_COL', `Используем колонку ${col} как резервную: ${headers[col]}`);
         return col;
       }
     }
@@ -349,23 +411,25 @@ export class ExcelProcessor {
    * Detect revenue column - prioritize "Итого" columns
    */
   private detectRevenueColumn(headers: string[], itogoColIdx: number): number {
-    // Look for "Итого выручка" or "Сумма"
-    const priorityHeaders = ['итого выручка', 'выручка', 'сумма', 'оборот', 'revenue'];
+    // Look for "Итого выручка" or "Итого Сумма" first
+    for (let i = 0; i < headers.length; i++) {
+      const h = headers[i].toLowerCase();
+      if (h.includes('итого') && (h.includes('выручка') || h.includes('сумма'))) {
+        this.logger.info('REVENUE_COL', `Найдена колонка выручки: ${headers[i]}`);
+        return i;
+      }
+    }
+    
+    // Look for revenue/sum columns
+    const priorityHeaders = ['выручка', 'сумма продаж', 'оборот', 'revenue', 'сумма'];
     
     for (const keyword of priorityHeaders) {
       for (let i = 0; i < headers.length; i++) {
         const h = headers[i].toLowerCase();
-        if (h.includes(keyword) && (h.includes('итого') || keyword !== 'выручка')) {
+        if (h.includes(keyword)) {
+          this.logger.info('REVENUE_COL', `Найдена колонка выручки: ${headers[i]}`);
           return i;
         }
-      }
-    }
-    
-    // Just find any revenue column
-    for (let i = 0; i < headers.length; i++) {
-      const h = headers[i].toLowerCase();
-      if (h.includes('выручка') || h.includes('сумма')) {
-        return i;
       }
     }
     
@@ -418,10 +482,19 @@ export class ExcelProcessor {
       if (!rawRow || rawRow.every(c => c === null || c === undefined || c === '')) continue;
       
       // Get raw article - keep original for display
-      const rawArticle = String(rawRow[articleColIdx] || '').trim();
+      const cellValue = rawRow[articleColIdx];
+      // Handle numeric articles (don't convert 0 to empty string)
+      const rawArticle = cellValue !== null && cellValue !== undefined && cellValue !== '' 
+        ? String(cellValue).trim() 
+        : '';
       
-      // Skip rows without article (but not rows with article = 0 or numeric)
+      // Skip rows without article value
       if (!rawArticle) continue;
+      
+      // Skip header-like rows (if article looks like a header)
+      const lowerArticle = rawArticle.toLowerCase();
+      if (lowerArticle === 'артикул' || lowerArticle === 'номенклатура' || 
+          lowerArticle === 'код' || lowerArticle === 'итого') continue;
       
       // Clean article for display (keeps original value, just trims)
       const displayArticle = cleanArticleForDisplay(rawArticle);
