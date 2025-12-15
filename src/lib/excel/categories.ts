@@ -61,15 +61,26 @@ export function extractGroupFromArticle(rawArticle: string): string {
 }
 
 /**
- * Extract group code (first 4 digits) for ABC analysis
+ * Extract group code (first 4-5 digits) for ABC analysis
+ * Handles both numeric and alphanumeric articles
  */
 export function extractGroupCode(rawArticle: string): string {
   const s = String(rawArticle || '').trim();
-  const match = s.match(/^(\d{4,5})/);
+  
+  // Try to extract first 4-5 digit sequence
+  const match = s.match(/(\d{4,5})/);
   if (match) {
     return match[1].substring(0, 4); // First 4 digits
   }
-  return s.substring(0, 4);
+  
+  // For purely numeric articles, take first 4 chars
+  if (/^\d+$/.test(s)) {
+    return s.substring(0, Math.min(4, s.length));
+  }
+  
+  // For alphanumeric, take first part before any separator
+  const parts = s.split(/[\-\s\/\.]/);
+  return parts[0].substring(0, Math.min(4, parts[0].length));
 }
 
 /**
