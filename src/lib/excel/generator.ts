@@ -1,5 +1,7 @@
 import * as XLSX from 'xlsx';
-import { ProcessedData, ABCResult, RowData } from './types';
+import { ProcessedData, RowData } from './types';
+import { calculateArticleMetrics } from './calculations';
+import { calculateXYZByArticles, getABCXYZRecommendation } from './xyz';
 
 /**
  * Generate processed report Excel file
@@ -8,9 +10,8 @@ export function generateProcessedReport(data: ProcessedData): Blob {
   const workbook = XLSX.utils.book_new();
 
   // Sheet 1: Данные
-  const dataHeaders = ['Группа товаров', 'Артикул', 'ABC Группа', 'ABC Артикул', 'Категория'];
+  const dataHeaders = ['Группа товаров', 'Артикул', 'ABC Группа', 'ABC Артикул', 'Категория', 'XYZ-Группа', 'Рекомендация'];
   
-  // Add other headers from data (excluding duplicates)
   const existingHeaders = new Set(dataHeaders);
   for (const header of data.headers) {
     if (!existingHeaders.has(header)) {
@@ -19,10 +20,7 @@ export function generateProcessedReport(data: ProcessedData): Blob {
     }
   }
 
-  const dataRows = data.dataSheet.map(row => {
-    return dataHeaders.map(h => row[h] ?? '');
-  });
-
+  const dataRows = data.dataSheet.map(row => dataHeaders.map(h => row[h] ?? ''));
   const dataSheet = XLSX.utils.aoa_to_sheet([dataHeaders, ...dataRows]);
   XLSX.utils.book_append_sheet(workbook, dataSheet, 'Данные');
 
@@ -30,12 +28,7 @@ export function generateProcessedReport(data: ProcessedData): Blob {
   if (data.abcByGroups.length > 0) {
     const groupHeaders = ['Группа', 'Категория', 'Выручка', 'Доля %', 'Накопл. доля %', 'ABC'];
     const groupRows = data.abcByGroups.map(item => [
-      item.name,
-      item.category || '',
-      item.revenue,
-      item.share,
-      item.cumulativeShare,
-      item.abc,
+      item.name, item.category || '', item.revenue, item.share, item.cumulativeShare, item.abc,
     ]);
     const groupSheet = XLSX.utils.aoa_to_sheet([groupHeaders, ...groupRows]);
     XLSX.utils.book_append_sheet(workbook, groupSheet, 'АБЦ по группам');
@@ -45,84 +38,67 @@ export function generateProcessedReport(data: ProcessedData): Blob {
   if (data.abcByArticles.length > 0) {
     const articleHeaders = ['Артикул', 'Выручка', 'Доля %', 'Накопл. доля %', 'ABC'];
     const articleRows = data.abcByArticles.map(item => [
-      item.name,
-      item.revenue,
-      item.share,
-      item.cumulativeShare,
-      item.abc,
+      item.name, item.revenue, item.share, item.cumulativeShare, item.abc,
     ]);
     const articleSheet = XLSX.utils.aoa_to_sheet([articleHeaders, ...articleRows]);
     XLSX.utils.book_append_sheet(workbook, articleSheet, 'АБЦ по артикулам');
   }
 
-  // Generate blob
   const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
   return new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
 
 /**
- * Generate production plan Excel file (placeholder for Phase 4)
+ * Generate production plan Excel file with all metrics
  */
 export function generateProductionPlan(data: ProcessedData): Blob {
   const workbook = XLSX.utils.book_new();
 
-  // For now, create a simple output with the data we have
-  // Full forecast logic will be in Phase 4
-  const headers = [
-    'Группа товаров',
-    'Артикул', 
-    'ABC Группа',
-    'ABC Артикул',
-    'Категория',
-    'Прогноз 1 мес',
-    'Прогноз 3 мес',
-    'Прогноз 6 мес',
-    'План 1 мес',
-    'План 3 мес', 
-    'План 6 мес',
+  // Calculate XYZ for metrics
+  const xyzData = calculateXYZByArticles(data.dataSheet, data.headers);
+  
+  // Calculate all article metrics
+  const metrics = calculateArticleMetrics(data.dataSheet, data.headers, xyzData, getABCXYZRecommendation);
+
+  // Sheet 1: План производства
+  const planHeaders = [
+    'Артикул+Размер', 'Артикул', 'Категория', 'Группа товаров',
+    'ABC Группа', 'ABC Артикул', 'XYZ-Группа', 'Рекомендация',
+    'Общий план 1М', 'Общий план 3М', 'Общий план 6М',
+    'Вес SKU', 'План SKU 1М, шт', 'План SKU 3М', 'План SKU 6М',
+    'Средняя цена продажи, руб', 'Примерная себестоимость, руб', 
+    'Реальная себестоимость, руб', 'Маржинальность до уплаты налогов,%',
+    'Средняя чистая прибыль на 1 продажу, руб',
+    'Капитализация по себестоимости, руб', 'Капитализация по Оптовой цене',
+    'Скорость продаж в месяц, шт', 'Скорость продаж в день, шт',
+    'Текущий остаток', 'Дней до конца остатков'
   ];
 
-  // Simple forecast: average of last available periods
-  const rows = data.dataSheet.map(row => {
-    // Find quantity columns and calculate average
-    const qtyValues: number[] = [];
-    for (const [key, value] of Object.entries(row)) {
-      if (key.toLowerCase().includes('кол-во') || key.toLowerCase().includes('количество')) {
-        const num = typeof value === 'number' ? value : 0;
-        if (num > 0) qtyValues.push(num);
-      }
-    }
+  const planRows = metrics.map(m => [
+    m.articleSize, m.article, m.category, m.group,
+    m.abcGroup, m.abcArticle, m.xyzGroup, m.recommendation,
+    m.plan1M, m.plan3M, m.plan6M,
+    Math.round(m.skuWeight * 100) / 100, m.planSKU1M, m.planSKU3M, m.planSKU6M,
+    m.avgSalePrice, m.estimatedCost, m.realCost, m.marginPercent,
+    m.avgNetProfit, m.capitalizationByCost, m.capitalizationByWholesale,
+    m.salesVelocityMonth, m.salesVelocityDay, m.currentStock, m.daysUntilStockout
+  ]);
 
-    const avgQty = qtyValues.length > 0 
-      ? Math.round(qtyValues.reduce((a, b) => a + b, 0) / qtyValues.length)
-      : 0;
+  const planSheet = XLSX.utils.aoa_to_sheet([planHeaders, ...planRows]);
+  XLSX.utils.book_append_sheet(workbook, planSheet, 'План производства');
 
-    return [
-      row['Группа товаров'] || '',
-      row['Артикул'] || '',
-      row['ABC Группа'] || '',
-      row['ABC Артикул'] || '',
-      row['Категория'] || '',
-      avgQty,                    // Forecast 1 month
-      Math.round(avgQty * 3),    // Forecast 3 months
-      Math.round(avgQty * 6),    // Forecast 6 months
-      avgQty,                    // Plan 1 month (same as forecast for now)
-      Math.round(avgQty * 3),    // Plan 3 months
-      Math.round(avgQty * 6),    // Plan 6 months
-    ];
-  });
-
-  const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  XLSX.utils.book_append_sheet(workbook, sheet, 'План производства');
-
-  // Add summary sheet
+  // Sheet 2: Сводка
   const summaryHeaders = ['Метрика', 'Значение'];
   const summaryRows = [
-    ['Всего артикулов', data.dataSheet.length],
+    ['Всего артикулов', new Set(metrics.map(m => m.article)).size],
+    ['Всего SKU', metrics.length],
     ['Артикулов A', data.abcByArticles.filter(a => a.abc === 'A').length],
     ['Артикулов B', data.abcByArticles.filter(a => a.abc === 'B').length],
     ['Артикулов C', data.abcByArticles.filter(a => a.abc === 'C').length],
     ['Групп товаров', data.abcByGroups.length],
+    ['Общий план 1М', metrics.reduce((s, m) => s + m.planSKU1M, 0)],
+    ['Общий план 3М', metrics.reduce((s, m) => s + m.planSKU3M, 0)],
+    ['Общий план 6М', metrics.reduce((s, m) => s + m.planSKU6M, 0)],
   ];
   const summarySheet = XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryRows]);
   XLSX.utils.book_append_sheet(workbook, summarySheet, 'Сводка');
