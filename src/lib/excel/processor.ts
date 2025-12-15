@@ -3,26 +3,17 @@ import {
   ProcessingResult, 
   ProcessedData, 
   RowData, 
-  ProcessingMetrics,
-  ColumnInfo,
   MONTH_NAMES_RU
 } from './types';
 import { ProcessingLogger } from './logger';
 import { 
   readExcelFile, 
   sheetToArray, 
-  normalizeArticle, 
-  extractGroupFromArticle,
-  normalizeCategory,
   parsePeriodString,
   parseMonthYear,
   parseNumber,
   isQuantityColumn,
   isRevenueColumn,
-  isStockColumn,
-  detectArticleColumn,
-  detectRevenueColumn,
-  findColumnByHeaders,
   formatMonthYear
 } from './utils';
 import { 
@@ -31,22 +22,30 @@ import {
   createABCLookup,
   createGroupABCLookup
 } from './abc';
+import {
+  normalizeArticleStrict,
+  extractGroupFromArticle,
+  normalizeCategorySmart,
+  findColIndexFlexible
+} from './categories';
+import { calculateXYZByArticles, getABCXYZRecommendation } from './xyz';
 
-export type ProcessingMode = '1C_RAW' | 'RAW' | 'PROCESSED';
+// Only 1C_RAW mode is supported now
+export type ProcessingMode = '1C_RAW';
 
 export class ExcelProcessor {
   private logger: ProcessingLogger;
   private workbook: XLSX.WorkBook | null = null;
   private mode: ProcessingMode;
 
-  constructor(mode: ProcessingMode) {
+  constructor(mode: ProcessingMode | string) {
     this.logger = new ProcessingLogger();
-    this.mode = mode;
+    this.mode = '1C_RAW'; // Always use 1C_RAW mode
   }
 
   async process(fileData: ArrayBuffer): Promise<ProcessingResult> {
     try {
-      this.logger.info('INIT', `Начало обработки в режиме ${this.mode}`);
+      this.logger.info('INIT', `Начало обработки выгрузки 1С`);
       
       // Read Excel file
       this.workbook = readExcelFile(fileData);
@@ -54,23 +53,7 @@ export class ExcelProcessor {
         sheets: this.workbook.SheetNames
       });
 
-      let result: ProcessingResult;
-
-      switch (this.mode) {
-        case '1C_RAW':
-          result = await this.process1CRaw();
-          break;
-        case 'RAW':
-          result = await this.processRaw();
-          break;
-        case 'PROCESSED':
-          result = await this.processReady();
-          break;
-        default:
-          throw new Error(`Unknown mode: ${this.mode}`);
-      }
-
-      return result;
+      return await this.process1CRaw();
 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -113,13 +96,12 @@ export class ExcelProcessor {
 
     // Get raw data
     let data = sheetToArray(sheet);
-    this.logger.info('DATA', `Загружено строк: ${data.length}`);
+    this.logger.info('DATA', `Загружено строк: ${data.length}, колонок: ${data[0]?.length || 0}`);
 
-    // Step 2: Try to parse period from first few rows (check various cells)
+    // Step 2: Try to parse period from first few rows
     let periodStart: string | null = null;
     let periodEnd: string | null = null;
     
-    // Search first 5 rows for period info
     for (let rowIdx = 0; rowIdx < Math.min(5, data.length); rowIdx++) {
       const row = data[rowIdx];
       for (let colIdx = 0; colIdx < Math.min(10, row?.length || 0); colIdx++) {
@@ -131,7 +113,7 @@ export class ExcelProcessor {
             if (parsed.start && parsed.end) {
               periodStart = parsed.start.toISOString().split('T')[0];
               periodEnd = parsed.end.toISOString().split('T')[0];
-              this.logger.info('PERIOD', `Найден период в ячейке [${rowIdx}][${colIdx}]: ${periodStart} - ${periodEnd}`);
+              this.logger.info('PERIOD', `Найден период: ${periodStart} - ${periodEnd}`);
               break;
             }
           }
@@ -140,62 +122,65 @@ export class ExcelProcessor {
       if (periodStart) break;
     }
 
-    // Step 3: Find header row - look for row with month names
-    let headerRowIdx = 0;
-    for (let i = 0; i < Math.min(15, data.length); i++) {
-      const row = data[i];
-      let monthCount = 0;
-      for (const cell of row || []) {
-        if (cell && parseMonthYear(String(cell))) {
-          monthCount++;
-        }
-      }
-      if (monthCount >= 3) { // Found row with multiple months
-        headerRowIdx = i;
-        this.logger.info('HEADERS', `Найдена строка заголовков с месяцами: ${i}`);
-        break;
-      }
-    }
+    // Step 3: Find header row by looking for specific markers or month names
+    let headerRowIdx = this.findHeaderRow(data);
+    this.logger.info('HEADERS', `Строка заголовков: ${headerRowIdx}`);
     
-    // Remove rows before header, but keep info about them
-    const rowsToRemove = Math.max(0, headerRowIdx);
-    if (rowsToRemove > 0) {
-      data = data.slice(rowsToRemove);
-      this.logger.action('CLEAN', `Удалено первых строк до заголовков: ${rowsToRemove}`);
+    // Remove rows before header
+    if (headerRowIdx > 0) {
+      data = data.slice(headerRowIdx);
+      this.logger.action('CLEAN', `Удалено первых строк: ${headerRowIdx}`);
     }
 
     // Step 4: Process headers (flatten multi-row header)
     const { headers, dataStartRow } = this.flattenHeaders(data);
-    this.logger.action('HEADERS', `Заголовки обработаны, найдено колонок: ${headers.length}`);
+    this.logger.action('HEADERS', `Заголовки обработаны, колонок: ${headers.length}`);
 
-    // Step 5: Detect key columns
-    const articleColIdx = detectArticleColumn(data, 0);
+    // Step 5: Find "Итого" column to determine period boundaries
+    const itogoColIdx = this.findItogoColumn(headers);
+    this.logger.info('DETECT', `Колонка "Итого": ${itogoColIdx >= 0 ? itogoColIdx : 'не найдена'}`);
+
+    // Step 6: Detect key columns
+    const articleColIdx = this.detectArticleColumn(data, headers);
     if (articleColIdx < 0) {
       throw new Error('ARTICLE_COL_NOT_FOUND: Не найдена колонка с артикулом');
     }
     this.logger.info('DETECT', `Колонка артикула: ${articleColIdx} (${headers[articleColIdx]})`);
 
-    // Detect revenue column
-    const revenueColIdx = detectRevenueColumn(data, dataStartRow - 1, [articleColIdx]);
+    // Find revenue column
+    const revenueColIdx = this.detectRevenueColumn(headers, itogoColIdx);
     if (revenueColIdx < 0) {
-      throw new Error('REVENUE_COL_NOT_FOUND: Не найдена колонка выручки/суммы');
+      this.logger.warn('DETECT', 'Колонка выручки не найдена, будет использована сумма периодов');
+    } else {
+      this.logger.info('DETECT', `Колонка выручки: ${revenueColIdx} (${headers[revenueColIdx]})`);
     }
-    this.logger.info('DETECT', `Колонка выручки: ${revenueColIdx} (${headers[revenueColIdx]})`);
 
-    // Detect category column
-    const categoryHeaders = ['категория', 'category', 'группа товаров', 'тип'];
-    const categoryColIdx = findColumnByHeaders(headers, categoryHeaders);
+    // Detect category source column
+    const categoryHeaders = ['номенклатура.группа', 'группа номенклатуры', 'группа', 'категория товаров', 'категория'];
+    const categoryColIdx = findColIndexFlexible(headers, categoryHeaders);
+    this.logger.info('DETECT', `Колонка категории: ${categoryColIdx >= 0 ? categoryColIdx : 'не найдена'}`);
 
-    // Step 6: Build processed data with new columns
+    // Detect stock column
+    const stockColIdx = findColIndexFlexible(headers, ['остаток', 'остатки', 'stock']);
+    this.logger.info('DETECT', `Колонка остатков: ${stockColIdx >= 0 ? stockColIdx : 'не найдена'}`);
+
+    // Detect price column
+    const priceColIdx = findColIndexFlexible(headers, ['цена', 'price']);
+    this.logger.info('DETECT', `Колонка цены: ${priceColIdx >= 0 ? priceColIdx : 'не найдена'}`);
+
+    // Step 7: Build processed data with new columns
     const processedData = this.buildProcessedData(
       data.slice(dataStartRow),
       headers,
       articleColIdx,
       revenueColIdx,
-      categoryColIdx
+      categoryColIdx,
+      stockColIdx,
+      priceColIdx,
+      itogoColIdx
     );
 
-    // Step 7: Calculate ABC
+    // Step 8: Calculate ABC
     const abcByGroups = calculateABCByGroups(
       processedData.rows,
       'Группа товаров',
@@ -209,7 +194,7 @@ export class ExcelProcessor {
       'Выручка'
     );
 
-    // Step 8: Apply ABC to data
+    // Step 9: Apply ABC to data
     const groupLookup = createGroupABCLookup(abcByGroups);
     const articleLookup = createABCLookup(abcByArticles);
 
@@ -219,8 +204,24 @@ export class ExcelProcessor {
       row['ABC Артикул'] = articleLookup.get(String(row['Артикул'])) || 'C';
     }
 
-    // Detect periods
-    const periods = this.detectPeriods(processedData.headers);
+    // Step 10: Calculate XYZ
+    const xyzResults = calculateXYZByArticles(processedData.rows, processedData.headers);
+    
+    // Apply XYZ to data
+    for (const row of processedData.rows) {
+      const article = String(row['Артикул'] || '');
+      const xyzData = xyzResults.get(article);
+      if (xyzData) {
+        row['XYZ-Группа'] = xyzData.xyz;
+        row['Рекомендация'] = getABCXYZRecommendation(
+          String(row['ABC Артикул'] || 'C'),
+          xyzData.xyz
+        );
+      }
+    }
+
+    // Detect periods (only before "Итого" column)
+    const periods = this.detectPeriods(processedData.headers, itogoColIdx);
     const lastPeriod = periods.length > 0 ? periods[periods.length - 1] : null;
 
     this.logger.action('COMPLETE', `Обработка завершена`, {
@@ -249,172 +250,132 @@ export class ExcelProcessor {
   }
 
   /**
-   * Process raw Excel file (simpler format)
+   * Find header row by looking for markers or month names
    */
-  private async processRaw(): Promise<ProcessingResult> {
-    if (!this.workbook) throw new Error('Workbook not loaded');
-
-    const sheetName = this.workbook.SheetNames[0];
-    const sheet = this.workbook.Sheets[sheetName];
-    
-    if (!sheet) {
-      throw new Error('NO_DATA_SHEET: В файле нет листа с данными');
-    }
-
-    let data = sheetToArray(sheet);
-    this.logger.info('DATA', `Загружено строк: ${data.length}`);
-
-    // Remove first rows if they look like service info
-    let headerRowIdx = 0;
-    for (let i = 0; i < Math.min(10, data.length); i++) {
+  private findHeaderRow(data: (string | number | null)[][]): number {
+    // Look for row with "Номенклатура" or month names
+    for (let i = 0; i < Math.min(15, data.length); i++) {
       const row = data[i];
-      const nonEmptyCount = row.filter(c => c !== null && c !== '').length;
-      if (nonEmptyCount >= 5) {
-        headerRowIdx = i;
-        break;
+      if (!row) continue;
+      
+      let monthCount = 0;
+      let hasNomenclature = false;
+      
+      for (const cell of row) {
+        if (!cell) continue;
+        const cellStr = String(cell).toLowerCase();
+        
+        if (cellStr.includes('номенклатура')) {
+          hasNomenclature = true;
+        }
+        
+        if (parseMonthYear(String(cell))) {
+          monthCount++;
+        }
+      }
+      
+      // Found header row if it has nomenclature marker or 3+ months
+      if (hasNomenclature || monthCount >= 3) {
+        return i;
       }
     }
-
-    if (headerRowIdx > 0) {
-      data = data.slice(headerRowIdx);
-      this.logger.action('CLEAN', `Удалено первых строк: ${headerRowIdx}`);
-    }
-
-    const headers = data[0].map(h => String(h || ''));
     
-    // Detect columns
-    const articleColIdx = detectArticleColumn(data, 0);
-    if (articleColIdx < 0) {
-      throw new Error('ARTICLE_COL_NOT_FOUND: Не найдена колонка с артикулом');
-    }
-
-    const revenueColIdx = detectRevenueColumn(data, 0, [articleColIdx]);
-    if (revenueColIdx < 0) {
-      throw new Error('REVENUE_COL_NOT_FOUND: Не найдена колонка выручки/суммы');
-    }
-
-    const categoryHeaders = ['категория', 'category', 'группа'];
-    const categoryColIdx = findColumnByHeaders(headers, categoryHeaders);
-
-    // Build processed data
-    const processedData = this.buildProcessedData(
-      data.slice(1),
-      headers,
-      articleColIdx,
-      revenueColIdx,
-      categoryColIdx
-    );
-
-    // Calculate ABC
-    const abcByGroups = calculateABCByGroups(
-      processedData.rows,
-      'Группа товаров',
-      'Категория',
-      'Выручка'
-    );
-    
-    const abcByArticles = calculateABCByArticles(
-      processedData.rows,
-      'Артикул',
-      'Выручка'
-    );
-
-    // Apply ABC
-    const groupLookup = createGroupABCLookup(abcByGroups);
-    const articleLookup = createABCLookup(abcByArticles);
-
-    for (const row of processedData.rows) {
-      const groupKey = `${row['Группа товаров']}|||${row['Категория']}`;
-      row['ABC Группа'] = groupLookup.get(groupKey) || 'C';
-      row['ABC Артикул'] = articleLookup.get(String(row['Артикул'])) || 'C';
-    }
-
-    const periods = this.detectPeriods(processedData.headers);
-    const lastPeriod = periods.length > 0 ? periods[periods.length - 1] : null;
-
-    return {
-      success: true,
-      processedData: {
-        dataSheet: processedData.rows,
-        abcByGroups,
-        abcByArticles,
-        headers: processedData.headers,
-      },
-      logs: this.logger.getLogs(),
-      metrics: {
-        periodsFound: periods.length,
-        rowsProcessed: processedData.rows.length,
-        lastPeriod,
-        periodStart: null,
-        periodEnd: null,
-      }
-    };
+    // Default: assume first 5 rows are metadata
+    return Math.min(5, data.length);
   }
 
   /**
-   * Process already prepared file - just load and validate
+   * Find "Итого" column index
    */
-  private async processReady(): Promise<ProcessingResult> {
-    if (!this.workbook) throw new Error('Workbook not loaded');
-
-    // Find "Данные" sheet or use first
-    let sheetName = this.workbook.SheetNames.find(
-      n => n.toLowerCase() === 'данные' || n.toLowerCase() === 'data'
-    ) || this.workbook.SheetNames[0];
-    
-    const sheet = this.workbook.Sheets[sheetName];
-    if (!sheet) {
-      throw new Error('NO_DATA_SHEET: Не найден лист "Данные"');
-    }
-
-    this.logger.info('SHEET', `Используется лист: ${sheetName}`);
-
-    const data = sheetToArray(sheet);
-    const headers = data[0].map(h => String(h || ''));
-    
-    // Convert to row objects
-    const rows: RowData[] = [];
-    for (let i = 1; i < data.length; i++) {
-      const row: RowData = {};
-      for (let j = 0; j < headers.length; j++) {
-        row[headers[j]] = data[i][j];
+  private findItogoColumn(headers: string[]): number {
+    for (let i = 0; i < headers.length; i++) {
+      const h = headers[i].toLowerCase();
+      if (h.includes('итого') && (h.includes('кол') || h.includes('выручка') || h.includes('сумма'))) {
+        return i;
       }
-      rows.push(row);
     }
-
-    // Try to find ABC sheets if they exist
-    const abcByGroups = this.tryLoadABCSheet('АБЦ по группам');
-    const abcByArticles = this.tryLoadABCSheet('АБЦ по артикулам');
-
-    const periods = this.detectPeriods(headers);
-    const lastPeriod = periods.length > 0 ? periods[periods.length - 1] : null;
-
-    return {
-      success: true,
-      processedData: {
-        dataSheet: rows,
-        abcByGroups,
-        abcByArticles,
-        headers,
-      },
-      logs: this.logger.getLogs(),
-      metrics: {
-        periodsFound: periods.length,
-        rowsProcessed: rows.length,
-        lastPeriod,
-        periodStart: null,
-        periodEnd: null,
+    
+    // Try just "Итого"
+    for (let i = 0; i < headers.length; i++) {
+      if (headers[i].toLowerCase().trim() === 'итого') {
+        return i;
       }
-    };
+    }
+    
+    return -1;
+  }
+
+  /**
+   * Detect article column
+   */
+  private detectArticleColumn(data: (string | number | null)[][], headers: string[]): number {
+    // First try by header names
+    const articleHeaders = [
+      'номенклатура.артикул', 'артикул (исходный)', 'артикул исходный', 
+      'артикул', 'sku', 'код артикула', 'код товара'
+    ];
+    
+    const idx = findColIndexFlexible(headers, articleHeaders);
+    if (idx >= 0) return idx;
+    
+    // Try to find by data pattern
+    const articlePattern = /^\s*(?:М|M)?\s*\d{3,}(?:[\/\-\s]?\d+)*[A-Za-zА-Яа-яёЁ\-]*\s*$/;
+    const sampleRows = data.slice(1, 20);
+    
+    for (let col = 0; col < headers.length; col++) {
+      let matchCount = 0;
+      let uniqueVals = new Set<string>();
+      
+      for (const row of sampleRows) {
+        const val = String(row?.[col] || '').trim();
+        if (val && articlePattern.test(val)) {
+          matchCount++;
+          uniqueVals.add(val);
+        }
+      }
+      
+      const score = matchCount * 2 + uniqueVals.size;
+      if (matchCount >= 10 && score > 20) {
+        return col;
+      }
+    }
+    
+    return -1;
+  }
+
+  /**
+   * Detect revenue column - prioritize "Итого" columns
+   */
+  private detectRevenueColumn(headers: string[], itogoColIdx: number): number {
+    // Look for "Итого выручка" or "Сумма"
+    const priorityHeaders = ['итого выручка', 'выручка', 'сумма', 'оборот', 'revenue'];
+    
+    for (const keyword of priorityHeaders) {
+      for (let i = 0; i < headers.length; i++) {
+        const h = headers[i].toLowerCase();
+        if (h.includes(keyword) && (h.includes('итого') || keyword !== 'выручка')) {
+          return i;
+        }
+      }
+    }
+    
+    // Just find any revenue column
+    for (let i = 0; i < headers.length; i++) {
+      const h = headers[i].toLowerCase();
+      if (h.includes('выручка') || h.includes('сумма')) {
+        return i;
+      }
+    }
+    
+    return -1;
   }
 
   /**
    * Flatten multi-row headers into single row
    */
   private flattenHeaders(data: (string | number | null)[][]): { headers: string[]; dataStartRow: number } {
-    // Assume first 1-3 rows might be headers
     const headerRows = Math.min(3, data.length);
-    const maxCols = Math.max(...data.slice(0, headerRows).map(r => r.length));
+    const maxCols = Math.max(...data.slice(0, headerRows).map(r => r?.length || 0));
     
     const headers: string[] = [];
     
@@ -440,22 +401,29 @@ export class ExcelProcessor {
     headers: string[],
     articleColIdx: number,
     revenueColIdx: number,
-    categoryColIdx: number
+    categoryColIdx: number,
+    stockColIdx: number,
+    priceColIdx: number,
+    itogoColIdx: number
   ): { rows: RowData[]; headers: string[] } {
-    const newHeaders = ['Группа товаров', 'Артикул', 'ABC Группа', 'ABC Артикул', 'Категория', ...headers];
+    const baseHeaders = ['Группа товаров', 'Артикул', 'ABC Группа', 'ABC Артикул', 'Категория', 'XYZ-Группа', 'Рекомендация'];
+    const newHeaders = [...baseHeaders, ...headers];
     const rows: RowData[] = [];
 
     for (const rawRow of rawRows) {
-      // Skip empty rows
       if (!rawRow || rawRow.every(c => c === null || c === '')) continue;
       
-      const article = normalizeArticle(rawRow[articleColIdx] as string);
+      // Use strict article normalization from script
+      const rawArticle = String(rawRow[articleColIdx] || '');
+      const article = normalizeArticleStrict(rawArticle);
       if (!article) continue;
 
+      // Extract group from article using script logic
       const group = extractGroupFromArticle(article);
-      const category = categoryColIdx >= 0 
-        ? normalizeCategory(rawRow[categoryColIdx] as string)
-        : 'Без категории';
+      
+      // Normalize category using smart category mapping
+      const rawCategory = categoryColIdx >= 0 ? String(rawRow[categoryColIdx] || '') : '';
+      const category = normalizeCategorySmart(rawCategory);
       
       const row: RowData = {
         'Группа товаров': group,
@@ -463,20 +431,48 @@ export class ExcelProcessor {
         'ABC Группа': '',
         'ABC Артикул': '',
         'Категория': category,
+        'XYZ-Группа': '',
+        'Рекомендация': '',
       };
 
       // Copy original columns
       for (let i = 0; i < headers.length; i++) {
         const val = rawRow[i];
-        if (i === revenueColIdx || isQuantityColumn(headers[i]) || isRevenueColumn(headers[i])) {
+        const headerLower = headers[i].toLowerCase();
+        
+        // Parse numeric columns
+        if (isQuantityColumn(headers[i]) || isRevenueColumn(headers[i]) || 
+            headerLower.includes('остаток') || headerLower.includes('цена')) {
           row[headers[i]] = parseNumber(val);
         } else {
           row[headers[i]] = val;
         }
       }
 
-      // Set Выручка column
-      row['Выручка'] = parseNumber(rawRow[revenueColIdx]);
+      // Set aggregated revenue
+      if (revenueColIdx >= 0) {
+        row['Выручка'] = parseNumber(rawRow[revenueColIdx]);
+      } else {
+        // Sum all revenue columns
+        let totalRevenue = 0;
+        for (let i = 0; i < headers.length; i++) {
+          if (itogoColIdx >= 0 && i >= itogoColIdx) break; // Stop at Итого
+          if (isRevenueColumn(headers[i])) {
+            totalRevenue += parseNumber(rawRow[i]);
+          }
+        }
+        row['Выручка'] = totalRevenue;
+      }
+
+      // Set stock
+      if (stockColIdx >= 0) {
+        row['Остаток'] = parseNumber(rawRow[stockColIdx]);
+      }
+
+      // Set price
+      if (priceColIdx >= 0) {
+        row['Цена'] = parseNumber(rawRow[priceColIdx]);
+      }
 
       rows.push(row);
     }
@@ -486,18 +482,19 @@ export class ExcelProcessor {
 
   /**
    * Detect period columns and return sorted list
-   * Searches for Russian month names with years (e.g., "Октябрь 2024")
+   * Only considers columns before "Итого" index
    */
-  private detectPeriods(headers: string[]): string[] {
+  private detectPeriods(headers: string[], itogoColIdx: number): string[] {
     const periods: { label: string; date: Date }[] = [];
+    const maxCol = itogoColIdx >= 0 ? itogoColIdx : headers.length;
 
-    for (const header of headers) {
+    for (let i = 0; i < maxCol; i++) {
+      const header = headers[i];
       const parsed = parseMonthYear(header);
       if (parsed) {
         const label = formatMonthYear(parsed.month, parsed.year);
         const date = new Date(parsed.year, parsed.month, 1);
         
-        // Avoid duplicates
         if (!periods.some(p => p.label === label)) {
           periods.push({ label, date });
         }
@@ -506,37 +503,5 @@ export class ExcelProcessor {
 
     periods.sort((a, b) => a.date.getTime() - b.date.getTime());
     return periods.map(p => p.label);
-  }
-
-  /**
-   * Try to load ABC data from existing sheet
-   */
-  private tryLoadABCSheet(sheetName: string): import('./types').ABCResult[] {
-    if (!this.workbook) return [];
-    
-    const sheet = this.workbook.Sheets[sheetName];
-    if (!sheet) return [];
-
-    try {
-      const data = sheetToArray(sheet);
-      if (data.length < 2) return [];
-
-      const headers = data[0].map(h => String(h || '').toLowerCase());
-      const nameIdx = headers.findIndex(h => h.includes('группа') || h.includes('артикул') || h.includes('name'));
-      const revenueIdx = headers.findIndex(h => h.includes('выручка') || h.includes('revenue'));
-      const abcIdx = headers.findIndex(h => h === 'abc' || h.includes('абц'));
-
-      if (nameIdx < 0) return [];
-
-      return data.slice(1).map(row => ({
-        name: String(row[nameIdx] || ''),
-        revenue: revenueIdx >= 0 ? parseNumber(row[revenueIdx]) : 0,
-        share: 0,
-        cumulativeShare: 0,
-        abc: (abcIdx >= 0 ? String(row[abcIdx] || 'C') : 'C') as 'A' | 'B' | 'C',
-      }));
-    } catch {
-      return [];
-    }
   }
 }
