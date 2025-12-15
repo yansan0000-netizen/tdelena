@@ -132,6 +132,10 @@ export function parseNumber(value: unknown): number {
   return isNaN(num) ? 0 : num;
 }
 
+// Safety limits for file processing
+const MAX_ROWS = 100000;
+const MAX_COLS = 500;
+
 /**
  * Read Excel file and return workbook
  */
@@ -139,29 +143,31 @@ export function readExcelFile(data: ArrayBuffer): XLSX.WorkBook {
   return XLSX.read(data, { 
     type: 'array',
     cellDates: true,
-    cellNF: true,
-    cellStyles: true,
+    cellNF: false,  // Disable number format parsing for performance
+    cellStyles: false,  // Disable style parsing for performance
+    sheetRows: MAX_ROWS + 10, // Limit rows read
   });
 }
 
 /**
- * Get sheet data as 2D array
+ * Get sheet data as 2D array with safety limits
  */
 export function sheetToArray(sheet: XLSX.WorkSheet): (string | number | null)[][] {
   const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
-  const result: (string | number | null)[][] = [];
   
-  for (let r = range.s.r; r <= range.e.r; r++) {
-    const row: (string | number | null)[] = [];
-    for (let c = range.s.c; c <= range.e.c; c++) {
-      const addr = XLSX.utils.encode_cell({ r, c });
-      const cell = sheet[addr];
-      row.push(cell ? cell.v : null);
-    }
-    result.push(row);
-  }
+  // Apply safety limits
+  const maxRow = Math.min(range.e.r, MAX_ROWS);
+  const maxCol = Math.min(range.e.c, MAX_COLS);
   
-  return result;
+  // Use XLSX built-in method for better performance
+  const rawData = XLSX.utils.sheet_to_json<(string | number | null)[]>(sheet, {
+    header: 1,
+    raw: true,
+    defval: null,
+    range: { s: { r: 0, c: 0 }, e: { r: maxRow, c: maxCol } }
+  });
+  
+  return rawData;
 }
 
 /**
