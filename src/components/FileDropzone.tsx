@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Upload, FileSpreadsheet, X, AlertCircle } from 'lucide-react';
+import { Upload, FileSpreadsheet, X, AlertCircle, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface FileDropzoneProps {
@@ -9,31 +9,46 @@ interface FileDropzoneProps {
   disabled?: boolean;
 }
 
-const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB for now
+const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
+const WARN_FILE_SIZE = 50 * 1024 * 1024; // 50MB - warning threshold
 const ALLOWED_EXTENSIONS = ['.xlsx', '.xls', '.csv'];
 
 export function FileDropzone({ onFileSelect, selectedFile, onClear, disabled }: FileDropzoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
-  const validateFile = (file: File): string | null => {
+  const validateFile = (file: File): { error: string | null; warning: string | null } => {
     const ext = '.' + file.name.split('.').pop()?.toLowerCase();
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      return `Неподдерживаемый формат файла. Поддерживаются: ${ALLOWED_EXTENSIONS.join(', ')}`;
+      return { 
+        error: `Неподдерживаемый формат файла. Поддерживаются: ${ALLOWED_EXTENSIONS.join(', ')}`,
+        warning: null 
+      };
     }
     if (file.size > MAX_FILE_SIZE) {
-      return `Файл слишком большой. Максимальный размер: ${MAX_FILE_SIZE / 1024 / 1024}MB`;
+      return { 
+        error: `Файл слишком большой. Максимальный размер: ${MAX_FILE_SIZE / 1024 / 1024}MB`,
+        warning: null 
+      };
     }
-    return null;
+    if (file.size > WARN_FILE_SIZE) {
+      return { 
+        error: null, 
+        warning: `Большой файл (${(file.size / 1024 / 1024).toFixed(1)}MB). Обработка может занять несколько минут.` 
+      };
+    }
+    return { error: null, warning: null };
   };
 
   const handleFile = useCallback((file: File) => {
-    const validationError = validateFile(file);
-    if (validationError) {
-      setError(validationError);
+    const validation = validateFile(file);
+    setError(validation.error);
+    setWarning(validation.warning);
+    
+    if (validation.error) {
       return;
     }
-    setError(null);
     onFileSelect(file);
   }, [onFileSelect]);
 
@@ -76,28 +91,36 @@ export function FileDropzone({ onFileSelect, selectedFile, onClear, disabled }: 
 
   if (selectedFile) {
     return (
-      <div className="border-2 border-dashed border-primary/30 bg-primary/5 rounded-lg p-6 animate-fade-in">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-              <FileSpreadsheet className="h-6 w-6 text-primary" />
+      <div className="space-y-2">
+        <div className="border-2 border-dashed border-primary/30 bg-primary/5 rounded-lg p-6 animate-fade-in">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                <FileSpreadsheet className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <p className="font-medium">{selectedFile.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {formatFileSize(selectedFile.size)}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="font-medium">{selectedFile.name}</p>
-              <p className="text-sm text-muted-foreground">
-                {formatFileSize(selectedFile.size)}
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={onClear}
+              disabled={disabled}
+              className="p-2 hover:bg-secondary rounded-md transition-colors disabled:opacity-50"
+            >
+              <X className="h-5 w-5 text-muted-foreground" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClear}
-            disabled={disabled}
-            className="p-2 hover:bg-secondary rounded-md transition-colors disabled:opacity-50"
-          >
-            <X className="h-5 w-5 text-muted-foreground" />
-          </button>
         </div>
+        {warning && (
+          <div className="flex items-center gap-2 text-amber-600 text-sm animate-fade-in">
+            <AlertTriangle className="h-4 w-4" />
+            {warning}
+          </div>
+        )}
       </div>
     );
   }
