@@ -2,7 +2,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { FileSpreadsheet, Upload, Settings, Download, BarChart3, Layers, FileText, AlertCircle } from 'lucide-react';
+import { FileSpreadsheet, Upload, BarChart3, Download, TrendingUp, Package, Calculator, AlertTriangle, CheckCircle } from 'lucide-react';
 
 export default function Documentation() {
   return (
@@ -11,19 +11,94 @@ export default function Documentation() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Документация</h1>
           <p className="text-muted-foreground mt-2">
-            Руководство по использованию системы ABC-анализа продаж
+            Система ABC/XYZ анализа и планирования производства
           </p>
         </div>
 
-        <Tabs defaultValue="modes" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="modes">Режимы обработки</TabsTrigger>
-            <TabsTrigger value="guide">Как использовать</TabsTrigger>
-            <TabsTrigger value="output">Выходные файлы</TabsTrigger>
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="overview">Обзор</TabsTrigger>
+            <TabsTrigger value="format">Формат файла</TabsTrigger>
+            <TabsTrigger value="analysis">Анализ</TabsTrigger>
+            <TabsTrigger value="output">Результаты</TabsTrigger>
           </TabsList>
 
-          {/* Modes Tab */}
-          <TabsContent value="modes" className="space-y-6">
+          {/* Overview Tab */}
+          <TabsContent value="overview" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-primary" />
+                  Что делает система?
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p>
+                  Система анализирует выгрузку продаж из 1С за несколько месяцев и формирует:
+                </p>
+                <ul className="space-y-3">
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                    <div>
+                      <strong>ABC-анализ</strong> — классификация товаров по вкладу в выручку (A — 80%, B — 15%, C — 5%)
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                    <div>
+                      <strong>XYZ-анализ</strong> — классификация по стабильности спроса (X — стабильный, Y — средний, Z — нестабильный)
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                    <div>
+                      <strong>План производства</strong> — расчёт необходимого объёма производства на 1, 3 и 6 месяцев
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                    <div>
+                      <strong>Рекомендации</strong> — автоматические рекомендации по управлению запасами для каждого артикула
+                    </div>
+                  </li>
+                </ul>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calculator className="h-5 w-5 text-primary" />
+                  Как пользоваться
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ol className="space-y-4">
+                  <li className="flex items-start gap-3">
+                    <Badge className="shrink-0">1</Badge>
+                    <div>
+                      <strong>Загрузите файл</strong> — экспортируйте отчёт из 1С в Excel и загрузите его в систему
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <Badge className="shrink-0">2</Badge>
+                    <div>
+                      <strong>Дождитесь обработки</strong> — система автоматически распознает структуру и обработает данные
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <Badge className="shrink-0">3</Badge>
+                    <div>
+                      <strong>Скачайте результаты</strong> — получите готовые отчёты с анализом и планом производства
+                    </div>
+                  </li>
+                </ol>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* File Format Tab */}
+          <TabsContent value="format" className="space-y-6">
             <Card>
               <CardHeader>
                 <div className="flex items-center gap-3">
@@ -31,154 +106,90 @@ export default function Documentation() {
                     <FileSpreadsheet className="h-6 w-6 text-primary" />
                   </div>
                   <div>
-                    <CardTitle className="flex items-center gap-2">
-                      1C_RAW
-                      <Badge variant="secondary">Рекомендуемый</Badge>
-                    </CardTitle>
-                    <CardDescription>Экспорт напрямую из 1С</CardDescription>
+                    <CardTitle>Формат файла из 1С</CardTitle>
+                    <CardDescription>Требования к входному файлу</CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p>
-                  Используйте этот режим для файлов, экспортированных напрямую из 1С:Предприятие.
-                  Система автоматически обработает сложную структуру заголовков с объединёнными ячейками.
-                </p>
-                
-                <div className="bg-muted/50 p-4 rounded-lg space-y-2">
-                  <h4 className="font-medium">Ожидаемый формат файла:</h4>
-                  <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                    <li>Первые строки — служебная информация (параметры отчёта, фильтры)</li>
-                    <li>Период отчёта в формате «01.10.2024 - 30.09.2025»</li>
-                    <li>Многострочные заголовки с объединёнными ячейками</li>
-                    <li>Колонки с месяцами: «Октябрь 2024», «Ноябрь 2024» и т.д.</li>
-                    <li>Подзаголовки: «Кол-во», «Сумма», «Остаток» для каждого месяца</li>
+                <div className="bg-muted/50 p-4 rounded-lg space-y-3">
+                  <h4 className="font-medium">Структура файла:</h4>
+                  <ul className="list-disc list-inside text-sm text-muted-foreground space-y-2">
+                    <li>Заголовок с 3-мя строками (даты, метрики, технические поля)</li>
+                    <li>Периоды в формате «Декабрь 2024» или «DD.MM.YYYY»</li>
+                    <li>Для каждого периода 3 колонки: <strong>Кол-во</strong>, <strong>Сумма</strong>, <strong>Остаток</strong></li>
+                    <li>Колонка артикула («Номенклатура.Артикул» или подобная)</li>
+                    <li>Опционально: колонка категории</li>
                   </ul>
                 </div>
 
-                <div className="bg-muted/50 p-4 rounded-lg space-y-2">
-                  <h4 className="font-medium">Автоматическое определение:</h4>
-                  <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                    <li>Колонка артикула (по заголовку или паттерну данных)</li>
-                    <li>Колонка выручки/суммы</li>
-                    <li>Периоды по названиям русских месяцев</li>
-                    <li>Диапазон дат отчёта</li>
-                  </ul>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-secondary/50 rounded-lg">
-                    <Layers className="h-6 w-6 text-foreground" />
+                <div className="bg-muted/50 p-4 rounded-lg space-y-3">
+                  <h4 className="font-medium">Пример структуры заголовков:</h4>
+                  <div className="overflow-x-auto">
+                    <table className="text-sm border-collapse w-full">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="p-2 text-left">Строка 1</th>
+                          <th className="p-2 text-left">Артикул</th>
+                          <th className="p-2 text-left" colSpan={3}>Декабрь 2024</th>
+                          <th className="p-2 text-left" colSpan={3}>Январь 2025</th>
+                        </tr>
+                        <tr className="border-b">
+                          <th className="p-2 text-left">Строка 2</th>
+                          <th className="p-2 text-left">—</th>
+                          <th className="p-2 text-left">Кол-во</th>
+                          <th className="p-2 text-left">Сумма</th>
+                          <th className="p-2 text-left">Остаток</th>
+                          <th className="p-2 text-left">Кол-во</th>
+                          <th className="p-2 text-left">Сумма</th>
+                          <th className="p-2 text-left">Остаток</th>
+                        </tr>
+                      </thead>
+                    </table>
                   </div>
-                  <div>
-                    <CardTitle>RAW</CardTitle>
-                    <CardDescription>Простой Excel без сложных заголовков</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p>
-                  Режим для Excel-файлов с простой структурой — одна строка заголовков, 
-                  данные начинаются со второй строки.
-                </p>
-                
-                <div className="bg-muted/50 p-4 rounded-lg space-y-2">
-                  <h4 className="font-medium">Ожидаемый формат файла:</h4>
-                  <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                    <li>Первая строка — заголовки колонок</li>
-                    <li>Обязательно: колонка с артикулом</li>
-                    <li>Обязательно: колонка с выручкой/суммой</li>
-                    <li>Опционально: колонки с категориями, месячными данными</li>
-                  </ul>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-green-500/10 rounded-lg">
-                    <FileText className="h-6 w-6 text-green-600" />
-                  </div>
-                  <div>
-                    <CardTitle>PROCESSED</CardTitle>
-                    <CardDescription>Уже обработанный файл</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p>
-                  Используйте этот режим, если файл уже был обработан ранее и содержит 
-                  стандартные колонки системы.
-                </p>
-                
-                <div className="bg-muted/50 p-4 rounded-lg space-y-2">
-                  <h4 className="font-medium">Ожидаемые листы в файле:</h4>
-                  <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                    <li>«Данные» или «data» — основной лист с данными</li>
-                    <li>«АБЦ по группам» — опционально, ABC по группам товаров</li>
-                    <li>«АБЦ по артикулам» — опционально, ABC по артикулам</li>
-                  </ul>
                 </div>
 
                 <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                  <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
-                  <p className="text-sm text-amber-800 dark:text-amber-200">
-                    ABC-анализ не пересчитывается — используются данные из файла
+                  <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                  <p className="text-sm">
+                    Колонки «Итого» автоматически пропускаются. Размер файла: до 50 МБ, до 100 000+ строк.
                   </p>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Guide Tab */}
-          <TabsContent value="guide" className="space-y-6">
+          {/* Analysis Tab */}
+          <TabsContent value="analysis" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Upload className="h-5 w-5" />
-                  Шаг 1: Загрузка файла
-                </CardTitle>
+                <CardTitle>ABC-анализ</CardTitle>
+                <CardDescription>Классификация по вкладу в выручку</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <p>
-                  Перетащите Excel-файл (.xlsx, .xls) в область загрузки или кликните для выбора файла.
-                </p>
-                <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                  <li>Максимальный размер файла: 50 МБ</li>
-                  <li>Поддерживаемые форматы: .xlsx, .xls</li>
-                  <li>Файл должен содержать хотя бы один лист с данными</li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="h-5 w-5" />
-                  Шаг 2: Выбор режима
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p>
-                  Выберите режим обработки, соответствующий формату вашего файла:
-                </p>
+              <CardContent className="space-y-4">
                 <div className="grid gap-3">
-                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                    <Badge>1C_RAW</Badge>
-                    <span className="text-sm">Файл напрямую из 1С со сложными заголовками</span>
+                  <div className="flex items-center gap-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                    <Badge className="bg-green-600 text-white text-lg px-3 py-1">A</Badge>
+                    <div>
+                      <div className="font-medium">Категория A — первые 80% выручки</div>
+                      <div className="text-sm text-muted-foreground">Ключевые товары, требующие максимального внимания к запасам</div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                    <Badge variant="outline">RAW</Badge>
-                    <span className="text-sm">Простой Excel с одной строкой заголовков</span>
+                  
+                  <div className="flex items-center gap-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                    <Badge className="bg-amber-600 text-white text-lg px-3 py-1">B</Badge>
+                    <div>
+                      <div className="font-medium">Категория B — следующие 15% выручки</div>
+                      <div className="text-sm text-muted-foreground">Товары средней важности, стандартное управление</div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                    <Badge variant="outline">PROCESSED</Badge>
-                    <span className="text-sm">Уже обработанный ранее файл</span>
+                  
+                  <div className="flex items-center gap-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                    <Badge className="bg-red-600 text-white text-lg px-3 py-1">C</Badge>
+                    <div>
+                      <div className="font-medium">Категория C — оставшиеся 5% выручки</div>
+                      <div className="text-sm text-muted-foreground">Наименее значимые товары, кандидаты на оптимизацию</div>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -186,41 +197,75 @@ export default function Documentation() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5" />
-                  Шаг 3: Обработка
-                </CardTitle>
+                <CardTitle>XYZ-анализ</CardTitle>
+                <CardDescription>Классификация по стабильности спроса (коэффициент вариации)</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <p>
-                  Нажмите «Начать обработку» и дождитесь завершения. Система выполнит:
-                </p>
-                <ol className="list-decimal list-inside text-sm text-muted-foreground space-y-1">
-                  <li>Парсинг структуры файла и определение колонок</li>
-                  <li>Извлечение артикулов и групп товаров</li>
-                  <li>Расчёт ABC-классификации по группам</li>
-                  <li>Расчёт ABC-классификации по артикулам</li>
-                  <li>Определение периодов и их сортировка</li>
-                  <li>Генерация выходных файлов</li>
-                </ol>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3">
+                  <div className="flex items-center gap-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                    <Badge className="bg-blue-600 text-white text-lg px-3 py-1">X</Badge>
+                    <div>
+                      <div className="font-medium">Категория X — CV ≤ 10%</div>
+                      <div className="text-sm text-muted-foreground">Стабильный спрос, легко прогнозируемый</div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-4 p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                    <Badge className="bg-purple-600 text-white text-lg px-3 py-1">Y</Badge>
+                    <div>
+                      <div className="font-medium">Категория Y — CV 10-25%</div>
+                      <div className="text-sm text-muted-foreground">Умеренные колебания, требуется страховой запас</div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-4 p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+                    <Badge className="bg-orange-600 text-white text-lg px-3 py-1">Z</Badge>
+                    <div>
+                      <div className="font-medium">Категория Z — CV {'>'} 25%</div>
+                      <div className="text-sm text-muted-foreground">Нестабильный спрос, требуется индивидуальный анализ</div>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Download className="h-5 w-5" />
-                  Шаг 4: Скачивание результатов
-                </CardTitle>
+                <CardTitle>Матрица рекомендаций ABC-XYZ</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <p>
-                  После успешной обработки вы сможете скачать два файла:
-                </p>
-                <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                  <li><strong>report_processed.xlsx</strong> — обработанные данные с ABC</li>
-                  <li><strong>Production_Plan_Result.xlsx</strong> — итоговый план производства</li>
-                </ul>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="p-2"></th>
+                        <th className="p-2 text-center">X</th>
+                        <th className="p-2 text-center">Y</th>
+                        <th className="p-2 text-center">Z</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b">
+                        <td className="p-2 font-medium">A</td>
+                        <td className="p-2 text-center bg-green-500/10">Максимальный контроль</td>
+                        <td className="p-2 text-center bg-amber-500/10">Регулярное пополнение</td>
+                        <td className="p-2 text-center bg-orange-500/10">Анализ причин</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="p-2 font-medium">B</td>
+                        <td className="p-2 text-center bg-blue-500/10">Стандартное управление</td>
+                        <td className="p-2 text-center bg-purple-500/10">Периодический контроль</td>
+                        <td className="p-2 text-center bg-orange-500/10">Оптимизация</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2 font-medium">C</td>
+                        <td className="p-2 text-center bg-gray-500/10">Минимум запасов</td>
+                        <td className="p-2 text-center bg-red-500/10">Сокращение</td>
+                        <td className="p-2 text-center bg-red-500/10">Вывод из ассортимента</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -229,100 +274,81 @@ export default function Documentation() {
           <TabsContent value="output" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>report_processed.xlsx</CardTitle>
-                <CardDescription>Обработанные данные с ABC-классификацией</CardDescription>
+                <CardTitle className="flex items-center gap-2">
+                  <Download className="h-5 w-5" />
+                  Выходные файлы
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p>
-                  Файл содержит 3 листа с полными результатами анализа:
-                </p>
-                
-                <div className="space-y-3">
-                  <div className="p-3 bg-muted/50 rounded-lg">
-                    <h4 className="font-medium mb-2">Лист «Данные»</h4>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      Все строки исходного файла с добавленными колонками:
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline">Группа товаров</Badge>
-                      <Badge variant="outline">Артикул</Badge>
-                      <Badge variant="outline">ABC Группа</Badge>
-                      <Badge variant="outline">ABC Артикул</Badge>
-                      <Badge variant="outline">Категория</Badge>
-                    </div>
-                  </div>
-                  
-                  <div className="p-3 bg-muted/50 rounded-lg">
-                    <h4 className="font-medium mb-2">Лист «АБЦ по группам»</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Сводная таблица ABC-классификации по группам товаров с выручкой и долей
-                    </p>
-                  </div>
-                  
-                  <div className="p-3 bg-muted/50 rounded-lg">
-                    <h4 className="font-medium mb-2">Лист «АБЦ по артикулам»</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Сводная таблица ABC-классификации по отдельным артикулам
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Production_Plan_Result.xlsx</CardTitle>
-                <CardDescription>Итоговый файл для планирования</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p>
-                  Файл аналогичен report_processed.xlsx, но предназначен для использования 
-                  в системах планирования производства.
-                </p>
-                
-                <div className="flex items-start gap-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                  <FileSpreadsheet className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                  <p className="text-sm text-blue-800 dark:text-blue-200">
-                    Может использоваться для импорта в ERP-системы или для дальнейшего 
-                    XYZ-анализа и расчёта трендов
+                <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                  <h4 className="font-medium flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4" />
+                    Обработанный отчёт (CSV)
+                  </h4>
+                  <p className="text-sm text-muted-foreground">
+                    Полный отчёт со всеми показателями по каждому артикулу:
                   </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline">Артикул</Badge>
+                    <Badge variant="outline">Категория</Badge>
+                    <Badge variant="outline">ABC</Badge>
+                    <Badge variant="outline">XYZ</Badge>
+                    <Badge variant="outline">Выручка</Badge>
+                    <Badge variant="outline">Доля выручки</Badge>
+                    <Badge variant="outline">Кол-во продаж</Badge>
+                    <Badge variant="outline">Остаток</Badge>
+                    <Badge variant="outline">Цена</Badge>
+                    <Badge variant="outline">CV %</Badge>
+                    <Badge variant="outline">Ср.мес.продажи</Badge>
+                    <Badge variant="outline">Дней до 0</Badge>
+                    <Badge variant="outline">План 1м/3м/6м</Badge>
+                    <Badge variant="outline">Рекомендация</Badge>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                  <h4 className="font-medium flex items-center gap-2">
+                    <Package className="h-4 w-4" />
+                    План производства (CSV)
+                  </h4>
+                  <p className="text-sm text-muted-foreground">
+                    Отфильтрованный список артикулов, которым нужно пополнение запасов:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline">Артикул</Badge>
+                    <Badge variant="outline">Категория</Badge>
+                    <Badge variant="outline">ABC/XYZ</Badge>
+                    <Badge variant="outline">Остаток</Badge>
+                    <Badge variant="outline">Ср.мес.продажи</Badge>
+                    <Badge variant="outline">План 1м</Badge>
+                    <Badge variant="outline">План 3м</Badge>
+                    <Badge variant="outline">План 6м</Badge>
+                    <Badge variant="outline">Рекомендация</Badge>
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>ABC-классификация</CardTitle>
-                <CardDescription>Методология расчёта</CardDescription>
+                <CardTitle>Формулы расчёта</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p>
-                  ABC-анализ распределяет товары по трём категориям на основе их вклада в выручку:
-                </p>
-                
-                <div className="grid gap-3">
-                  <div className="flex items-center gap-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-                    <Badge className="bg-green-600 text-white text-lg px-3 py-1">A</Badge>
-                    <div>
-                      <div className="font-medium">Категория A — 80% выручки</div>
-                      <div className="text-sm text-muted-foreground">Самые важные товары, требующие приоритетного внимания</div>
-                    </div>
+                <div className="grid gap-3 text-sm">
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <strong>Ср. месячные продажи</strong> = Общее кол-во продаж / Число периодов
                   </div>
-                  
-                  <div className="flex items-center gap-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                    <Badge className="bg-amber-600 text-white text-lg px-3 py-1">B</Badge>
-                    <div>
-                      <div className="font-medium">Категория B — следующие 15% выручки</div>
-                      <div className="text-sm text-muted-foreground">Товары средней важности</div>
-                    </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <strong>Скорость продаж/день</strong> = Ср. месячные продажи / 30
                   </div>
-                  
-                  <div className="flex items-center gap-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                    <Badge className="bg-red-600 text-white text-lg px-3 py-1">C</Badge>
-                    <div>
-                      <div className="font-medium">Категория C — оставшиеся 5% выручки</div>
-                      <div className="text-sm text-muted-foreground">Наименее значимые товары</div>
-                    </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <strong>Дней до нуля</strong> = Текущий остаток / Скорость продаж в день
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <strong>План на N мес.</strong> = max(0, Ср.мес.продажи × N − Текущий остаток)
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <strong>CV (коэфф. вариации)</strong> = (Стандартное отклонение / Среднее) × 100%
                   </div>
                 </div>
               </CardContent>

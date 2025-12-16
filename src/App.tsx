@@ -11,7 +11,6 @@ import NewRun from "./pages/NewRun";
 import RunsList from "./pages/RunsList";
 import RunDetails from "./pages/RunDetails";
 import Documentation from "./pages/Documentation";
-import SplitByCategory from "./pages/SplitByCategory";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,14 +31,6 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <NewRun />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/split"
-              element={
-                <ProtectedRoute>
-                  <SplitByCategory />
                 </ProtectedRoute>
               }
             />
