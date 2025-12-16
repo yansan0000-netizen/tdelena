@@ -5,7 +5,9 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { useRuns } from '@/hooks/useRuns';
+import { toast } from 'sonner';
 import { Run, LogEntry } from '@/lib/types';
 import { 
   ArrowLeft, 
@@ -55,6 +57,28 @@ export default function RunDetails() {
     };
     fetchRun();
   }, [id, getRun]);
+
+  // Polling for PROCESSING status
+  useEffect(() => {
+    if (!run || run.status !== 'PROCESSING') return;
+
+    const interval = setInterval(async () => {
+      if (!id) return;
+      const data = await getRun(id);
+      if (data) {
+        setRun(data);
+        if (data.status === 'DONE') {
+          toast.success('Обработка завершена!');
+          clearInterval(interval);
+        } else if (data.status === 'ERROR') {
+          toast.error('Ошибка обработки');
+          clearInterval(interval);
+        }
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [run?.status, id, getRun]);
 
   const handleDownload = async (bucket: string, path: string | null, filename: string) => {
     if (!path) return;
@@ -116,6 +140,26 @@ export default function RunDetails() {
             </p>
           </div>
         </div>
+
+        {/* Processing indicator */}
+        {run.status === 'PROCESSING' && (
+          <Card className="border-primary/20 bg-primary/5">
+            <CardContent className="py-6">
+              <div className="flex flex-col items-center gap-4">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <div className="text-center">
+                  <p className="font-medium">Идёт обработка файла...</p>
+                  <p className="text-sm text-muted-foreground">
+                    Это может занять несколько минут
+                  </p>
+                </div>
+                <div className="w-full max-w-md">
+                  <Progress className="h-2 animate-pulse" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Metadata */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
