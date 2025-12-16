@@ -1,8 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { RunMode } from '@/lib/types';
 import { processExcelFile, ProcessingResult } from '@/lib/excel/clientProcessor';
+import { processExcelFileStream } from '@/lib/excel/streamProcessor';
 import { generateProcessedReport, generateProductionPlan } from '@/lib/excel/clientExport';
 
 interface ProcessingState {
@@ -13,6 +14,9 @@ interface ProcessingState {
   result: ProcessingResult | null;
 }
 
+// Threshold for switching to streaming mode (15MB)
+const STREAMING_THRESHOLD_MB = 15;
+
 export function useProcessing() {
   const { user } = useAuth();
   const [state, setState] = useState<ProcessingState>({
@@ -22,6 +26,35 @@ export function useProcessing() {
     error: null,
     result: null,
   });
+  
+  // AbortController for cancellation
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const cancelProcessing = useCallback(async (runId?: string) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    // Update run status to ERROR if runId provided
+    if (runId) {
+      await supabase
+        .from('runs')
+        .update({
+          status: 'ERROR',
+          error_message: 'Обработка отменена пользователем',
+        })
+        .eq('id', runId);
+    }
+    
+    setState({
+      isProcessing: false,
+      progress: '',
+      progressPercent: 0,
+      error: 'Обработка отменена',
+      result: null,
+    });
+  }, []);
 
   const processRunClient = useCallback(async (
     runId: string, 
@@ -30,13 +63,36 @@ export function useProcessing() {
   ): Promise<ProcessingResult | null> => {
     if (!user) return null;
 
+    // Create new AbortController for this run
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+
     setState({ isProcessing: true, progress: 'Начало обработки...', progressPercent: 0, error: null, result: null });
 
     try {
-      // Process file locally in browser
-      const result = await processExcelFile(file, (msg, percent) => {
-        setState(s => ({ ...s, progress: msg, progressPercent: percent ?? s.progressPercent }));
-      });
+      const fileSizeMB = file.size / 1024 / 1024;
+      const useStreaming = fileSizeMB >= STREAMING_THRESHOLD_MB;
+      
+      // Choose processor based on file size
+      let result: ProcessingResult;
+      
+      if (useStreaming) {
+        setState(s => ({ ...s, progress: `Streaming режим для файла ${fileSizeMB.toFixed(1)}MB...`, progressPercent: 2 }));
+        result = await processExcelFileStream(file, (msg, percent) => {
+          if (signal.aborted) return;
+          setState(s => ({ ...s, progress: msg, progressPercent: percent ?? s.progressPercent }));
+        }, signal);
+      } else {
+        result = await processExcelFile(file, (msg, percent) => {
+          if (signal.aborted) return;
+          setState(s => ({ ...s, progress: msg, progressPercent: percent ?? s.progressPercent }));
+        }, signal);
+      }
+
+      // Check if aborted
+      if (signal.aborted) {
+        return null;
+      }
 
       if (!result.success || !result.processedData) {
         throw new Error(result.error || 'Ошибка обработки файла');
@@ -47,6 +103,8 @@ export function useProcessing() {
       // Generate Excel files locally
       const processedBlob = generateProcessedReport(result.processedData);
       const planBlob = generateProductionPlan(result.processedData);
+
+      if (signal.aborted) return null;
 
       setState(s => ({ ...s, progress: 'Загрузка результатов...', progressPercent: 95 }));
 
@@ -67,6 +125,8 @@ export function useProcessing() {
           }),
       ]);
 
+      if (signal.aborted) return null;
+
       const processedFilePath = processedUpload.error ? null : processedPath;
       const resultFilePath = planUpload.error ? null : planPath;
 
@@ -84,9 +144,15 @@ export function useProcessing() {
       }).eq('id', runId);
 
       setState({ isProcessing: false, progress: '', progressPercent: 100, error: null, result });
+      abortControllerRef.current = null;
       return result;
 
     } catch (error) {
+      // Check if it was an abort
+      if (signal.aborted) {
+        return null;
+      }
+      
       const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
       
       // Update run with error
@@ -99,6 +165,7 @@ export function useProcessing() {
         .eq('id', runId);
 
       setState({ isProcessing: false, progress: '', progressPercent: 0, error: message, result: null });
+      abortControllerRef.current = null;
       return null;
     }
   }, [user]);
@@ -110,5 +177,6 @@ export function useProcessing() {
     error: state.error,
     result: state.result,
     processRunClient,
+    cancelProcessing,
   };
 }
