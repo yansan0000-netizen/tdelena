@@ -424,27 +424,51 @@ export async function processExcelFileStream(
     }
 
     // Pre-calculate revenue column indices
+    // Strategy: first search BEFORE "Итого", if none found - search AFTER "Итого"
     const revenueColIndices: number[] = [];
-    for (let i = 0; i < headers.length; i++) {
-      if (itogoColIdx >= 0 && i >= itogoColIdx) break;
+    const searchBeforeItogo = itogoColIdx >= 0 ? itogoColIdx : headers.length;
+    
+    // First pass: search before "Итого"
+    for (let i = 0; i < searchBeforeItogo; i++) {
       if (isRevenueColumn(headers[i])) {
         revenueColIndices.push(i);
       }
     }
+    
+    // Second pass: if nothing found before "Итого", search after it
+    if (revenueColIndices.length === 0 && itogoColIdx >= 0) {
+      log(`Выручка до Итого не найдена, ищем после колонки ${itogoColIdx}`, 46);
+      for (let i = itogoColIdx + 1; i < headers.length; i++) {
+        if (isRevenueColumn(headers[i])) {
+          revenueColIndices.push(i);
+        }
+      }
+    }
 
-    // Fallback: if no revenue columns found, look for numeric columns that come after month-quantity columns
-    // In 1C exports, usually pattern is: "Январь 2024 кол-во", "Январь 2024 сумма" (or similar)
+    // Fallback: look for month columns that are not quantity columns
     if (revenueColIndices.length === 0) {
-      for (let i = 0; i < headers.length; i++) {
-        if (itogoColIdx >= 0 && i >= itogoColIdx) break;
+      const fallbackLimit = itogoColIdx >= 0 ? itogoColIdx : headers.length;
+      // First try before "Итого"
+      for (let i = 0; i < fallbackLimit; i++) {
         const header = headers[i];
         const parsed = parseMonthYear(header);
-        // If it's a month column and NOT a quantity column, it might be revenue
         if (parsed && !isQuantityColumn(header)) {
-          // Check if it looks like a numeric/revenue column
           const h = header.toLowerCase();
           if (!h.includes('остаток') && !h.includes('цена') && !h.includes('группа')) {
             revenueColIndices.push(i);
+          }
+        }
+      }
+      // If still nothing, try after "Итого"
+      if (revenueColIndices.length === 0 && itogoColIdx >= 0) {
+        for (let i = itogoColIdx + 1; i < headers.length; i++) {
+          const header = headers[i];
+          const parsed = parseMonthYear(header);
+          if (parsed && !isQuantityColumn(header)) {
+            const h = header.toLowerCase();
+            if (!h.includes('остаток') && !h.includes('цена') && !h.includes('группа')) {
+              revenueColIndices.push(i);
+            }
           }
         }
       }
@@ -456,7 +480,6 @@ export async function processExcelFileStream(
       log(`Выручка колонки: ${revenueColIndices.slice(0, 5).map(i => headers[i]).join(', ')}`, 46);
     } else {
       log(`ВНИМАНИЕ: Колонки с выручкой не найдены! Проверьте заголовки файла.`, 46);
-      // Log first 10 headers for debugging
       log(`Первые заголовки: ${headers.slice(0, 10).join(' | ')}`, 46);
     }
     if (itogoSummaIdx >= 0) {
@@ -591,13 +614,28 @@ export async function processExcelFileStream(
     log(`Метрики рассчитаны для ${articleMetrics.length} артикулов`, 84);
 
     // Detect periods from ORIGINAL headers (not newHeaders which has base columns prepended)
+    // Strategy: first search BEFORE "Итого", if none found - search AFTER "Итого"
     const periods: string[] = [];
-    const maxCol = itogoColIdx >= 0 ? itogoColIdx : headers.length;
-    for (let i = 0; i < maxCol; i++) {
+    const periodSearchLimit = itogoColIdx >= 0 ? itogoColIdx : headers.length;
+    
+    // First pass: search before "Итого"
+    for (let i = 0; i < periodSearchLimit; i++) {
       const parsed = parseMonthYear(headers[i]);
       if (parsed) {
         const label = formatMonthYear(parsed.month, parsed.year);
         if (!periods.includes(label)) periods.push(label);
+      }
+    }
+    
+    // Second pass: if no periods found before "Итого", search after it
+    if (periods.length === 0 && itogoColIdx >= 0) {
+      log(`Периоды до Итого не найдены, ищем после колонки ${itogoColIdx}`, 85);
+      for (let i = itogoColIdx + 1; i < headers.length; i++) {
+        const parsed = parseMonthYear(headers[i]);
+        if (parsed) {
+          const label = formatMonthYear(parsed.month, parsed.year);
+          if (!periods.includes(label)) periods.push(label);
+        }
       }
     }
 
