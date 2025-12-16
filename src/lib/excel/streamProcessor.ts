@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs';
+import * as XLSX from 'xlsx';
 import { ProcessingResult, ProcessingMetrics, RowData, ABCItem, ArticleMetrics, XYZData } from './clientProcessor';
 
 // Russian month names
@@ -130,8 +130,11 @@ function getABCXYZRecommendation(abc: string, xyz: string): string {
 
 const yieldToMain = () => new Promise(resolve => setTimeout(resolve, 0));
 
+// Process file in chunks to avoid memory issues
+const CHUNK_SIZE = 10000; // rows per chunk
+
 /**
- * Stream-based Excel processor using ExcelJS for memory-efficient large file handling
+ * Memory-optimized Excel processor using XLSX library with chunked processing
  */
 export async function processExcelFileStream(
   file: File,
@@ -157,54 +160,72 @@ export async function processExcelFileStream(
 
   try {
     const fileSizeMB = file.size / 1024 / 1024;
-    log(`Streaming обработка файла: ${fileSizeMB.toFixed(1)}MB`, 5);
+    log(`Чанковая обработка файла: ${fileSizeMB.toFixed(1)}MB`, 5);
     checkAbort();
 
-    log('Чтение файла в поток...', 10);
-    let arrayBuffer: ArrayBuffer | null = await file.arrayBuffer();
+    log('Чтение файла...', 10);
+    const arrayBuffer = await file.arrayBuffer();
     checkAbort();
-
-    log('Инициализация ExcelJS...', 15);
-    const workbook = new ExcelJS.Workbook();
     
-    // Load with ignoreNodes to skip images/drawings which cause memory issues
-    await workbook.xlsx.load(arrayBuffer, {
-      ignoreNodes: [
-        'xl/drawings',
-        'xl/drawings/drawing1.xml',
-        'xl/drawings/drawing2.xml',
-        'xl/media',
-      ] as any // ExcelJS types don't include this option but it works
+    log('Парсинг Excel (без изображений)...', 15);
+    
+    // Use XLSX with memory-optimized options - skip images entirely
+    const workbook = XLSX.read(arrayBuffer, {
+      type: 'array',
+      cellDates: true,
+      cellNF: false,
+      cellHTML: false,
+      cellStyles: false,
+      // Only load sheet data, not metadata
+      bookProps: false,
+      bookSheets: true,
+      // Optimize for large files
+      dense: false,
+      // WTF mode for faster parsing
+      WTF: true,
     });
     checkAbort();
 
-    // Free the array buffer immediately
-    arrayBuffer = null;
-
-    log(`Файл загружен, листов: ${workbook.worksheets.length}`, 20);
+    log(`Файл загружен, листов: ${workbook.SheetNames.length}`, 20);
 
     // Select data sheet
-    let worksheet = workbook.worksheets[0];
-    if (worksheet.name.toLowerCase() === 'логи' && workbook.worksheets.length > 1) {
-      worksheet = workbook.worksheets[1];
+    let sheetName = workbook.SheetNames[0];
+    if (sheetName.toLowerCase() === 'логи' && workbook.SheetNames.length > 1) {
+      sheetName = workbook.SheetNames[1];
     }
 
+    const worksheet = workbook.Sheets[sheetName];
     if (!worksheet) {
       throw new Error('В файле нет листа с данными');
     }
 
-    log(`Выбран лист: ${worksheet.name}`, 25);
+    log(`Выбран лист: ${sheetName}`, 25);
     checkAbort();
+
+    // Convert to array of arrays - more memory efficient than JSON
+    const rawData: (string | number | null)[][] = XLSX.utils.sheet_to_json(worksheet, {
+      header: 1,
+      defval: null,
+      blankrows: false,
+      raw: true,
+    });
+
+    // Free worksheet reference
+    delete workbook.Sheets[sheetName];
+    await yieldToMain();
+
+    const totalRawRows = rawData.length;
+    log(`Всего строк в файле: ${totalRawRows}`, 28);
 
     // Parse period from first rows
     let periodStart: string | null = null;
     let periodEnd: string | null = null;
 
-    for (let rowNum = 1; rowNum <= 5; rowNum++) {
-      const row = worksheet.getRow(rowNum);
-      for (let colNum = 1; colNum <= 10; colNum++) {
-        const cell = row.getCell(colNum);
-        const cellValue = cell.value;
+    for (let rowNum = 0; rowNum < Math.min(5, rawData.length); rowNum++) {
+      const row = rawData[rowNum];
+      if (!row) continue;
+      for (let colNum = 0; colNum < Math.min(10, row.length); colNum++) {
+        const cellValue = row[colNum];
         if (cellValue) {
           const cellStr = String(cellValue);
           if (cellStr.includes('Период') || cellStr.match(/\d{2}\.\d{2}\.\d{4}\s*[-–—]\s*\d{2}\.\d{2}\.\d{4}/)) {
@@ -212,7 +233,7 @@ export async function processExcelFileStream(
             if (parsed.start && parsed.end) {
               periodStart = parsed.start.toISOString().split('T')[0];
               periodEnd = parsed.end.toISOString().split('T')[0];
-              log(`Найден период: ${periodStart} - ${periodEnd}`, 28);
+              log(`Найден период: ${periodStart} - ${periodEnd}`, 30);
               break;
             }
           }
@@ -222,19 +243,21 @@ export async function processExcelFileStream(
     }
 
     // Find header row
-    log('Поиск заголовков...', 30);
-    let headerRowIdx = 1;
+    log('Поиск заголовков...', 32);
+    let headerRowIdx = 0;
 
-    for (let rowNum = 1; rowNum <= 15; rowNum++) {
-      const row = worksheet.getRow(rowNum);
+    for (let rowNum = 0; rowNum < Math.min(15, rawData.length); rowNum++) {
+      const row = rawData[rowNum];
+      if (!row) continue;
+      
       let monthCount = 0;
       let hasNomenclature = false;
 
-      row.eachCell({ includeEmpty: false }, (cell) => {
-        const cellStr = String(cell.value || '').toLowerCase();
+      for (const cell of row) {
+        const cellStr = String(cell || '').toLowerCase();
         if (cellStr.includes('номенклатура')) hasNomenclature = true;
-        if (parseMonthYear(String(cell.value || ''))) monthCount++;
-      });
+        if (parseMonthYear(String(cell || ''))) monthCount++;
+      }
 
       if (hasNomenclature || monthCount >= 3) {
         headerRowIdx = rowNum;
@@ -242,27 +265,26 @@ export async function processExcelFileStream(
       }
     }
 
-    if (headerRowIdx === 1) headerRowIdx = Math.min(6, worksheet.rowCount);
-    log(`Строка заголовков: ${headerRowIdx}`, 35);
+    if (headerRowIdx === 0) headerRowIdx = Math.min(5, rawData.length - 1);
+    log(`Строка заголовков: ${headerRowIdx + 1}`, 35);
     checkAbort();
 
-    // Extract headers with merging support
+    // Extract headers with multi-row merge support
+    const maxCols = Math.max(...rawData.slice(headerRowIdx, headerRowIdx + 3).map(r => r?.length || 0));
     const headers: string[] = [];
-    const maxCols = worksheet.columnCount;
 
-    for (let col = 1; col <= maxCols; col++) {
+    for (let col = 0; col < maxCols; col++) {
       const parts: string[] = [];
-      for (let row = headerRowIdx; row <= headerRowIdx + 2 && row <= worksheet.rowCount; row++) {
-        const cell = worksheet.getRow(row).getCell(col);
-        const val = cell.value;
+      for (let row = headerRowIdx; row <= headerRowIdx + 2 && row < rawData.length; row++) {
+        const val = rawData[row]?.[col];
         if (val !== null && val !== undefined && val !== '') {
           parts.push(String(val).trim());
         }
       }
-      headers.push(parts.join(' ').trim() || `Колонка ${col}`);
+      headers.push(parts.join(' ').trim() || `Колонка ${col + 1}`);
     }
 
-    log(`Заголовков: ${headers.length}`, 40);
+    log(`Заголовков: ${headers.length}`, 38);
     checkAbort();
 
     // Find key columns
@@ -279,7 +301,7 @@ export async function processExcelFileStream(
     if (articleColIdx < 0) {
       throw new Error('Не найдена колонка с артикулом');
     }
-    log(`Колонка артикула: ${articleColIdx} (${headers[articleColIdx]})`, 42);
+    log(`Колонка артикула: ${articleColIdx} (${headers[articleColIdx]})`, 40);
 
     // Find "Итого" column
     let itogoColIdx = -1;
@@ -329,7 +351,7 @@ export async function processExcelFileStream(
       }
     }
 
-    log('Потоковая обработка строк...', 45);
+    log('Обработка строк данных...', 45);
     checkAbort();
 
     const baseHeaders = ['Группа товаров', 'Артикул', 'ABC Группа', 'ABC Артикул', 'Категория', 'XYZ-Группа', 'Рекомендация'];
@@ -337,75 +359,84 @@ export async function processExcelFileStream(
     const rows: RowData[] = [];
 
     const dataStartRow = headerRowIdx + 3;
-    const totalRows = worksheet.rowCount - dataStartRow + 1;
+    const totalDataRows = rawData.length - dataStartRow;
     let processedCount = 0;
 
-    // Stream through rows
-    for (let rowNum = dataStartRow; rowNum <= worksheet.rowCount; rowNum++) {
+    // Process in chunks
+    for (let chunkStart = dataStartRow; chunkStart < rawData.length; chunkStart += CHUNK_SIZE) {
       checkAbort();
+      
+      const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, rawData.length);
+      
+      for (let rowNum = chunkStart; rowNum < chunkEnd; rowNum++) {
+        const rawRow = rawData[rowNum];
+        if (!rawRow) continue;
 
-      const excelRow = worksheet.getRow(rowNum);
-      const cellValue = excelRow.getCell(articleColIdx + 1).value;
+        const cellValue = rawRow[articleColIdx];
+        if (cellValue === null || cellValue === undefined || cellValue === '') continue;
 
-      if (cellValue === null || cellValue === undefined || cellValue === '') continue;
+        const rawArticle = String(cellValue).trim();
+        if (!rawArticle) continue;
 
-      const rawArticle = String(cellValue).trim();
-      if (!rawArticle) continue;
+        const lowerArticle = rawArticle.toLowerCase();
+        if (lowerArticle === 'артикул' || lowerArticle === 'номенклатура' ||
+            lowerArticle === 'код' || lowerArticle === 'итого') continue;
 
-      const lowerArticle = rawArticle.toLowerCase();
-      if (lowerArticle === 'артикул' || lowerArticle === 'номенклатура' ||
-          lowerArticle === 'код' || lowerArticle === 'итого') continue;
+        const displayArticle = rawArticle;
+        const groupCode = extractGroupCode(rawArticle);
+        const rawCategory = categoryColIdx >= 0 ? String(rawRow[categoryColIdx] || '') : '';
+        const category = normalizeCategory(rawCategory);
 
-      const displayArticle = rawArticle;
-      const groupCode = extractGroupCode(rawArticle);
-      const rawCategory = categoryColIdx >= 0 ? String(excelRow.getCell(categoryColIdx + 1).value || '') : '';
-      const category = normalizeCategory(rawCategory);
+        const row: RowData = {
+          'Группа товаров': groupCode,
+          'Артикул': displayArticle,
+          'ABC Группа': '',
+          'ABC Артикул': '',
+          'Категория': category,
+          'XYZ-Группа': '',
+          'Рекомендация': '',
+        };
 
-      const row: RowData = {
-        'Группа товаров': groupCode,
-        'Артикул': displayArticle,
-        'ABC Группа': '',
-        'ABC Артикул': '',
-        'Категория': category,
-        'XYZ-Группа': '',
-        'Рекомендация': '',
-      };
-
-      // Extract all column values
-      for (let i = 0; i < headers.length; i++) {
-        const val = excelRow.getCell(i + 1).value;
-        const parsedVal = val === null || val === undefined ? null : 
-          (numericCols.has(i) ? parseNumber(val) : String(val));
-        row[headers[i]] = parsedVal;
-      }
-
-      // Calculate total revenue
-      let totalRevenue = 0;
-      if (itogoSummaIdx >= 0) {
-        totalRevenue = parseNumber(excelRow.getCell(itogoSummaIdx + 1).value);
-      } else {
-        for (const idx of revenueColIndices) {
-          totalRevenue += parseNumber(excelRow.getCell(idx + 1).value);
+        // Extract all column values
+        for (let i = 0; i < headers.length; i++) {
+          const val = rawRow[i];
+          const parsedVal = val === null || val === undefined ? null : 
+            (numericCols.has(i) ? parseNumber(val) : String(val));
+          row[headers[i]] = parsedVal;
         }
-      }
-      row['Выручка'] = totalRevenue;
 
-      rows.push(row);
-      processedCount++;
+        // Calculate total revenue
+        let totalRevenue = 0;
+        if (itogoSummaIdx >= 0) {
+          totalRevenue = parseNumber(rawRow[itogoSummaIdx]);
+        } else {
+          for (const idx of revenueColIndices) {
+            totalRevenue += parseNumber(rawRow[idx]);
+          }
+        }
+        row['Выручка'] = totalRevenue;
 
-      // Progress update and memory relief every 500 rows
-      if (processedCount % 500 === 0) {
-        const percent = Math.round(45 + (processedCount / totalRows) * 25);
-        log(`Обработано строк: ${processedCount}`, percent, true);
-        await yieldToMain(); // Allow GC to run
+        rows.push(row);
+        processedCount++;
       }
+
+      // Progress and memory relief after each chunk
+      const percent = Math.round(45 + (processedCount / totalDataRows) * 25);
+      log(`Обработано строк: ${processedCount}/${totalDataRows}`, percent, true);
+      
+      // Clear processed chunk from memory
+      for (let i = chunkStart; i < chunkEnd; i++) {
+        rawData[i] = null as any;
+      }
+      
+      await yieldToMain();
     }
+
+    // Clear remaining raw data
+    rawData.length = 0;
 
     log(`Всего обработано строк: ${rows.length}`, 72);
     checkAbort();
-
-    // Free worksheet memory
-    workbook.removeWorksheet(worksheet.id);
 
     // Calculate ABC
     log('Расчёт ABC анализа...', 75);
@@ -453,168 +484,194 @@ export async function processExcelFileStream(
     }
 
     const lastPeriod = periods.length > 0 ? periods[periods.length - 1] : null;
-    log(`Обработка завершена. Периодов: ${periods.length}, Последний: ${lastPeriod}`, 85);
+
+    const metrics: ProcessingMetrics = {
+      periodsFound: periods.length,
+      rowsProcessed: rows.length,
+      lastPeriod,
+      periodStart,
+      periodEnd,
+    };
+
+    log(`Периодов: ${periods.length}, Строк: ${rows.length}`, 90);
 
     return {
       success: true,
+      error: undefined,
       processedData: {
+        headers: newHeaders,
         dataSheet: rows,
         abcByGroups,
         abcByArticles,
         articleMetrics,
-        headers: newHeaders,
       },
-      error: null,
-      metrics: {
-        periodsFound: periods.length,
-        rowsProcessed: rows.length,
-        lastPeriod,
-        periodStart,
-        periodEnd,
-      },
+      metrics,
       logs,
     };
 
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    log(`Ошибка обработки: ${message}`, 0);
-
+    const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
+    log(`Ошибка: ${message}`, 0, true);
+    
     return {
       success: false,
-      processedData: null,
       error: message,
+      processedData: null,
       metrics: { periodsFound: 0, rowsProcessed: 0, lastPeriod: null, periodStart: null, periodEnd: null },
       logs,
     };
   }
 }
 
-// Local ABC calculation
+// ==================== Local Analysis Functions ====================
+
 function calculateABCByGroupsLocal(rows: RowData[]): ABCItem[] {
-  const groups = new Map<string, { name: string; category: string; revenue: number }>();
-
+  const groupMap = new Map<string, { revenue: number; category: string }>();
+  
   for (const row of rows) {
-    const name = String(row['Группа товаров'] || '');
-    const category = String(row['Категория'] || '');
+    const group = String(row['Группа товаров'] || '');
+    const category = String(row['Категория'] || 'Прочее');
     const revenue = parseNumber(row['Выручка']);
-
-    const key = `${name}|||${category}`;
-    const existing = groups.get(key);
-    if (existing) {
-      existing.revenue += revenue;
-    } else {
-      groups.set(key, { name, category, revenue });
-    }
+    
+    const key = `${group}|||${category}`;
+    const existing = groupMap.get(key) || { revenue: 0, category };
+    existing.revenue += revenue;
+    groupMap.set(key, existing);
   }
-
-  const items = Array.from(groups.values()).sort((a, b) => b.revenue - a.revenue);
-  const totalRevenue = items.reduce((s, i) => s + i.revenue, 0);
-
+  
+  const items: ABCItem[] = Array.from(groupMap.entries()).map(([key, data]) => ({
+    name: key.split('|||')[0],
+    revenue: data.revenue,
+    category: data.category,
+    abc: 'C',
+    share: 0,
+    cumulativeShare: 0,
+  }));
+  
+  items.sort((a, b) => b.revenue - a.revenue);
+  
+  const totalRevenue = items.reduce((sum, item) => sum + item.revenue, 0);
   let cumulative = 0;
-  return items.map(item => {
-    const share = totalRevenue > 0 ? item.revenue / totalRevenue : 0;
-    cumulative += share;
-    let abc = 'C';
-    if (cumulative <= 0.8) abc = 'A';
-    else if (cumulative <= 0.95) abc = 'B';
-
-    return { name: item.name, category: item.category, revenue: item.revenue, share, cumulativeShare: cumulative, abc };
-  });
+  
+  for (const item of items) {
+    item.share = totalRevenue > 0 ? (item.revenue / totalRevenue) * 100 : 0;
+    cumulative += item.share;
+    item.cumulativeShare = cumulative;
+    
+    if (cumulative <= 80) item.abc = 'A';
+    else if (cumulative <= 95) item.abc = 'B';
+    else item.abc = 'C';
+  }
+  
+  return items;
 }
 
 function calculateABCByArticlesLocal(rows: RowData[]): ABCItem[] {
-  const articles = new Map<string, number>();
-
+  const articleMap = new Map<string, { revenue: number; category: string }>();
+  
   for (const row of rows) {
     const article = String(row['Артикул'] || '');
+    const category = String(row['Категория'] || 'Прочее');
     const revenue = parseNumber(row['Выручка']);
-    articles.set(article, (articles.get(article) || 0) + revenue);
+    
+    const existing = articleMap.get(article) || { revenue: 0, category };
+    existing.revenue += revenue;
+    articleMap.set(article, existing);
   }
-
-  const items = Array.from(articles.entries())
-    .map(([name, revenue]) => ({ name, revenue }))
-    .sort((a, b) => b.revenue - a.revenue);
-
-  const totalRevenue = items.reduce((s, i) => s + i.revenue, 0);
-
+  
+  const items: ABCItem[] = Array.from(articleMap.entries()).map(([name, data]) => ({
+    name,
+    revenue: data.revenue,
+    category: data.category,
+    abc: 'C',
+    share: 0,
+    cumulativeShare: 0,
+  }));
+  
+  items.sort((a, b) => b.revenue - a.revenue);
+  
+  const totalRevenue = items.reduce((sum, item) => sum + item.revenue, 0);
   let cumulative = 0;
-  return items.map(item => {
-    const share = totalRevenue > 0 ? item.revenue / totalRevenue : 0;
-    cumulative += share;
-    let abc = 'C';
-    if (cumulative <= 0.8) abc = 'A';
-    else if (cumulative <= 0.95) abc = 'B';
-
-    return { name: item.name, revenue: item.revenue, share, cumulativeShare: cumulative, abc };
-  });
+  
+  for (const item of items) {
+    item.share = totalRevenue > 0 ? (item.revenue / totalRevenue) * 100 : 0;
+    cumulative += item.share;
+    item.cumulativeShare = cumulative;
+    
+    if (cumulative <= 80) item.abc = 'A';
+    else if (cumulative <= 95) item.abc = 'B';
+    else item.abc = 'C';
+  }
+  
+  return items;
 }
 
 function calculateXYZByArticlesLocal(rows: RowData[], headers: string[]): Map<string, XYZData> {
-  const result = new Map<string, XYZData>();
-
+  // Find quantity columns for each period
   const qtyColIndices: number[] = [];
+  
   for (let i = 0; i < headers.length; i++) {
-    const h = headers[i];
-    const monthParsed = parseMonthYear(h);
-    if (monthParsed && (isQuantityColumn(h) || h.toLowerCase().includes('кол'))) {
+    const header = headers[i];
+    const hasMonth = parseMonthYear(header);
+    if (hasMonth && isQuantityColumn(header)) {
       qtyColIndices.push(i);
     }
   }
-
-  if (qtyColIndices.length < 3) {
+  
+  // If no qty columns found by month, try any qty columns
+  if (qtyColIndices.length === 0) {
     for (let i = 0; i < headers.length; i++) {
-      const h = headers[i];
-      const monthParsed = parseMonthYear(h);
-      const hLower = h.toLowerCase();
-      if (monthParsed && !hLower.includes('сумма') && !hLower.includes('выручка') && !hLower.includes('итого')) {
-        if (!qtyColIndices.includes(i)) qtyColIndices.push(i);
+      if (isQuantityColumn(headers[i])) {
+        qtyColIndices.push(i);
       }
     }
   }
-
-  if (qtyColIndices.length < 3) return result;
-
-  const articleData = new Map<string, number[]>();
+  
+  const articleQty = new Map<string, number[]>();
+  
   for (const row of rows) {
     const article = String(row['Артикул'] || '');
     if (!article) continue;
-
-    const values = qtyColIndices.map(idx => parseNumber(row[headers[idx]]));
-    const existing = articleData.get(article);
-    if (existing) {
-      for (let i = 0; i < values.length; i++) {
-        existing[i] = (existing[i] || 0) + values[i];
-      }
+    
+    const quantities: number[] = qtyColIndices.map(idx => {
+      const headerKey = headers[idx];
+      return parseNumber(row[headerKey]);
+    });
+    
+    const existing = articleQty.get(article) || [];
+    if (existing.length === 0) {
+      articleQty.set(article, quantities);
     } else {
-      articleData.set(article, values);
+      for (let i = 0; i < quantities.length; i++) {
+        existing[i] = (existing[i] || 0) + quantities[i];
+      }
     }
   }
-
-  for (const [article, values] of articleData) {
-    const nonZero = values.filter(v => v > 0);
-    if (nonZero.length < 3) {
-      result.set(article, { xyz: 'Z', cv: 999, mean: 0, stdDev: 0, periodCount: nonZero.length });
+  
+  const results = new Map<string, XYZData>();
+  
+  for (const [article, quantities] of articleQty.entries()) {
+    const nonZero = quantities.filter(q => q > 0);
+    
+    if (nonZero.length < 2) {
+      results.set(article, { xyz: 'Z', cv: 100, mean: 0, stdDev: 0, periodCount: nonZero.length });
       continue;
     }
-
-    const mean = nonZero.reduce((s, v) => s + v, 0) / nonZero.length;
-    if (mean === 0) {
-      result.set(article, { xyz: 'Z', cv: 999, mean: 0, stdDev: 0, periodCount: nonZero.length });
-      continue;
-    }
-
-    const variance = nonZero.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / nonZero.length;
+    
+    const avg = nonZero.reduce((a, b) => a + b, 0) / nonZero.length;
+    const variance = nonZero.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / nonZero.length;
     const stdDev = Math.sqrt(variance);
-    const cv = (stdDev / mean) * 100;
-
-    let xyz = 'Z';
+    const cv = avg > 0 ? (stdDev / avg) * 100 : 100;
+    
+    let xyz: 'X' | 'Y' | 'Z';
     if (cv <= 10) xyz = 'X';
     else if (cv <= 25) xyz = 'Y';
-
-    result.set(article, { xyz, cv, mean, stdDev, periodCount: nonZero.length });
+    else xyz = 'Z';
+    
+    results.set(article, { xyz, cv, mean: avg, stdDev, periodCount: nonZero.length });
   }
-
-  return result;
+  
+  return results;
 }
 
 function calculateArticleMetricsLocal(
@@ -624,103 +681,107 @@ function calculateArticleMetricsLocal(
   abcByArticles: ABCItem[],
   xyzResults: Map<string, XYZData>
 ): ArticleMetrics[] {
-  const groupLookup = new Map(abcByGroups.map(g => [`${g.name}|||${g.category}`, g.abc]));
-  const articleLookup = new Map(abcByArticles.map(a => [a.name, a.abc]));
+  const articleDataMap = new Map<string, {
+    quantities: number[];
+    revenues: number[];
+    category: string;
+    groupCode: string;
+    stock: number;
+  }>();
 
-  const qtyColIndices: number[] = [];
+  // Find period columns
+  const periodCols: { header: string; idx: number; isQty: boolean; isRev: boolean }[] = [];
   for (let i = 0; i < headers.length; i++) {
     const h = headers[i];
-    const monthParsed = parseMonthYear(h);
-    if (monthParsed && (isQuantityColumn(h) || h.toLowerCase().includes('кол'))) {
-      qtyColIndices.push(i);
+    if (parseMonthYear(h)) {
+      periodCols.push({
+        header: h,
+        idx: i,
+        isQty: isQuantityColumn(h),
+        isRev: isRevenueColumn(h),
+      });
     }
   }
 
-  const stockColIdx = headers.findIndex(h => h.toLowerCase().includes('остаток'));
-  const priceColIdx = headers.findIndex(h => {
-    const hl = h.toLowerCase();
-    return hl.includes('цена') || hl.includes('price');
-  });
+  // Find stock column
+  const stockColIdx = headers.findIndex(h => 
+    h.toLowerCase().includes('остаток') || h.toLowerCase().includes('stock')
+  );
 
-  const articleGroups = new Map<string, RowData[]>();
+  // Aggregate by article
   for (const row of rows) {
     const article = String(row['Артикул'] || '');
     if (!article) continue;
-    const existing = articleGroups.get(article) || [];
-    existing.push(row);
-    articleGroups.set(article, existing);
-  }
 
-  const metrics: ArticleMetrics[] = [];
+    const existing = articleDataMap.get(article) || {
+      quantities: [],
+      revenues: [],
+      category: String(row['Категория'] || 'Прочее'),
+      groupCode: String(row['Группа товаров'] || ''),
+      stock: 0,
+    };
 
-  for (const [article, articleRows] of articleGroups) {
-    const firstRow = articleRows[0];
-    const category = String(firstRow['Категория'] || '');
-    const groupCode = String(firstRow['Группа товаров'] || '');
-
-    let totalRevenue = 0;
-    let totalQuantity = 0;
-    let currentStock = 0;
-    let totalPrice = 0;
-    let priceCount = 0;
-
-    for (const row of articleRows) {
-      totalRevenue += parseNumber(row['Выручка']);
-
-      for (const idx of qtyColIndices) {
-        totalQuantity += parseNumber(row[headers[idx]]);
+    for (const pc of periodCols) {
+      const val = parseNumber(row[pc.header]);
+      if (pc.isQty) {
+        existing.quantities.push(val);
       }
-
-      if (stockColIdx >= 0) {
-        currentStock += parseNumber(row[headers[stockColIdx]]);
-      }
-
-      if (priceColIdx >= 0) {
-        const price = parseNumber(row[headers[priceColIdx]]);
-        if (price > 0) {
-          totalPrice += price;
-          priceCount++;
-        }
+      if (pc.isRev) {
+        existing.revenues.push(val);
       }
     }
 
-    const avgPrice = priceCount > 0 ? totalPrice / priceCount : (totalQuantity > 0 ? totalRevenue / totalQuantity : 0);
-    const xyzData = xyzResults.get(article) || { xyz: 'Z', cv: 999, mean: 0, stdDev: 0, periodCount: 0 };
-    const periodsWithSales = xyzData.periodCount || (qtyColIndices.length > 0 ? qtyColIndices.length : 1);
-    const avgMonthlySales = periodsWithSales > 0 ? totalQuantity / periodsWithSales : 0;
-    const dailySalesVelocity = avgMonthlySales / 30;
-    const daysToStockout = dailySalesVelocity > 0 ? Math.round(currentStock / dailySalesVelocity) : 9999;
-    const safetyMultiplier = xyzData.xyz === 'X' ? 1.0 : xyzData.xyz === 'Y' ? 1.2 : 1.5;
-    const plan1M = Math.ceil(avgMonthlySales * 1 * safetyMultiplier);
-    const plan3M = Math.ceil(avgMonthlySales * 3 * safetyMultiplier);
-    const plan6M = Math.ceil(avgMonthlySales * 6 * safetyMultiplier);
-    const capitalizationByPrice = currentStock * avgPrice;
-    const groupKey = `${groupCode}|||${category}`;
-    const abcGroup = groupLookup.get(groupKey) || 'C';
-    const abcArticle = articleLookup.get(article) || 'C';
+    if (stockColIdx >= 0) {
+      existing.stock += parseNumber(row[headers[stockColIdx]]);
+    }
+
+    articleDataMap.set(article, existing);
+  }
+
+  const metrics: ArticleMetrics[] = [];
+  const abcArticleLookup = new Map(abcByArticles.map(a => [a.name, a]));
+  const abcGroupLookup = new Map(abcByGroups.map(g => [`${g.name}|||${g.category}`, g]));
+
+  for (const [article, data] of articleDataMap.entries()) {
+    const xyzData = xyzResults.get(article);
+    const abcArticle = abcArticleLookup.get(article);
+    const abcGroup = abcGroupLookup.get(`${data.groupCode}|||${data.category}`);
+
+    const totalQty = data.quantities.reduce((a, b) => a + b, 0);
+    const totalRev = data.revenues.reduce((a, b) => a + b, 0);
+    const avgQtyPerPeriod = data.quantities.length > 0 ? totalQty / data.quantities.length : 0;
+    const avgPrice = totalQty > 0 ? totalRev / totalQty : 0;
+
+    // Calculate forecasts
+    const recentQty = data.quantities.slice(-3);
+    const forecast1m = recentQty.length > 0 ? recentQty.reduce((a, b) => a + b, 0) / recentQty.length : 0;
+
+    // Days to stockout
+    const dailySales = avgQtyPerPeriod / 30;
+    const daysToStockout = dailySales > 0 ? Math.round(data.stock / dailySales) : 999;
 
     metrics.push({
       article,
-      category,
-      groupCode,
-      abcGroup,
-      abcArticle,
-      xyzGroup: xyzData.xyz,
-      recommendation: getABCXYZRecommendation(abcArticle, xyzData.xyz),
-      totalRevenue,
-      totalQuantity,
-      currentStock,
+      category: data.category,
+      groupCode: data.groupCode,
+      abcGroup: abcGroup?.abc || 'C',
+      abcArticle: abcArticle?.abc || 'C',
+      xyzGroup: xyzData?.xyz || 'Z',
+      recommendation: getABCXYZRecommendation(abcArticle?.abc || 'C', xyzData?.xyz || 'Z'),
+      totalQuantity: totalQty,
+      totalRevenue: totalRev,
       avgPrice,
-      avgMonthlySales,
-      dailySalesVelocity,
+      currentStock: data.stock,
+      plan1M: Math.round(Math.max(0, forecast1m - data.stock)),
+      plan3M: Math.round(Math.max(0, forecast1m * 3 - data.stock)),
+      plan6M: Math.round(Math.max(0, forecast1m * 6 - data.stock)),
+      avgMonthlySales: Math.round(avgQtyPerPeriod),
+      dailySalesVelocity: Math.round(dailySales * 100) / 100,
       daysToStockout,
-      plan1M,
-      plan3M,
-      plan6M,
-      capitalizationByPrice,
-      cv: xyzData.cv,
+      capitalizationByPrice: Math.round(data.stock * avgPrice),
+      cv: xyzData?.cv || 100,
     });
   }
 
-  return metrics.sort((a, b) => b.totalRevenue - a.totalRevenue);
+  return metrics;
 }
