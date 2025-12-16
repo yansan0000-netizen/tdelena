@@ -4,6 +4,9 @@ export interface WorkerResult {
   success: boolean;
   processedReportBuffer?: ArrayBuffer;
   productionPlanBuffer?: ArrayBuffer;
+  processedReportCSV?: string;
+  productionPlanCSV?: string;
+  isCSV?: boolean;
   error?: string;
   metrics: {
     periodsFound: number;
@@ -90,6 +93,9 @@ export function useExcelWorker() {
               success: true,
               processedReportBuffer: data.processedReportBuffer,
               productionPlanBuffer: data.productionPlanBuffer,
+              processedReportCSV: data.processedReportCSV,
+              productionPlanCSV: data.productionPlanCSV,
+              isCSV: data.isCSV,
               metrics: data.metrics,
             });
           } else {
