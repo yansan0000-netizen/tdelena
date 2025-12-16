@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
-import { useExcelWorker, AggregatedData } from './useExcelWorker';
+import { useStreamingWorker } from './useStreamingWorker';
 import { RunMode } from '@/lib/types';
 
 interface ProcessingState {
@@ -13,7 +13,11 @@ interface ProcessingState {
 
 export function useProcessing() {
   const { user } = useAuth();
-  const { processFile: processWithWorker, cancelProcessing: cancelWorker, progress: workerProgress } = useExcelWorker();
+  const { 
+    processFile: processWithStreamingWorker, 
+    cancelProcessing: cancelStreamingWorker, 
+    progress: streamingProgress 
+  } = useStreamingWorker();
   
   const [state, setState] = useState<ProcessingState>({
     isProcessing: false,
@@ -26,17 +30,17 @@ export function useProcessing() {
 
   // Sync worker progress to state
   useEffect(() => {
-    if (workerProgress.message) {
+    if (streamingProgress.message) {
       setState(s => ({
         ...s,
-        progress: workerProgress.message,
-        progressPercent: workerProgress.percent,
+        progress: streamingProgress.message,
+        progressPercent: streamingProgress.percent,
       }));
     }
-  }, [workerProgress]);
+  }, [streamingProgress]);
 
   const cancelProcessing = useCallback(async (runId?: string) => {
-    cancelWorker();
+    cancelStreamingWorker();
     
     const id = runId || currentRunIdRef.current;
     if (id) {
@@ -56,7 +60,7 @@ export function useProcessing() {
       progressPercent: 0,
       error: 'Обработка отменена',
     });
-  }, [cancelWorker]);
+  }, [cancelStreamingWorker]);
 
   // Generate safe filename for storage
   const generateSafeFileName = (originalName: string): string => {
@@ -66,11 +70,11 @@ export function useProcessing() {
     return `file_${timestamp}_${randomStr}.${ext}`;
   };
 
-  // Call Edge Function to generate reports
-  const generateReportsOnServer = async (
+  // Call Edge Function to run analytics
+  const runAnalyticsOnServer = async (
     runId: string, 
     userId: string, 
-    aggregatedData: AggregatedData,
+    periods: string[],
     metrics: {
       periodsFound: number;
       rowsProcessed: number;
@@ -80,11 +84,11 @@ export function useProcessing() {
     }
   ): Promise<{ success: boolean; error?: string }> => {
     try {
-      const { data, error } = await supabase.functions.invoke('generate-reports', {
+      const { data, error } = await supabase.functions.invoke('run-analytics', {
         body: {
           runId,
           userId,
-          aggregatedData,
+          periods,
           metrics,
         },
       });
@@ -100,7 +104,7 @@ export function useProcessing() {
       
       return { success: true };
     } catch (err) {
-      console.error('Error calling generate-reports:', err);
+      console.error('Error calling run-analytics:', err);
       return { success: false, error: err instanceof Error ? err.message : 'Network error' };
     }
   };
@@ -109,7 +113,7 @@ export function useProcessing() {
     runId: string, 
     mode: RunMode, 
     file: File
-  ): Promise<{ success: boolean; rowsProcessed?: number; aggregatedByBase?: boolean; originalArticleCount?: number; finalArticleCount?: number }> => {
+  ): Promise<{ success: boolean; rowsProcessed?: number }> => {
     if (!user) return { success: false };
 
     currentRunIdRef.current = runId;
@@ -133,29 +137,30 @@ export function useProcessing() {
       // Update run with input file path
       await supabase.from('runs').update({
         input_file_path: inputPath,
+        status: 'PROCESSING',
       }).eq('id', runId);
       
-      // 2. Process file using Web Worker (client-side parsing only)
+      // 2. Process file using Streaming Worker (parses Excel and uploads to DB in batches)
       setState(s => ({ ...s, progress: 'Обработка файла...', progressPercent: 10 }));
       
-      const result = await processWithWorker(file);
+      const result = await processWithStreamingWorker(file, runId, user.id);
       
-      if (!result.success || !result.aggregatedData) {
+      if (!result.success) {
         throw new Error(result.error || 'Ошибка обработки файла');
       }
       
-      // 3. Send aggregated data to Edge Function for report generation
-      setState(s => ({ ...s, progress: 'Генерация отчётов на сервере...', progressPercent: 88 }));
+      // 3. Run analytics on server (calculates ABC/XYZ and generates reports)
+      setState(s => ({ ...s, progress: 'Запуск аналитики на сервере...', progressPercent: 95 }));
       
-      const serverResult = await generateReportsOnServer(
+      const analyticsResult = await runAnalyticsOnServer(
         runId,
         user.id,
-        result.aggregatedData,
-        result.metrics
+        result.periods || [],
+        result.metrics || { periodsFound: 0, rowsProcessed: 0, lastPeriod: null }
       );
       
-      if (!serverResult.success) {
-        throw new Error(serverResult.error || 'Ошибка генерации отчётов');
+      if (!analyticsResult.success) {
+        throw new Error(analyticsResult.error || 'Ошибка аналитики');
       }
       
       setState({ 
@@ -168,10 +173,7 @@ export function useProcessing() {
       currentRunIdRef.current = null;
       return { 
         success: true, 
-        rowsProcessed: result.metrics.rowsProcessed,
-        aggregatedByBase: result.metrics.aggregatedByBase,
-        originalArticleCount: result.metrics.originalArticleCount,
-        finalArticleCount: result.metrics.finalArticleCount,
+        rowsProcessed: result.totalRows,
       };
 
     } catch (error) {
@@ -190,7 +192,7 @@ export function useProcessing() {
       currentRunIdRef.current = null;
       return { success: false };
     }
-  }, [user, processWithWorker]);
+  }, [user, processWithStreamingWorker]);
 
   return {
     isProcessing: state.isProcessing,

@@ -98,6 +98,145 @@ export type Database = {
         }
         Relationships: []
       }
+      sales_analytics: {
+        Row: {
+          abc_group: string | null
+          article: string
+          avg_monthly_qty: number | null
+          avg_price: number | null
+          category: string | null
+          coefficient_of_variation: number | null
+          created_at: string | null
+          cumulative_share: number | null
+          current_stock: number | null
+          days_until_stockout: number | null
+          group_code: string | null
+          id: string
+          plan_1m: number | null
+          plan_3m: number | null
+          plan_6m: number | null
+          recommendation: string | null
+          revenue_share: number | null
+          run_id: string
+          sales_velocity_day: number | null
+          total_quantity: number | null
+          total_revenue: number | null
+          xyz_group: string | null
+        }
+        Insert: {
+          abc_group?: string | null
+          article: string
+          avg_monthly_qty?: number | null
+          avg_price?: number | null
+          category?: string | null
+          coefficient_of_variation?: number | null
+          created_at?: string | null
+          cumulative_share?: number | null
+          current_stock?: number | null
+          days_until_stockout?: number | null
+          group_code?: string | null
+          id?: string
+          plan_1m?: number | null
+          plan_3m?: number | null
+          plan_6m?: number | null
+          recommendation?: string | null
+          revenue_share?: number | null
+          run_id: string
+          sales_velocity_day?: number | null
+          total_quantity?: number | null
+          total_revenue?: number | null
+          xyz_group?: string | null
+        }
+        Update: {
+          abc_group?: string | null
+          article?: string
+          avg_monthly_qty?: number | null
+          avg_price?: number | null
+          category?: string | null
+          coefficient_of_variation?: number | null
+          created_at?: string | null
+          cumulative_share?: number | null
+          current_stock?: number | null
+          days_until_stockout?: number | null
+          group_code?: string | null
+          id?: string
+          plan_1m?: number | null
+          plan_3m?: number | null
+          plan_6m?: number | null
+          recommendation?: string | null
+          revenue_share?: number | null
+          run_id?: string
+          sales_velocity_day?: number | null
+          total_quantity?: number | null
+          total_revenue?: number | null
+          xyz_group?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_analytics_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sales_data: {
+        Row: {
+          article: string
+          avg_price: number | null
+          category: string | null
+          created_at: string | null
+          current_stock: number | null
+          group_code: string | null
+          id: string
+          period_quantities: Json
+          period_revenues: Json
+          run_id: string
+          total_quantity: number | null
+          total_revenue: number | null
+          user_id: string
+        }
+        Insert: {
+          article: string
+          avg_price?: number | null
+          category?: string | null
+          created_at?: string | null
+          current_stock?: number | null
+          group_code?: string | null
+          id?: string
+          period_quantities?: Json
+          period_revenues?: Json
+          run_id: string
+          total_quantity?: number | null
+          total_revenue?: number | null
+          user_id: string
+        }
+        Update: {
+          article?: string
+          avg_price?: number | null
+          category?: string | null
+          created_at?: string | null
+          current_stock?: number | null
+          group_code?: string | null
+          id?: string
+          period_quantities?: Json
+          period_revenues?: Json
+          run_id?: string
+          total_quantity?: number | null
+          total_revenue?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_data_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
