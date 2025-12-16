@@ -44,13 +44,13 @@ export function useRuns() {
   const createRun = async (file: File, mode: RunMode): Promise<string | null> => {
     if (!user) return null;
 
-    // Create run record
+    // Create run record with PROCESSING status (processing starts immediately)
     const { data: run, error: runError } = await supabase
       .from('runs')
       .insert({
         user_id: user.id,
         mode,
-        status: 'QUEUED',
+        status: 'PROCESSING',
         input_filename: file.name, // Keep original name for display
         log: [],
       })
