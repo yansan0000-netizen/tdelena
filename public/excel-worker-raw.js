@@ -133,12 +133,55 @@ function isStockColumn(header) {
   return h.includes('остат') || h.includes('stock') || h.includes('склад');
 }
 
-function normalizeCategory(raw) {
-  if (!raw || typeof raw !== 'string') return 'ДРУГОЕ';
-  const trimmed = raw.trim();
-  if (!trimmed) return 'ДРУГОЕ';
-  // Use real category from file, just normalize case
-  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+// Smart category normalization based on keywords (product type)
+function normalizeCategorySmart(src) {
+  if (!src || typeof src !== 'string') return 'Без категории';
+  const s = src.toLowerCase().trim();
+  if (!s) return 'Без категории';
+  
+  // Keywords for product categories
+  if (/футбол|tshirt|t-shirt|майк[аи]?\s*корот/i.test(s)) return 'Футболки';
+  if (/лонгслив|longsl|длин.*рукав/i.test(s)) return 'Лонгсливы';
+  if (/майк[аи]|топ[ыа]?|tank/i.test(s)) return 'Майки/Топы';
+  if (/тельняш/i.test(s)) return 'Тельняшки';
+  if (/джемпер|водолаз|свитер|пулов|кофт/i.test(s)) return 'Джемперы/Водолазки';
+  if (/толстов|худи|hoodie|свитшот|бомбер/i.test(s)) return 'Толстовки';
+  if (/брюк|штан|джинс|чинос|слакс|низ/i.test(s)) return 'Брюки/Низ';
+  if (/шорт|бермуд/i.test(s)) return 'Шорты';
+  if (/пижам|ночн/i.test(s)) return 'Пижамы';
+  if (/халат/i.test(s)) return 'Халаты';
+  if (/костюм|комплект/i.test(s)) return 'Костюмы';
+  if (/трус|бель[еёя]|боксер|плавк/i.test(s)) return 'Белье';
+  if (/плать[еяи]|сарафан/i.test(s)) return 'Платья/Сарафаны';
+  if (/юбк/i.test(s)) return 'Юбки';
+  if (/куртк|ветровк|парк[аи]/i.test(s)) return 'Куртки';
+  if (/жилет/i.test(s)) return 'Жилеты';
+  if (/носк|гольф[ыа]?(?!.*клюшк)/i.test(s)) return 'Носки';
+  if (/шапк|кепк|панам|берет/i.test(s)) return 'Головные уборы';
+  if (/перчат|варежк/i.test(s)) return 'Перчатки';
+  if (/шарф|снуд|палантин/i.test(s)) return 'Шарфы';
+  if (/ремен|ремн[иья]/i.test(s)) return 'Ремни';
+  if (/сумк|рюкзак|портфел/i.test(s)) return 'Сумки';
+  
+  // Return title-cased original if no match
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// Extract product group based on first digit of article (мужская/детская/женская)
+function extractProductGroup(article) {
+  if (!article || typeof article !== 'string') return 'другая';
+  const s = article.trim();
+  const match = s.match(/^(\d)/);
+  if (!match) return 'другая';
+  
+  const firstDigit = match[1];
+  switch (firstDigit) {
+    case '1': return 'мужская';
+    case '2': return 'детская';
+    case '3': return 'женская';
+    case '4': return 'ясельная';
+    default: return 'другая';
+  }
 }
 
 function extractGroupCode(article) {
@@ -638,7 +681,8 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
     if (!article) continue;
 
     const rawCategory = categoryCol !== -1 ? cellToString(row[categoryCol]) : '';
-    const category = normalizeCategory(rawCategory);
+    const category = normalizeCategorySmart(rawCategory);  // Product category (Футболки, Брюки, etc.)
+    const productGroup = extractProductGroup(article);      // Group by article (мужская, детская, etc.)
 
     // Apply category filter if specified
     if (categoryFilter && category !== categoryFilter) {
@@ -659,8 +703,9 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
       if (quantity > 0 || revenue > 0 || stock > 0) {
         chunk.push({
           article,
-          category,
-          groupCode,
+          category,        // Футболки, Брюки, etc.
+          productGroup,    // мужская, детская, etc.
+          groupCode,       // 1000, 2045, etc.
           stock,
           price,
           period: period.key,
