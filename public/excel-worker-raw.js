@@ -1,6 +1,11 @@
 /**
  * Streaming Excel Worker - sends raw rows without aggregation
  * Memory optimized: processes in chunks, doesn't hold all data in memory
+ * 
+ * Optimized for 1C Excel exports with 3-row header structure:
+ * Row 1: Period dates (e.g., "Декабрь 2023")
+ * Row 2: Metrics ("Кол-во", "Сумма", "Остаток")
+ * Row 3: Technical field names
  */
 
 const CHUNK_SIZE = 3000; // Rows per chunk to send to server
@@ -122,6 +127,12 @@ function isRevenueColumn(header) {
   );
 }
 
+function isStockColumn(header) {
+  if (!header) return false;
+  const h = String(header).toLowerCase();
+  return h.includes('остат') || h.includes('stock') || h.includes('склад');
+}
+
 function normalizeCategory(raw) {
   if (!raw || typeof raw !== 'string') return 'ДРУГОЕ';
   for (const [category, pattern] of Object.entries(CATEGORY_PATTERNS)) {
@@ -180,16 +191,18 @@ function normMetricLabel(labelRaw) {
   if (!t) return '';
 
   // Normalize the three typical 1C metrics
-  if (t.startsWith('кол') || t.includes('кол-во') || t.includes('количество')) return 'кол-во, шт.';
-  if (t.startsWith('сум') || t.includes('сумма')) return 'сумма, руб.';
-  if (t.startsWith('остат') || t.includes('остаток')) return 'остаток, шт.';
+  if (t.startsWith('кол') || t.includes('кол-во') || t.includes('количество')) return 'qty';
+  if (t.startsWith('сум') || t.includes('сумма')) return 'rev';
+  if (t.startsWith('остат') || t.includes('остаток')) return 'stock';
 
   return '';
 }
 
+/**
+ * Try to detect and parse 1C 3-row header structure
+ * Returns: { headers, headerRowIndex, dataStartRowIndex, markerIdx, periodColumns }
+ */
 function tryBuild1CHeaders(data) {
-  // We search for a 3-row header block where a marker "Номенклатура.Снято с продажи" exists.
-  // This follows the user's GAS/Python pipeline.
   const MARKER = 'номенклатура.снято с продажи';
   const ARTICLE_HEADER_CANDIDATES = [
     'номенклатура.артикул', 'номенклатура.код',
@@ -222,53 +235,176 @@ function tryBuild1CHeaders(data) {
     // Forward-fill dates for month columns
     const ffDates = fillForward(datesRow);
 
-    // Drop "Итого" pairs (Кол-во + Сумма)
-    const dropCols = new Set();
-    for (let c = markerIdx + 1; c < colsCount - 1; c++) {
-      const top = cellToString(datesRow[c]).toLowerCase();
-      const low = cellToString(labelsRow[c]).toLowerCase();
-      const lowNext = cellToString(labelsRow[c + 1]).toLowerCase();
-
-      if ((top.includes('итого') || low.includes('итого')) && low.startsWith('кол') && lowNext.startsWith('сум')) {
-        dropCols.add(c);
-        dropCols.add(c + 1);
-        c++; // skip next because it's paired
-      }
-    }
-
-    // Build headers
+    // Build period columns directly while scanning
+    const periodColumns = [];
     const headers = [];
-    for (let i = 0; i < colsCount; i++) {
-      if (dropCols.has(i)) {
-        headers.push('');
-        continue;
-      }
-
-      if (i > markerIdx) {
-        const lbl = normMetricLabel(labelsRow[i]);
-        const dateToken = formatPeriodToken(ffDates[i]);
-        if (lbl && dateToken) {
-          headers.push(`${dateToken} ${lbl}`.trim());
-          continue;
-        }
-      }
-
+    
+    // First, build base headers (before marker)
+    for (let i = 0; i <= markerIdx; i++) {
       headers.push(cellToString(thirdRow[i]) || cellToString(labelsRow[i]) || cellToString(datesRow[i]));
     }
 
-    // Sanity check: article column should exist in the base (left) part
+    // Now scan period columns after marker
+    // 1C structure: each period has 3 columns (Кол-во, Сумма, Остаток)
+    // "Итого" has 2 columns (Кол-во, Сумма)
+    let i = markerIdx + 1;
+    while (i < colsCount) {
+      const dateVal = ffDates[i];
+      const dateStr = cellToString(dateVal).toLowerCase();
+      
+      // Skip empty columns
+      if (!dateVal && !labelsRow[i]) {
+        headers.push('');
+        i++;
+        continue;
+      }
+
+      // Check if this is "Итого" - skip it
+      if (dateStr.includes('итого') || cellToString(labelsRow[i]).toLowerCase().includes('итого')) {
+        // Skip Итого columns (usually 2: qty + rev)
+        headers.push('');
+        headers.push('');
+        i += 2;
+        continue;
+      }
+
+      // Try to parse date from this column
+      const parsed = parseMonthYear(dateVal);
+      if (!parsed) {
+        headers.push(cellToString(thirdRow[i]) || cellToString(labelsRow[i]) || '');
+        i++;
+        continue;
+      }
+
+      // Found a date - look for the column group (qty, rev, stock)
+      const label1 = normMetricLabel(labelsRow[i]);
+      const label2 = normMetricLabel(labelsRow[i + 1]);
+      const label3 = normMetricLabel(labelsRow[i + 2]);
+
+      // Check if we have a valid period group
+      // Standard 1C: qty, rev, stock (3 columns per period)
+      if (label1 === 'qty' && label2 === 'rev' && label3 === 'stock') {
+        const periodKey = `${parsed.year}-${String(parsed.month).padStart(2, '0')}`;
+        
+        periodColumns.push({
+          key: periodKey,
+          qtyCol: i,
+          revCol: i + 1,
+          stockCol: i + 2,
+          month: parsed.month,
+          year: parsed.year
+        });
+
+        // Build headers for these 3 columns
+        const dateToken = formatPeriodToken(dateVal);
+        headers.push(`${dateToken} кол-во`);
+        headers.push(`${dateToken} сумма`);
+        headers.push(`${dateToken} остаток`);
+        
+        i += 3;
+        continue;
+      }
+
+      // Alternative: qty, rev (2 columns per period - no per-period stock)
+      if (label1 === 'qty' && label2 === 'rev') {
+        const periodKey = `${parsed.year}-${String(parsed.month).padStart(2, '0')}`;
+        
+        periodColumns.push({
+          key: periodKey,
+          qtyCol: i,
+          revCol: i + 1,
+          stockCol: -1,
+          month: parsed.month,
+          year: parsed.year
+        });
+
+        const dateToken = formatPeriodToken(dateVal);
+        headers.push(`${dateToken} кол-во`);
+        headers.push(`${dateToken} сумма`);
+        
+        i += 2;
+        continue;
+      }
+
+      // Fallback: single column
+      headers.push(cellToString(thirdRow[i]) || cellToString(labelsRow[i]) || '');
+      i++;
+    }
+
+    // Sanity check: article column should exist
     const articleCol = findColIndexFlexible(headers, ARTICLE_HEADER_CANDIDATES, 0, markerIdx);
     if (articleCol === -1) continue;
+
+    // Need at least some periods
+    if (periodColumns.length === 0) continue;
+
+    // Sort periods chronologically
+    periodColumns.sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      return a.month - b.month;
+    });
+
+    console.log('[raw-worker] 1C header detected', {
+      startRow: start,
+      markerIdx,
+      periodsFound: periodColumns.length,
+      firstPeriod: periodColumns[0]?.key,
+      lastPeriod: periodColumns[periodColumns.length - 1]?.key
+    });
 
     return {
       headers,
       headerRowIndex: start + 2,
       dataStartRowIndex: start + 3,
-      markerIdx
+      markerIdx,
+      periodColumns
     };
   }
 
   return null;
+}
+
+/**
+ * Fallback: find period columns from combined headers
+ */
+function findPeriodColumnsFromHeaders(headers, startIdx) {
+  const periodColumns = [];
+
+  for (let i = startIdx; i < headers.length; i++) {
+    const header = headers[i];
+    const hl = String(header || '').toLowerCase();
+    if (!header || hl.includes('итого')) continue;
+
+    // Header format: "MM.YYYY кол-во" or "Декабрь 2024 кол-во"
+    const parsed = parseMonthYear(header);
+    if (parsed && isQuantityColumn(header)) {
+      const periodKey = `${parsed.year}-${String(parsed.month).padStart(2, '0')}`;
+
+      // Look for corresponding revenue column nearby
+      let revenueCol = -1;
+      for (let j = i + 1; j < Math.min(i + 4, headers.length); j++) {
+        const h2 = headers[j];
+        if (!h2) continue;
+        
+        const revParsed = parseMonthYear(h2);
+        if (revParsed && revParsed.year === parsed.year && revParsed.month === parsed.month && isRevenueColumn(h2)) {
+          revenueCol = j;
+          break;
+        }
+      }
+
+      periodColumns.push({
+        key: periodKey,
+        qtyCol: i,
+        revCol: revenueCol,
+        stockCol: -1,
+        month: parsed.month,
+        year: parsed.year
+      });
+    }
+  }
+
+  return periodColumns;
 }
 
 /**
@@ -277,13 +413,23 @@ function tryBuild1CHeaders(data) {
 async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
   sendProgress('Загрузка библиотеки XLSX...', 0);
 
+  // Validate file signature (PK zip header for .xlsx)
+  const signature = new Uint8Array(arrayBuffer.slice(0, 4));
+  const isZip = signature[0] === 0x50 && signature[1] === 0x4B;
+  if (!isZip) {
+    throw new Error('Файл не является валидным Excel (.xlsx). Убедитесь, что файл не поврежден.');
+  }
+
   // Import XLSX
   importScripts('https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js');
 
   sendProgress('Парсинг Excel файла...', 5);
 
+  // Convert ArrayBuffer to Uint8Array for XLSX
+  const uint8Array = new Uint8Array(arrayBuffer);
+
   // Parse with optimization options
-  const workbook = XLSX.read(arrayBuffer, {
+  const workbook = XLSX.read(uint8Array, {
     type: 'array',
     cellDates: true,
     cellNF: false,
@@ -310,11 +456,19 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
     throw new Error('Файл пуст или содержит только заголовок');
   }
 
+  console.log('[raw-worker] Data loaded', { 
+    totalRows: data.length,
+    sampleRow0: data[0]?.slice(0, 10),
+    sampleRow1: data[1]?.slice(0, 10),
+    sampleRow2: data[2]?.slice(0, 10)
+  });
+
   // 1) Try 1C 3-row header (dates row + metric row + technical names row)
   let headers = [];
   let headerRowIndex = -1;
   let dataStartRowIndex = 1;
   let markerIdx = -1;
+  let periodColumns = [];
 
   const header1c = tryBuild1CHeaders(data);
   if (header1c) {
@@ -322,13 +476,15 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
     headerRowIndex = header1c.headerRowIndex;
     dataStartRowIndex = header1c.dataStartRowIndex;
     markerIdx = header1c.markerIdx;
+    periodColumns = header1c.periodColumns;
 
-    console.log('[raw-worker] 1C header detected', {
+    console.log('[raw-worker] Using 1C headers', {
       headerRowIndex,
       dataStartRowIndex,
       markerIdx,
+      periodsCount: periodColumns.length,
       sampleHeadersLeft: headers.slice(0, Math.min(markerIdx + 1, 12)),
-      sampleHeadersRight: headers.slice(markerIdx + 1, markerIdx + 1 + 12)
+      samplePeriodHeaders: headers.slice(markerIdx + 1, markerIdx + 1 + 9)
     });
   } else {
     // 2) Fallback: find header row robustly (previous logic)
@@ -396,9 +552,13 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
 
     dataStartRowIndex = headerRowIndex + 1;
 
+    // Find period columns from combined headers
+    periodColumns = findPeriodColumnsFromHeaders(headers, 0);
+
     console.log('[raw-worker] Fallback header detected', {
       headerRowIndex,
       dataStartRowIndex,
+      periodsCount: periodColumns.length,
       sampleHeaders: headers.slice(0, 20)
     });
   }
@@ -427,61 +587,22 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
     categoryCol,
     stockCol,
     priceCol,
-    markerIdx
+    markerIdx,
+    periodsCount: periodColumns.length
   });
 
   if (articleCol === -1) {
     throw new Error('Не найдена колонка с артикулами. Пример заголовков: ' + headers.slice(0, 12).join(', '));
   }
 
-  // Find period columns (quantity and revenue pairs)
-  const periodColumns = [];
-  const periodScanStart = markerIdx >= 0 ? markerIdx + 1 : 0;
-
-  for (let i = periodScanStart; i < headers.length; i++) {
-    const header = headers[i];
-    const hl = String(header || '').toLowerCase();
-    if (!header || hl.includes('итого')) continue;
-
-    const parsed = parseMonthYear(header);
-    if (parsed && isQuantityColumn(header)) {
-      const periodKey = `${parsed.year}-${String(parsed.month).padStart(2, '0')}`;
-
-      // Look for corresponding revenue column nearby
-      let revenueCol = -1;
-      for (let j = i + 1; j < Math.min(i + 6, headers.length); j++) {
-        const h2 = headers[j];
-        const h2l = String(h2 || '').toLowerCase();
-        if (!h2 || h2l.includes('итого')) continue;
-
-        if (isRevenueColumn(h2)) {
-          const revParsed = parseMonthYear(h2);
-          if (revParsed && revParsed.year === parsed.year && revParsed.month === parsed.month) {
-            revenueCol = j;
-            break;
-          }
-        }
-      }
-
-      periodColumns.push({
-        key: periodKey,
-        qtyCol: i,
-        revCol: revenueCol,
-        month: parsed.month,
-        year: parsed.year
-      });
-    }
-  }
-
   if (periodColumns.length === 0) {
     throw new Error(
       'Не найдены колонки с периодами продаж. ' +
-        'Пример заголовков периодов: ' +
-        headers.slice(periodScanStart, periodScanStart + 24).join(' | ')
+      'Пример заголовков: ' + headers.slice(Math.max(0, markerIdx), markerIdx + 24).join(' | ')
     );
   }
 
-  // Sort periods chronologically
+  // Sort periods chronologically (might already be sorted from 1C detection)
   periodColumns.sort((a, b) => {
     if (a.year !== b.year) return a.year - b.year;
     return a.month - b.month;
@@ -494,6 +615,14 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
   const totalRows = maxDataRows ? Math.min(totalRowsAvailable, maxDataRows) : totalRowsAvailable;
 
   sendProgress(`Найдено ${periods.length} периодов. Обработка строк...`, 20);
+
+  console.log('[raw-worker] Starting row processing', {
+    periodsFound: periods.length,
+    firstPeriod: periods[0],
+    lastPeriod: periods[periods.length - 1],
+    totalRows,
+    dataStartRowIndex
+  });
 
   let processedRows = 0;
   let chunk = [];
@@ -580,6 +709,7 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
       isLast: true
     });
     await waitForAck();
+    chunkIndex++;
   }
 
   sendProgress('Обработка завершена', 100);
@@ -589,7 +719,7 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
     type: 'complete',
     metrics: {
       totalRows: processedRows,
-      totalChunks: chunkIndex + (chunk.length > 0 ? 1 : 0),
+      totalChunks: chunkIndex,
       periods,
       skippedByCategory,
       truncated: !!maxDataRows && totalRowsAvailable > totalRows
@@ -613,6 +743,7 @@ self.onmessage = async function(e) {
     try {
       await processExcelRaw(arrayBuffer, categoryFilter, maxDataRows);
     } catch (error) {
+      console.error('[raw-worker] Error:', error);
       self.postMessage({
         type: 'error',
         error: error?.message || 'Unknown error during processing'
