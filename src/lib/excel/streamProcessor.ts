@@ -99,12 +99,15 @@ function parsePeriodString(periodStr: string): { start: Date | null; end: Date |
 
 function isQuantityColumn(header: string): boolean {
   const h = header.toLowerCase();
-  return h.includes('кол-во') || h.includes('количество') || h.includes('qty');
+  // Match: "кол-во", "количество", "qty", also "Январь 2024 кол-во"
+  return h.includes('кол-во') || h.includes('кол.') || h.includes('количество') || h.includes('qty') || h.includes('шт');
 }
 
 function isRevenueColumn(header: string): boolean {
   const h = header.toLowerCase();
-  return h.includes('сумма') || h.includes('выручка') || h.includes('revenue');
+  // Match: "сумма", "выручка", "revenue", also month columns with sum, "руб"
+  return h.includes('сумма') || h.includes('выручка') || h.includes('revenue') || h.includes('руб') || 
+         h.includes('sum') || h.includes('итог сумма');
 }
 
 function normalizeCategory(raw: string): string {
@@ -163,6 +166,7 @@ export async function processExcelFileStream(
   onProgress?: (msg: string, percent?: number) => void,
   signal?: AbortSignal
 ): Promise<ProcessingResult> {
+  const startTime = Date.now();
   const logs: string[] = [];
   let lastLogTime = 0;
 
@@ -357,11 +361,22 @@ export async function processExcelFileStream(
       }
     }
 
-    // Find revenue column
-    const itogoSummaIdx = headers.findIndex(h => {
+    // Find revenue column - check for "Итого сумма", "Итого выручка", or just "Итого" followed by numeric data
+    let itogoSummaIdx = headers.findIndex(h => {
       const hl = h.toLowerCase();
       return hl.includes('итого') && (hl.includes('сумма') || hl.includes('выручка'));
     });
+    
+    // Fallback: look for any "Итого" column that's not quantity
+    if (itogoSummaIdx < 0) {
+      for (let i = 0; i < headers.length; i++) {
+        const hl = headers[i].toLowerCase();
+        if (hl.includes('итого') && !hl.includes('кол')) {
+          itogoSummaIdx = i;
+          break;
+        }
+      }
+    }
 
     // Find category column
     const categoryHeaders = ['номенклатура.группа', 'группа номенклатуры', 'группа', 'категория'];
@@ -387,7 +402,38 @@ export async function processExcelFileStream(
       }
     }
 
-    log('Обработка строк данных...', 45);
+    // Fallback: if no revenue columns found, look for numeric columns that come after month-quantity columns
+    // In 1C exports, usually pattern is: "Январь 2024 кол-во", "Январь 2024 сумма" (or similar)
+    if (revenueColIndices.length === 0) {
+      for (let i = 0; i < headers.length; i++) {
+        if (itogoColIdx >= 0 && i >= itogoColIdx) break;
+        const header = headers[i];
+        const parsed = parseMonthYear(header);
+        // If it's a month column and NOT a quantity column, it might be revenue
+        if (parsed && !isQuantityColumn(header)) {
+          // Check if it looks like a numeric/revenue column
+          const h = header.toLowerCase();
+          if (!h.includes('остаток') && !h.includes('цена') && !h.includes('группа')) {
+            revenueColIndices.push(i);
+          }
+        }
+      }
+    }
+
+    // Log detected revenue columns for debugging
+    log(`Колонок с выручкой найдено: ${revenueColIndices.length}`, 46);
+    if (revenueColIndices.length > 0) {
+      log(`Выручка колонки: ${revenueColIndices.slice(0, 5).map(i => headers[i]).join(', ')}`, 46);
+    } else {
+      log(`ВНИМАНИЕ: Колонки с выручкой не найдены! Проверьте заголовки файла.`, 46);
+      // Log first 10 headers for debugging
+      log(`Первые заголовки: ${headers.slice(0, 10).join(' | ')}`, 46);
+    }
+    if (itogoSummaIdx >= 0) {
+      log(`Итого сумма колонка: ${headers[itogoSummaIdx]}`, 46);
+    }
+
+    log('Обработка строк данных...', 47);
     checkAbort();
 
     const baseHeaders = ['Группа товаров', 'Артикул', 'ABC Группа', 'ABC Артикул', 'Категория', 'XYZ-Группа', 'Рекомендация'];
@@ -520,6 +566,7 @@ export async function processExcelFileStream(
     }
 
     const lastPeriod = periods.length > 0 ? periods[periods.length - 1] : null;
+    const processingTimeMs = Date.now() - startTime;
 
     const metrics: ProcessingMetrics = {
       periodsFound: periods.length,
@@ -527,9 +574,10 @@ export async function processExcelFileStream(
       lastPeriod,
       periodStart,
       periodEnd,
+      processingTimeMs,
     };
 
-    log(`Периодов: ${periods.length}, Последний: ${lastPeriod}, Строк: ${rows.length}`, 90);
+    log(`Периодов: ${periods.length}, Последний: ${lastPeriod}, Строк: ${rows.length}, Время: ${(processingTimeMs / 1000).toFixed(1)}с`, 90);
 
     return {
       success: true,
@@ -548,12 +596,13 @@ export async function processExcelFileStream(
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
     log(`Ошибка: ${message}`, 0, true);
+    const processingTimeMs = Date.now() - startTime;
     
     return {
       success: false,
       error: message,
       processedData: null,
-      metrics: { periodsFound: 0, rowsProcessed: 0, lastPeriod: null, periodStart: null, periodEnd: null },
+      metrics: { periodsFound: 0, rowsProcessed: 0, lastPeriod: null, periodStart: null, periodEnd: null, processingTimeMs },
       logs,
     };
   }

@@ -87,6 +87,7 @@ export interface ProcessingMetrics {
   lastPeriod: string | null;
   periodStart: string | null;
   periodEnd: string | null;
+  processingTimeMs?: number;
 }
 
 export interface ProcessingResult {

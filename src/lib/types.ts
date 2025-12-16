@@ -18,6 +18,7 @@ export interface Run {
   last_period: string | null;
   error_message: string | null;
   log: LogEntry[] | null;
+  processing_time_ms: number | null;
 }
 
 export interface LogEntry {
@@ -32,4 +33,5 @@ export interface RunMetrics {
   periods_found: number | null;
   rows_processed: number | null;
   last_period: string | null;
+  processing_time_ms?: number | null;
 }
