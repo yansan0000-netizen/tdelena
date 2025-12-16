@@ -622,12 +622,17 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
     'категория', 'category', 'группа', 'тип', 'вид'
   ], 0, baseEnd);
 
+  const sizeCol = findColIndexFlexible(headers, [
+    'номенклатура.размер', 'размер', 'size', 'размеры'
+  ], 0, baseEnd);
+
   const stockCol = findColIndexFlexible(headers, ['остаток', 'stock', 'склад', 'наличие', 'остатки'], 0, baseEnd);
   const priceCol = findColIndexFlexible(headers, ['цена', 'price', 'розн', 'стоимость', 'опт'], 0, baseEnd);
 
   console.log('[raw-worker] Column indices', {
     articleCol,
     categoryCol,
+    sizeCol,
     stockCol,
     priceCol,
     markerIdx,
@@ -683,6 +688,7 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
     const rawCategory = categoryCol !== -1 ? cellToString(row[categoryCol]) : '';
     const category = normalizeCategorySmart(rawCategory);  // Product category (Футболки, Брюки, etc.)
     const productGroup = extractProductGroup(article);      // Group by article (мужская, детская, etc.)
+    const size = sizeCol !== -1 ? cellToString(row[sizeCol]) : '';  // Size (S, M, L, etc.)
 
     // Apply category filter if specified
     if (categoryFilter && category !== categoryFilter) {
@@ -703,6 +709,7 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
       if (quantity > 0 || revenue > 0 || stock > 0) {
         chunk.push({
           article,
+          size,            // S, M, L, XL, etc.
           category,        // Футболки, Брюки, etc.
           productGroup,    // мужская, детская, etc.
           groupCode,       // 1000, 2045, etc.
