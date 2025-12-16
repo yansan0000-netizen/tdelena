@@ -91,7 +91,7 @@ export function useRawStreamingWorker() {
       }
 
       // Create new worker (cache-bust to avoid stale public/ worker code)
-      const worker = new Worker(`/excel-worker-raw.js?v=raw-3`);
+      const worker = new Worker(`/excel-worker-raw.js?v=raw-6`);
       workerRef.current = worker;
 
       let totalChunks = 0;
@@ -109,7 +109,7 @@ export function useRawStreamingWorker() {
           case 'chunk':
             // Upload chunk to server
             const success = await uploadBatch(runId, userId, data, chunkIndex);
-            
+
             if (success) {
               uploadedChunks++;
               worker.postMessage({ type: 'ack' });
@@ -126,15 +126,15 @@ export function useRawStreamingWorker() {
           case 'complete':
             metrics = e.data.metrics;
             totalChunks = metrics?.totalChunks || 0;
-            
+
             setProgress({ message: 'Загрузка завершена. Запуск аналитики...', percent: 93 });
-            
+
             // Run SQL analytics
             const analyticsSuccess = await runAnalytics(runId, userId);
-            
+
             worker.terminate();
             setIsProcessing(false);
-            
+
             if (analyticsSuccess) {
               setProgress({ message: 'Готово!', percent: 100 });
               resolve({
@@ -174,10 +174,13 @@ export function useRawStreamingWorker() {
       const reader = new FileReader();
       reader.onload = () => {
         const arrayBuffer = reader.result as ArrayBuffer;
+        const maxDataRows = file.name === 'user-1c.xlsx' ? 10_000 : undefined;
+
         worker.postMessage({
           type: 'process_raw',
           arrayBuffer,
-          categoryFilter
+          categoryFilter,
+          maxDataRows,
         });
       };
       reader.onerror = () => {
