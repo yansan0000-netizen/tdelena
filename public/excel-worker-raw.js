@@ -150,16 +150,18 @@ async function processExcelRaw(arrayBuffer, categoryFilter) {
     throw new Error('Файл пуст или содержит только заголовок');
   }
   
-  // Find header row (look in first 15 rows)
+  // Find header row (look in first 20 rows)
   let headerRowIndex = -1;
   let headers = [];
   
-  for (let i = 0; i < Math.min(15, data.length); i++) {
+  for (let i = 0; i < Math.min(20, data.length); i++) {
     const row = data[i];
-    if (!row) continue;
+    if (!row || row.length < 3) continue;
     
     const rowStr = row.map(c => String(c || '').toLowerCase()).join(' ');
-    if (rowStr.includes('артикул') || rowStr.includes('article') || 
+    // Check for 1C format "номенклатура.артикул" or standard headers
+    if (rowStr.includes('номенклатура.артикул') || rowStr.includes('номенклатура.код') ||
+        rowStr.includes('артикул') || rowStr.includes('article') || 
         rowStr.includes('наименование') || rowStr.includes('товар')) {
       headerRowIndex = i;
       headers = row.map(c => String(c || '').trim());
@@ -172,19 +174,27 @@ async function processExcelRaw(arrayBuffer, categoryFilter) {
     headers = data[0].map(c => String(c || '').trim());
   }
   
+  console.log('Found headers at row:', headerRowIndex, headers.slice(0, 10));
+  
   sendProgress('Определение колонок...', 15);
   
-  // Find key columns - expanded for 1C exports
+  // Find key columns - expanded for 1C exports (with dot notation like "Номенклатура.Артикул")
   const articleCol = findColIndexFlexible(headers, [
+    'номенклатура.артикул', 'номенклатура.код', // 1C specific formats
     'артикул', 'article', 'код товара', 'sku', 
     'номенклатура', 'наименование', 'товар', 'код', 'name', 'product', 'item'
   ]);
-  const categoryCol = findColIndexFlexible(headers, ['категория', 'category', 'группа', 'тип']);
+  const categoryCol = findColIndexFlexible(headers, [
+    'номенклатура.группа', 'номенклатура.вид', // 1C specific
+    'категория', 'category', 'группа', 'тип', 'вид'
+  ]);
   const stockCol = findColIndexFlexible(headers, ['остаток', 'stock', 'склад', 'наличие', 'остатки']);
-  const priceCol = findColIndexFlexible(headers, ['цена', 'price', 'розн', 'стоимость']);
+  const priceCol = findColIndexFlexible(headers, ['цена', 'price', 'розн', 'стоимость', 'опт']);
+  
+  console.log('Column indices - article:', articleCol, 'category:', categoryCol, 'stock:', stockCol, 'price:', priceCol);
   
   if (articleCol === -1) {
-    throw new Error('Не найдена колонка с артикулами');
+    throw new Error('Не найдена колонка с артикулами. Заголовки: ' + headers.slice(0, 10).join(', '));
   }
   
   // Find period columns (quantity and revenue pairs)
