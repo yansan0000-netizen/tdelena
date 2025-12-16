@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { FileDropzone } from '@/components/FileDropzone';
@@ -9,15 +9,16 @@ import { Progress } from '@/components/ui/progress';
 import { useRuns } from '@/hooks/useRuns';
 import { useProcessing } from '@/hooks/useProcessing';
 import { useToast } from '@/hooks/use-toast';
-import { Play, Loader2, AlertCircle, AlertTriangle } from 'lucide-react';
+import { Play, Loader2, AlertCircle, AlertTriangle, X } from 'lucide-react';
 import { toast as sonnerToast } from 'sonner';
 
 export default function NewRun() {
   const [file, setFile] = useState<File | null>(null);
   const [mode, setMode] = useState<RunMode>('1C_RAW');
   const [tabWarningShown, setTabWarningShown] = useState(false);
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null);
   const { createRun } = useRuns();
-  const { isProcessing, progress, progressPercent, error, processRunClient } = useProcessing();
+  const { isProcessing, progress, progressPercent, error, processRunClient, cancelProcessing } = useProcessing();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -64,6 +65,8 @@ export default function NewRun() {
         });
         return;
       }
+
+      setCurrentRunId(runId);
 
       // Process file directly here
       const result = await processRunClient(runId, mode, file);
@@ -124,6 +127,15 @@ export default function NewRun() {
               <p className="text-xs text-muted-foreground text-center">
                 Обработка выполняется в браузере. Переключение на другие вкладки замедляет процесс.
               </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => cancelProcessing(currentRunId || undefined)}
+                className="w-full gap-2 border-destructive/50 text-destructive hover:bg-destructive/10"
+              >
+                <X className="h-4 w-4" />
+                Отменить обработку
+              </Button>
             </CardContent>
           </Card>
         )}

@@ -482,7 +482,8 @@ const yieldToMain = () => new Promise(resolve => setTimeout(resolve, 0));
 // Main processor with progress callback
 export async function processExcelFile(
   file: File, 
-  onProgress?: (msg: string, percent?: number) => void
+  onProgress?: (msg: string, percent?: number) => void,
+  signal?: AbortSignal
 ): Promise<ProcessingResult> {
   const logs: string[] = [];
   let lastLogTime = 0;
@@ -496,12 +497,19 @@ export async function processExcelFile(
     onProgress?.(msg, percent);
   };
 
+  const checkAbort = () => {
+    if (signal?.aborted) {
+      throw new Error('Обработка отменена пользователем');
+    }
+  };
+
   try {
     // Check file size limit (30MB)
     const fileSizeMB = file.size / 1024 / 1024;
     if (fileSizeMB > 30) {
       throw new Error(`Файл слишком большой (${fileSizeMB.toFixed(1)}MB). Максимальный размер: 30MB. Попробуйте уменьшить файл.`);
     }
+    checkAbort();
 
     log('Чтение файла...', 5);
     
@@ -536,6 +544,7 @@ export async function processExcelFile(
     // Free memory immediately after parsing
     (arrayBuffer as unknown) = null;
     log(`Файл прочитан, листов: ${workbook.SheetNames.length}`, 25);
+    checkAbort();
     
     // Select data sheet
     let sheetName = workbook.SheetNames[0];
@@ -773,15 +782,18 @@ export async function processExcelFile(
         const percent = Math.round(55 + (processedCount / totalRawRows) * 15);
         log(`Обработано строк: ${processedCount}`, percent, true);
         await yieldToMain(); // Let browser breathe
+        checkAbort();
       }
     }
     
     log(`Всего обработано строк: ${rows.length}`, 72);
+    checkAbort();
     
     // Calculate ABC
     log('Расчёт ABC анализа...', 75);
     const abcByGroups = calculateABCByGroups(rows, 'Группа товаров', 'Категория', 'Выручка');
     const abcByArticles = calculateABCByArticles(rows, 'Артикул', 'Выручка');
+    checkAbort();
     
     const groupLookup = new Map(abcByGroups.map(g => [`${g.name}|||${g.category}`, g.abc]));
     const articleLookup = new Map(abcByArticles.map(a => [a.name, a.abc]));
