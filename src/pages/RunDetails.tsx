@@ -298,7 +298,7 @@ export default function RunDetails() {
             ) : (
               <div className="space-y-2 max-h-[400px] overflow-y-auto">
                 {filteredLogs.map((log, i) => {
-                  const config = logLevelConfig[log.level];
+                  const config = logLevelConfig[log.level] || logLevelConfig.INFO;
                   const Icon = config.icon;
                   
                   return (
