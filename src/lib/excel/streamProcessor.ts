@@ -42,8 +42,30 @@ const CATEGORY_PATTERNS: [RegExp, string][] = [
 function parseNumber(value: unknown): number {
   if (typeof value === 'number') return isNaN(value) ? 0 : value;
   if (!value) return 0;
-  const cleaned = String(value).replace(/[^\d.,\-]/g, '').replace(',', '.');
-  const num = parseFloat(cleaned);
+  
+  // Convert to string and normalize
+  let str = String(value);
+  
+  // Remove all types of spaces (regular, non-breaking, thin, etc.)
+  str = str.replace(/[\s\u00A0\u202F\u2007\u200B]/g, '');
+  
+  // Remove currency symbols
+  str = str.replace(/[₽руб\.р]/gi, '');
+  
+  // Keep only digits, minus, comma, period
+  str = str.replace(/[^\d.,\-]/g, '');
+  
+  // Handle Russian format: replace comma with period if it's the decimal separator
+  // If there's both comma and period, comma is thousands separator
+  if (str.includes(',') && str.includes('.')) {
+    // 1.000,50 -> 1000.50 (European format)
+    str = str.replace(/\./g, '').replace(',', '.');
+  } else {
+    // 1000,50 -> 1000.50
+    str = str.replace(',', '.');
+  }
+  
+  const num = parseFloat(str);
   return isNaN(num) ? 0 : num;
 }
 
