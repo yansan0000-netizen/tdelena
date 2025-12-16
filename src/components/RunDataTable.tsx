@@ -14,8 +14,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Search, Filter, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Loader2, Search, Filter, ChevronLeft, ChevronRight, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+type SortDirection = 'asc' | 'desc' | null;
 
 interface RunDataTableProps {
   processedFilePath: string | null;
@@ -44,6 +46,10 @@ export function RunDataTable({ processedFilePath, resultFilePath }: RunDataTable
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
+  
+  // Sorting
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   
   // Source selection
   const [dataSource, setDataSource] = useState<'processed' | 'result'>('result');
@@ -186,12 +192,71 @@ export function RunDataTable({ processedFilePath, resultFilePath }: RunDataTable
     });
   }, [data, searchTerm, articleFilter, abcFilter, xyzFilter, categoryFilter, groupFilter]);
 
+  // Sorted data
+  const sortedData = useMemo(() => {
+    if (!sortColumn || !sortDirection) return filteredData;
+    
+    return [...filteredData].sort((a, b) => {
+      const aVal = a[sortColumn];
+      const bVal = b[sortColumn];
+      
+      // Handle nulls
+      if (aVal === null && bVal === null) return 0;
+      if (aVal === null) return sortDirection === 'asc' ? 1 : -1;
+      if (bVal === null) return sortDirection === 'asc' ? -1 : 1;
+      
+      // Numeric comparison
+      const aNum = typeof aVal === 'number' ? aVal : parseFloat(String(aVal).replace(/[^\d.,\-]/g, '').replace(',', '.'));
+      const bNum = typeof bVal === 'number' ? bVal : parseFloat(String(bVal).replace(/[^\d.,\-]/g, '').replace(',', '.'));
+      
+      if (!isNaN(aNum) && !isNaN(bNum)) {
+        return sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
+      }
+      
+      // String comparison
+      const aStr = String(aVal).toLowerCase();
+      const bStr = String(bVal).toLowerCase();
+      
+      if (sortDirection === 'asc') {
+        return aStr.localeCompare(bStr, 'ru');
+      }
+      return bStr.localeCompare(aStr, 'ru');
+    });
+  }, [filteredData, sortColumn, sortDirection]);
+
   // Pagination
-  const totalPages = Math.ceil(filteredData.length / ROWS_PER_PAGE);
-  const paginatedData = filteredData.slice(
+  const totalPages = Math.ceil(sortedData.length / ROWS_PER_PAGE);
+  const paginatedData = sortedData.slice(
     (currentPage - 1) * ROWS_PER_PAGE,
     currentPage * ROWS_PER_PAGE
   );
+
+  // Handle sort
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      // Toggle direction or clear
+      if (sortDirection === 'asc') {
+        setSortDirection('desc');
+      } else if (sortDirection === 'desc') {
+        setSortColumn(null);
+        setSortDirection(null);
+      }
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // Get sort icon
+  const getSortIcon = (column: string) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="h-3 w-3 ml-1 opacity-30" />;
+    }
+    if (sortDirection === 'asc') {
+      return <ArrowUp className="h-3 w-3 ml-1 text-primary" />;
+    }
+    return <ArrowDown className="h-3 w-3 ml-1 text-primary" />;
+  };
 
   // Reset page when filters change
   useEffect(() => {
@@ -385,11 +450,16 @@ export function RunDataTable({ processedFilePath, resultFilePath }: RunDataTable
 
             {/* Stats */}
             <div className="flex items-center gap-4 mb-4 text-sm text-muted-foreground">
-              <span>Показано: {paginatedData.length} из {filteredData.length}</span>
-              {filteredData.length !== data.length && (
+              <span>Показано: {paginatedData.length} из {sortedData.length}</span>
+              {sortedData.length !== data.length && (
                 <Badge variant="secondary">
                   <Filter className="h-3 w-3 mr-1" />
                   Фильтр активен
+                </Badge>
+              )}
+              {sortColumn && (
+                <Badge variant="outline">
+                  Сортировка: {sortColumn} ({sortDirection === 'asc' ? '↑' : '↓'})
                 </Badge>
               )}
             </div>
@@ -401,8 +471,15 @@ export function RunDataTable({ processedFilePath, resultFilePath }: RunDataTable
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
                       {columns.slice(0, 15).map((col) => (
-                        <TableHead key={col} className="whitespace-nowrap font-semibold">
-                          {col}
+                        <TableHead 
+                          key={col} 
+                          className="whitespace-nowrap font-semibold cursor-pointer hover:bg-muted/50 select-none"
+                          onClick={() => handleSort(col)}
+                        >
+                          <div className="flex items-center">
+                            {col}
+                            {getSortIcon(col)}
+                          </div>
                         </TableHead>
                       ))}
                       {columns.length > 15 && (
