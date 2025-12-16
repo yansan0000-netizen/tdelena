@@ -1,8 +1,8 @@
-// Web Worker for Excel processing - runs in separate thread
-// Import xlsx via CDN
+// Web Worker for Excel processing - Memory Optimized Version
+// Uses aggregation instead of storing all rows
 importScripts('https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js');
 
-// Russian month names
+// Constants
 const MONTH_NAMES_RU = {
   'январь': 0, 'января': 0, 'янв': 0,
   'февраль': 1, 'февраля': 1, 'фев': 1,
@@ -124,133 +124,8 @@ function findColIndexFlexible(headers, possibleNames) {
   return -1;
 }
 
-// ABC calculation
-function calculateABCByGroups(rows, groupKey, categoryKey, revenueKey) {
-  const groups = new Map();
-  
-  for (const row of rows) {
-    const name = String(row[groupKey] || '');
-    const category = String(row[categoryKey] || '');
-    const revenue = parseNumber(row[revenueKey]);
-    
-    const key = `${name}|||${category}`;
-    const existing = groups.get(key);
-    if (existing) {
-      existing.revenue += revenue;
-    } else {
-      groups.set(key, { name, category, revenue });
-    }
-  }
-  
-  const items = Array.from(groups.values()).sort((a, b) => b.revenue - a.revenue);
-  const totalRevenue = items.reduce((s, i) => s + i.revenue, 0);
-  
-  let cumulative = 0;
-  return items.map(item => {
-    const share = totalRevenue > 0 ? item.revenue / totalRevenue : 0;
-    cumulative += share;
-    let abc = 'C';
-    if (cumulative <= 0.8) abc = 'A';
-    else if (cumulative <= 0.95) abc = 'B';
-    
-    return { name: item.name, category: item.category, revenue: item.revenue, share, cumulativeShare: cumulative, abc };
-  });
-}
-
-function calculateABCByArticles(rows, articleKey, revenueKey) {
-  const articles = new Map();
-  
-  for (const row of rows) {
-    const article = String(row[articleKey] || '');
-    const revenue = parseNumber(row[revenueKey]);
-    articles.set(article, (articles.get(article) || 0) + revenue);
-  }
-  
-  const items = Array.from(articles.entries())
-    .map(([name, revenue]) => ({ name, revenue }))
-    .sort((a, b) => b.revenue - a.revenue);
-  
-  const totalRevenue = items.reduce((s, i) => s + i.revenue, 0);
-  
-  let cumulative = 0;
-  return items.map(item => {
-    const share = totalRevenue > 0 ? item.revenue / totalRevenue : 0;
-    cumulative += share;
-    let abc = 'C';
-    if (cumulative <= 0.8) abc = 'A';
-    else if (cumulative <= 0.95) abc = 'B';
-    
-    return { name: item.name, revenue: item.revenue, share, cumulativeShare: cumulative, abc };
-  });
-}
-
-// XYZ calculation
-function calculateXYZByArticles(rows, headers) {
-  const result = new Map();
-  
-  const qtyColIndices = [];
-  for (let i = 0; i < headers.length; i++) {
-    const h = headers[i];
-    const monthParsed = parseMonthYear(h);
-    if (monthParsed && (isQuantityColumn(h) || String(h).toLowerCase().includes('кол'))) {
-      qtyColIndices.push(i);
-    }
-  }
-  
-  if (qtyColIndices.length < 3) {
-    for (let i = 0; i < headers.length; i++) {
-      const h = headers[i];
-      const monthParsed = parseMonthYear(h);
-      const hLower = String(h).toLowerCase();
-      if (monthParsed && !hLower.includes('сумма') && !hLower.includes('выручка') && !hLower.includes('итого')) {
-        if (!qtyColIndices.includes(i)) qtyColIndices.push(i);
-      }
-    }
-  }
-  
-  if (qtyColIndices.length < 3) return result;
-  
-  const articleData = new Map();
-  for (const row of rows) {
-    const article = String(row['Артикул'] || '');
-    if (!article) continue;
-    
-    const values = qtyColIndices.map(idx => parseNumber(row[headers[idx]]));
-    const existing = articleData.get(article);
-    if (existing) {
-      for (let i = 0; i < values.length; i++) {
-        existing[i] = (existing[i] || 0) + values[i];
-      }
-    } else {
-      articleData.set(article, values);
-    }
-  }
-  
-  for (const [article, values] of articleData) {
-    const nonZero = values.filter(v => v > 0);
-    if (nonZero.length < 3) {
-      result.set(article, { xyz: 'Z', cv: 999, mean: 0, stdDev: 0, periodCount: nonZero.length });
-      continue;
-    }
-    
-    const mean = nonZero.reduce((s, v) => s + v, 0) / nonZero.length;
-    if (mean === 0) {
-      result.set(article, { xyz: 'Z', cv: 999, mean: 0, stdDev: 0, periodCount: nonZero.length });
-      continue;
-    }
-    
-    const variance = nonZero.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / nonZero.length;
-    const stdDev = Math.sqrt(variance);
-    const cv = (stdDev / mean) * 100;
-    
-    let xyz = 'Z';
-    if (cv <= 10) xyz = 'X';
-    else if (cv <= 25) xyz = 'Y';
-    
-    result.set(article, { xyz, cv, mean, stdDev, periodCount: nonZero.length });
-  }
-  
-  return result;
+function sendProgress(msg, percent) {
+  self.postMessage({ type: 'progress', message: msg, percent });
 }
 
 function getABCXYZRecommendation(abc, xyz) {
@@ -262,229 +137,18 @@ function getABCXYZRecommendation(abc, xyz) {
   return matrix[abc]?.[xyz] || 'Нет рекомендации';
 }
 
-// Calculate production metrics
-function calculateArticleMetrics(rows, headers, abcByGroups, abcByArticles, xyzResults) {
-  const groupLookup = new Map(abcByGroups.map(g => [`${g.name}|||${g.category}`, g.abc]));
-  const articleLookup = new Map(abcByArticles.map(a => [a.name, a.abc]));
-  
-  const qtyColIndices = [];
-  for (let i = 0; i < headers.length; i++) {
-    const h = headers[i];
-    const monthParsed = parseMonthYear(h);
-    if (monthParsed && (isQuantityColumn(h) || String(h).toLowerCase().includes('кол'))) {
-      qtyColIndices.push(i);
-    }
-  }
-  
-  const stockColIdx = headers.findIndex(h => String(h).toLowerCase().includes('остаток'));
-  const priceColIdx = headers.findIndex(h => {
-    const hl = String(h).toLowerCase();
-    return hl.includes('цена') || hl.includes('price');
-  });
-  
-  const articleGroups = new Map();
-  for (const row of rows) {
-    const article = String(row['Артикул'] || '');
-    if (!article) continue;
-    const existing = articleGroups.get(article) || [];
-    existing.push(row);
-    articleGroups.set(article, existing);
-  }
-  
-  const metrics = [];
-  
-  for (const [article, articleRows] of articleGroups) {
-    const firstRow = articleRows[0];
-    const category = String(firstRow['Категория'] || '');
-    const groupCode = String(firstRow['Группа товаров'] || '');
-    
-    let totalRevenue = 0;
-    let totalQuantity = 0;
-    let currentStock = 0;
-    let totalPrice = 0;
-    let priceCount = 0;
-    
-    for (const row of articleRows) {
-      totalRevenue += parseNumber(row['Выручка']);
-      
-      for (const idx of qtyColIndices) {
-        totalQuantity += parseNumber(row[headers[idx]]);
-      }
-      
-      if (stockColIdx >= 0) {
-        currentStock += parseNumber(row[headers[stockColIdx]]);
-      }
-      
-      if (priceColIdx >= 0) {
-        const price = parseNumber(row[headers[priceColIdx]]);
-        if (price > 0) {
-          totalPrice += price;
-          priceCount++;
-        }
-      }
-    }
-    
-    const avgPrice = priceCount > 0 ? totalPrice / priceCount : (totalQuantity > 0 ? totalRevenue / totalQuantity : 0);
-    
-    const xyzData = xyzResults.get(article) || { xyz: 'Z', cv: 999, mean: 0, stdDev: 0, periodCount: 0 };
-    
-    const periodsWithSales = xyzData.periodCount || (qtyColIndices.length > 0 ? qtyColIndices.length : 1);
-    const avgMonthlySales = periodsWithSales > 0 ? totalQuantity / periodsWithSales : 0;
-    const dailySalesVelocity = avgMonthlySales / 30;
-    
-    const daysToStockout = dailySalesVelocity > 0 ? Math.round(currentStock / dailySalesVelocity) : 9999;
-    
-    const safetyMultiplier = xyzData.xyz === 'X' ? 1.0 : xyzData.xyz === 'Y' ? 1.2 : 1.5;
-    
-    const plan1M = Math.ceil(avgMonthlySales * 1 * safetyMultiplier);
-    const plan3M = Math.ceil(avgMonthlySales * 3 * safetyMultiplier);
-    const plan6M = Math.ceil(avgMonthlySales * 6 * safetyMultiplier);
-    
-    const capitalizationByPrice = currentStock * avgPrice;
-    
-    const groupKey = `${groupCode}|||${category}`;
-    const abcGroup = groupLookup.get(groupKey) || 'C';
-    const abcArticle = articleLookup.get(article) || 'C';
-    
-    metrics.push({
-      article,
-      category,
-      groupCode,
-      abcGroup,
-      abcArticle,
-      xyzGroup: xyzData.xyz,
-      recommendation: getABCXYZRecommendation(abcArticle, xyzData.xyz),
-      totalRevenue,
-      totalQuantity,
-      currentStock,
-      avgPrice,
-      avgMonthlySales,
-      dailySalesVelocity,
-      daysToStockout,
-      plan1M,
-      plan3M,
-      plan6M,
-      capitalizationByPrice,
-      cv: xyzData.cv,
-    });
-  }
-  
-  return metrics.sort((a, b) => b.totalRevenue - a.totalRevenue);
-}
-
-// Generate processed report
-function generateProcessedReport(data) {
-  const workbook = XLSX.utils.book_new();
-  
-  const baseHeaders = ['Группа товаров', 'Артикул', 'ABC Группа', 'ABC Артикул', 'Категория', 'XYZ-Группа', 'Рекомендация'];
-  const dataHeaders = new Set();
-  for (const row of data.dataSheet) {
-    for (const key of Object.keys(row)) {
-      if (!baseHeaders.includes(key) && key !== 'Выручка' && key !== 'Остаток' && key !== 'Цена') {
-        dataHeaders.add(key);
-      }
-    }
-  }
-  
-  const finalHeaders = [...baseHeaders, ...Array.from(dataHeaders)];
-  const dataRows = data.dataSheet.map(row => finalHeaders.map(h => row[h] ?? ''));
-  
-  const dataSheet = XLSX.utils.aoa_to_sheet([finalHeaders, ...dataRows]);
-  XLSX.utils.book_append_sheet(workbook, dataSheet, 'Данные');
-  
-  if (data.abcByGroups?.length > 0) {
-    const groupHeaders = ['Группа', 'Категория', 'Выручка', 'Доля %', 'Накопл. доля %', 'ABC'];
-    const groupRows = data.abcByGroups.map(item => [
-      item.name, item.category || '', item.revenue,
-      Math.round(item.share * 10000) / 100,
-      Math.round(item.cumulativeShare * 10000) / 100,
-      item.abc,
-    ]);
-    const groupSheet = XLSX.utils.aoa_to_sheet([groupHeaders, ...groupRows]);
-    XLSX.utils.book_append_sheet(workbook, groupSheet, 'АБЦ по группам');
-  }
-  
-  if (data.abcByArticles?.length > 0) {
-    const articleHeaders = ['Артикул', 'Выручка', 'Доля %', 'Накопл. доля %', 'ABC'];
-    const articleRows = data.abcByArticles.map(item => [
-      item.name, item.revenue,
-      Math.round(item.share * 10000) / 100,
-      Math.round(item.cumulativeShare * 10000) / 100,
-      item.abc,
-    ]);
-    const articleSheet = XLSX.utils.aoa_to_sheet([articleHeaders, ...articleRows]);
-    XLSX.utils.book_append_sheet(workbook, articleSheet, 'АБЦ по артикулам');
-  }
-  
-  return XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-}
-
-// Generate production plan
-function generateProductionPlan(data) {
-  const workbook = XLSX.utils.book_new();
-  
-  const planHeaders = [
-    'Артикул', 'Категория', 'Группа товаров', 'ABC Группа', 'ABC Артикул',
-    'XYZ-Группа', 'Коэф. вариации %', 'Рекомендация', 'Выручка', 'Продано шт.',
-    'Остаток', 'Ср. цена', 'Скорость мес.', 'Скорость день', 'Дней до стокаута',
-    'План 1М', 'План 3М', 'План 6М', 'Капитализация',
-  ];
-  
-  const planRows = data.articleMetrics.map(m => [
-    m.article, m.category, m.groupCode, m.abcGroup, m.abcArticle,
-    m.xyzGroup, m.cv < 999 ? Math.round(m.cv * 10) / 10 : '-', m.recommendation,
-    Math.round(m.totalRevenue), Math.round(m.totalQuantity), Math.round(m.currentStock),
-    Math.round(m.avgPrice * 100) / 100, Math.round(m.avgMonthlySales),
-    Math.round(m.dailySalesVelocity * 10) / 10,
-    m.daysToStockout < 9999 ? m.daysToStockout : '∞',
-    m.plan1M, m.plan3M, m.plan6M, Math.round(m.capitalizationByPrice),
-  ]);
-  
-  const planSheet = XLSX.utils.aoa_to_sheet([planHeaders, ...planRows]);
-  XLSX.utils.book_append_sheet(workbook, planSheet, 'План производства');
-  
-  // Summary
-  const totalRevenue = data.articleMetrics.reduce((s, m) => s + m.totalRevenue, 0);
-  const totalStock = data.articleMetrics.reduce((s, m) => s + m.currentStock, 0);
-  const totalCapitalization = data.articleMetrics.reduce((s, m) => s + m.capitalizationByPrice, 0);
-  
-  const countA = data.articleMetrics.filter(m => m.abcArticle === 'A').length;
-  const countB = data.articleMetrics.filter(m => m.abcArticle === 'B').length;
-  const countC = data.articleMetrics.filter(m => m.abcArticle === 'C').length;
-  
-  const summaryHeaders = ['Метрика', 'Значение'];
-  const summaryRows = [
-    ['Всего артикулов', data.articleMetrics.length],
-    ['Общая выручка', Math.round(totalRevenue)],
-    ['Общий остаток', Math.round(totalStock)],
-    ['Капитализация', Math.round(totalCapitalization)],
-    ['Артикулов A', countA],
-    ['Артикулов B', countB],
-    ['Артикулов C', countC],
-  ];
-  
-  const summarySheet = XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryRows]);
-  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Сводка');
-  
-  return XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-}
-
-// Send progress message
-function sendProgress(msg, percent) {
-  self.postMessage({ type: 'progress', message: msg, percent });
-}
-
-// Main processing function
-function processExcel(arrayBuffer, fileSizeMB) {
-  const logs = [];
+// Memory-efficient chunk processor
+function processExcelChunked(arrayBuffer, fileSizeMB) {
+  const CHUNK_SIZE = 20000; // Process 20k rows at a time
   
   try {
-    if (fileSizeMB > 30) {
-      throw new Error(`Файл слишком большой (${fileSizeMB.toFixed(1)}MB). Максимальный размер: 30MB.`);
+    if (fileSizeMB > 50) {
+      throw new Error(`Файл слишком большой (${fileSizeMB.toFixed(1)}MB). Максимальный размер: 50MB.`);
     }
     
-    sendProgress('Парсинг Excel...', 15);
+    sendProgress('Парсинг структуры файла...', 10);
     
+    // First pass: read only headers and structure (first 100 rows)
     let workbook;
     try {
       workbook = XLSX.read(arrayBuffer, {
@@ -492,36 +156,31 @@ function processExcel(arrayBuffer, fileSizeMB) {
         cellDates: true,
         cellNF: false,
         cellStyles: false,
-        sheetRows: 100000,
+        sheetRows: 100, // Only read first 100 rows for structure
       });
     } catch (e) {
-      if (e.message && (e.message.includes('memory') || e.message.includes('allocation'))) {
-        throw new Error('Недостаточно памяти для обработки файла.');
+      if (e.message?.includes('memory') || e.message?.includes('allocation')) {
+        throw new Error('Недостаточно памяти для чтения файла. Попробуйте файл меньшего размера.');
       }
-      throw new Error('Ошибка чтения Excel файла.');
+      throw new Error('Ошибка чтения Excel файла: ' + e.message);
     }
-    
-    sendProgress(`Листов: ${workbook.SheetNames.length}`, 25);
     
     let sheetName = workbook.SheetNames[0];
     if (sheetName.toLowerCase() === 'логи' && workbook.SheetNames.length > 1) {
       sheetName = workbook.SheetNames[1];
     }
     
-    const sheet = workbook.Sheets[sheetName];
-    if (!sheet) throw new Error('В файле нет листа с данными');
+    const structSheet = workbook.Sheets[sheetName];
+    if (!structSheet) throw new Error('В файле нет листа с данными');
     
-    sendProgress('Извлечение данных...', 35);
-    let data = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
+    const structData = XLSX.utils.sheet_to_json(structSheet, { header: 1, raw: true, defval: null });
     
-    sendProgress(`Строк: ${data.length}`, 40);
-    
-    // Parse period
+    // Parse period from structure
     let periodStart = null;
     let periodEnd = null;
     
-    for (let rowIdx = 0; rowIdx < Math.min(5, data.length); rowIdx++) {
-      const row = data[rowIdx];
+    for (let rowIdx = 0; rowIdx < Math.min(5, structData.length); rowIdx++) {
+      const row = structData[rowIdx];
       for (let colIdx = 0; colIdx < Math.min(10, row?.length || 0); colIdx++) {
         const cellValue = row[colIdx];
         if (cellValue) {
@@ -540,10 +199,10 @@ function processExcel(arrayBuffer, fileSizeMB) {
     }
     
     // Find header row
-    sendProgress('Поиск заголовков...', 45);
+    sendProgress('Анализ заголовков...', 15);
     let headerRowIdx = 0;
-    for (let i = 0; i < Math.min(15, data.length); i++) {
-      const row = data[i];
+    for (let i = 0; i < Math.min(15, structData.length); i++) {
+      const row = structData[i];
       if (!row) continue;
       
       let monthCount = 0;
@@ -562,18 +221,18 @@ function processExcel(arrayBuffer, fileSizeMB) {
       }
     }
     
-    if (headerRowIdx === 0) headerRowIdx = Math.min(5, data.length);
-    if (headerRowIdx > 0) data = data.slice(headerRowIdx);
+    if (headerRowIdx === 0) headerRowIdx = Math.min(5, structData.length);
     
-    // Flatten headers
-    const headerRows = Math.min(3, data.length);
-    const maxCols = Math.max(...data.slice(0, headerRows).map(r => r?.length || 0));
+    // Extract headers
+    const headerData = structData.slice(headerRowIdx);
+    const headerRows = Math.min(3, headerData.length);
+    const maxCols = Math.max(...headerData.slice(0, headerRows).map(r => r?.length || 0));
     
     const headers = [];
     for (let col = 0; col < maxCols; col++) {
       const parts = [];
       for (let row = 0; row < headerRows; row++) {
-        const val = data[row]?.[col];
+        const val = headerData[row]?.[col];
         if (val !== null && val !== undefined && val !== '') {
           parts.push(String(val).trim());
         }
@@ -581,11 +240,7 @@ function processExcel(arrayBuffer, fileSizeMB) {
       headers.push(parts.join(' ').trim() || `Колонка ${col + 1}`);
     }
     
-    sendProgress(`Заголовков: ${headers.length}`, 50);
-    
-    const dataStartRow = headerRows;
-    
-    // Find article column
+    // Find key columns
     const articleHeaders = ['номенклатура.артикул', 'артикул', 'sku', 'код артикула'];
     let articleColIdx = findColIndexFlexible(headers, articleHeaders);
     
@@ -598,7 +253,6 @@ function processExcel(arrayBuffer, fileSizeMB) {
     
     if (articleColIdx < 0) throw new Error('Не найдена колонка с артикулом');
     
-    // Find category column
     const categoryHeaders = ['номенклатура.группа', 'группа номенклатуры', 'группа', 'категория'];
     const categoryColIdx = findColIndexFlexible(headers, categoryHeaders);
     
@@ -634,119 +288,305 @@ function processExcel(arrayBuffer, fileSizeMB) {
       }
     }
     
-    // Pre-calculate numeric columns
-    const numericCols = new Set();
+    // Find quantity columns for XYZ
+    const qtyColIndices = [];
+    const qtyColHeaders = [];
     for (let i = 0; i < headers.length; i++) {
-      const headerLower = String(headers[i]).toLowerCase();
-      if (isQuantityColumn(headers[i]) || isRevenueColumn(headers[i]) || 
-          headerLower.includes('остаток') || headerLower.includes('цена') ||
-          headerLower.includes('кол-во') || headerLower.includes('сумма')) {
-        numericCols.add(i);
+      if (itogoColIdx >= 0 && i >= itogoColIdx) break;
+      const h = headers[i];
+      const monthParsed = parseMonthYear(h);
+      if (monthParsed && (isQuantityColumn(h) || String(h).toLowerCase().includes('кол'))) {
+        qtyColIndices.push(i);
+        qtyColHeaders.push(h);
       }
     }
     
-    sendProgress('Обработка строк...', 55);
-    
-    const baseHeaders = ['Группа товаров', 'Артикул', 'ABC Группа', 'ABC Артикул', 'Категория', 'XYZ-Группа', 'Рекомендация'];
-    const newHeaders = [...baseHeaders, ...headers];
-    const rows = [];
-    
-    const rawRows = data.slice(dataStartRow);
-    const totalRawRows = rawRows.length;
-    
-    for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
-      const rawRow = rawRows[rowIdx];
-      if (!rawRow || rawRow.length === 0) continue;
-      
-      const cellValue = rawRow[articleColIdx];
-      if (cellValue === null || cellValue === undefined || cellValue === '') continue;
-      
-      const rawArticle = String(cellValue).trim();
-      if (!rawArticle) continue;
-      
-      const lowerArticle = rawArticle.toLowerCase();
-      if (lowerArticle === 'артикул' || lowerArticle === 'номенклатура' || 
-          lowerArticle === 'код' || lowerArticle === 'итого') continue;
-      
-      const displayArticle = cleanArticleForDisplay(rawArticle);
-      const groupCode = extractGroupCode(rawArticle);
-      const rawCategory = categoryColIdx >= 0 ? String(rawRow[categoryColIdx] || '') : '';
-      const category = normalizeCategory(rawCategory);
-      
-      const row = {
-        'Группа товаров': groupCode,
-        'Артикул': displayArticle,
-        'ABC Группа': '',
-        'ABC Артикул': '',
-        'Категория': category,
-        'XYZ-Группа': '',
-        'Рекомендация': '',
-      };
-      
+    // Fallback: any month columns not revenue
+    if (qtyColIndices.length < 3) {
       for (let i = 0; i < headers.length; i++) {
-        const val = rawRow[i];
-        row[headers[i]] = numericCols.has(i) ? parseNumber(val) : val;
-      }
-      
-      // Calculate total revenue
-      let totalRevenue = 0;
-      if (itogoSummaIdx >= 0) {
-        totalRevenue = parseNumber(rawRow[itogoSummaIdx]);
-      } else if (revenueColIdx >= 0) {
-        totalRevenue = parseNumber(rawRow[revenueColIdx]);
-      } else {
-        for (const idx of revenueColIndices) {
-          totalRevenue += parseNumber(rawRow[idx]);
+        if (itogoColIdx >= 0 && i >= itogoColIdx) break;
+        const h = headers[i];
+        const monthParsed = parseMonthYear(h);
+        const hLower = String(h).toLowerCase();
+        if (monthParsed && !hLower.includes('сумма') && !hLower.includes('выручка') && !hLower.includes('итого')) {
+          if (!qtyColIndices.includes(i)) {
+            qtyColIndices.push(i);
+            qtyColHeaders.push(h);
+          }
         }
       }
-      row['Выручка'] = totalRevenue;
-      
-      rows.push(row);
-      
-      if (rowIdx % 5000 === 0) {
-        const percent = Math.round(55 + (rowIdx / totalRawRows) * 15);
-        sendProgress(`Обработано: ${rows.length}`, percent);
-      }
     }
     
-    sendProgress(`Строк: ${rows.length}`, 72);
+    const stockColIdx = headers.findIndex(h => String(h).toLowerCase().includes('остаток'));
+    const priceColIdx = headers.findIndex(h => {
+      const hl = String(h).toLowerCase();
+      return hl.includes('цена') || hl.includes('price');
+    });
     
-    // Calculate ABC
-    sendProgress('ABC анализ...', 75);
-    const abcByGroups = calculateABCByGroups(rows, 'Группа товаров', 'Категория', 'Выручка');
-    const abcByArticles = calculateABCByArticles(rows, 'Артикул', 'Выручка');
+    // Release structure workbook
+    workbook = null;
+    
+    sendProgress('Подготовка к обработке данных...', 20);
+    
+    // Data aggregation maps (memory efficient)
+    const articleAggregates = new Map(); // article -> {revenue, quantities[], stock, priceSum, priceCount, category, groupCode}
+    const groupAggregates = new Map(); // groupCode|||category -> revenue
+    
+    const dataStartRow = headerRowIdx + headerRows;
+    let totalRowsProcessed = 0;
+    let chunkStart = 0;
+    let hasMoreData = true;
+    
+    // Process in chunks
+    while (hasMoreData) {
+      sendProgress(`Чтение данных (чанк ${Math.floor(chunkStart / CHUNK_SIZE) + 1})...`, 25 + Math.min(40, (chunkStart / 100000) * 40));
+      
+      let chunkWorkbook;
+      try {
+        chunkWorkbook = XLSX.read(arrayBuffer, {
+          type: 'array',
+          cellDates: true,
+          cellNF: false,
+          cellStyles: false,
+          sheetRows: dataStartRow + chunkStart + CHUNK_SIZE + 10,
+        });
+      } catch (e) {
+        if (e.message?.includes('memory') || e.message?.includes('allocation')) {
+          // If we already have some data, proceed with what we have
+          if (totalRowsProcessed > 0) {
+            sendProgress(`Память ограничена. Обработано ${totalRowsProcessed} строк.`, 65);
+            break;
+          }
+          throw new Error('Недостаточно памяти. Попробуйте файл меньшего размера.');
+        }
+        throw e;
+      }
+      
+      const chunkSheet = chunkWorkbook.Sheets[sheetName];
+      const chunkData = XLSX.utils.sheet_to_json(chunkSheet, { header: 1, raw: true, defval: null });
+      
+      // Get only the rows we need for this chunk
+      const startIdx = dataStartRow + chunkStart;
+      const endIdx = Math.min(chunkData.length, dataStartRow + chunkStart + CHUNK_SIZE);
+      
+      if (startIdx >= chunkData.length) {
+        hasMoreData = false;
+        chunkWorkbook = null;
+        break;
+      }
+      
+      // Process rows in this chunk
+      for (let i = startIdx; i < endIdx; i++) {
+        const rawRow = chunkData[i];
+        if (!rawRow || rawRow.length === 0) continue;
+        
+        const cellValue = rawRow[articleColIdx];
+        if (cellValue === null || cellValue === undefined || cellValue === '') continue;
+        
+        const rawArticle = String(cellValue).trim();
+        if (!rawArticle) continue;
+        
+        const lowerArticle = rawArticle.toLowerCase();
+        if (lowerArticle === 'артикул' || lowerArticle === 'номенклатура' || 
+            lowerArticle === 'код' || lowerArticle === 'итого') continue;
+        
+        const displayArticle = cleanArticleForDisplay(rawArticle);
+        const groupCode = extractGroupCode(rawArticle);
+        const rawCategory = categoryColIdx >= 0 ? String(rawRow[categoryColIdx] || '') : '';
+        const category = normalizeCategory(rawCategory);
+        
+        // Calculate revenue for this row
+        let rowRevenue = 0;
+        if (itogoSummaIdx >= 0) {
+          rowRevenue = parseNumber(rawRow[itogoSummaIdx]);
+        } else if (revenueColIdx >= 0) {
+          rowRevenue = parseNumber(rawRow[revenueColIdx]);
+        } else {
+          for (const idx of revenueColIndices) {
+            rowRevenue += parseNumber(rawRow[idx]);
+          }
+        }
+        
+        // Get quantities for XYZ
+        const quantities = qtyColIndices.map(idx => parseNumber(rawRow[idx]));
+        
+        // Get stock and price
+        const stock = stockColIdx >= 0 ? parseNumber(rawRow[stockColIdx]) : 0;
+        const price = priceColIdx >= 0 ? parseNumber(rawRow[priceColIdx]) : 0;
+        
+        // Aggregate by article
+        const existing = articleAggregates.get(displayArticle);
+        if (existing) {
+          existing.revenue += rowRevenue;
+          existing.stock += stock;
+          if (price > 0) {
+            existing.priceSum += price;
+            existing.priceCount++;
+          }
+          // Aggregate quantities per period
+          for (let q = 0; q < quantities.length; q++) {
+            existing.quantities[q] = (existing.quantities[q] || 0) + quantities[q];
+          }
+        } else {
+          articleAggregates.set(displayArticle, {
+            revenue: rowRevenue,
+            quantities: [...quantities],
+            stock,
+            priceSum: price,
+            priceCount: price > 0 ? 1 : 0,
+            category,
+            groupCode,
+          });
+        }
+        
+        // Aggregate by group
+        const groupKey = `${groupCode}|||${category}`;
+        groupAggregates.set(groupKey, (groupAggregates.get(groupKey) || 0) + rowRevenue);
+        
+        totalRowsProcessed++;
+      }
+      
+      // Check if we've read all data
+      if (endIdx >= chunkData.length || endIdx - startIdx < CHUNK_SIZE) {
+        hasMoreData = false;
+      }
+      
+      chunkStart += CHUNK_SIZE;
+      chunkWorkbook = null; // Release memory
+      
+      // Force garbage collection hint
+      if (typeof gc === 'function') gc();
+    }
+    
+    sendProgress(`Агрегировано ${totalRowsProcessed} строк, ${articleAggregates.size} артикулов`, 70);
+    
+    if (articleAggregates.size === 0) {
+      throw new Error('Не найдено данных для обработки');
+    }
+    
+    // Calculate ABC by groups
+    sendProgress('ABC анализ по группам...', 72);
+    const groupItems = Array.from(groupAggregates.entries())
+      .map(([key, revenue]) => {
+        const [name, category] = key.split('|||');
+        return { name, category, revenue };
+      })
+      .sort((a, b) => b.revenue - a.revenue);
+    
+    const totalGroupRevenue = groupItems.reduce((s, i) => s + i.revenue, 0);
+    let cumulative = 0;
+    const abcByGroups = groupItems.map(item => {
+      const share = totalGroupRevenue > 0 ? item.revenue / totalGroupRevenue : 0;
+      cumulative += share;
+      let abc = 'C';
+      if (cumulative <= 0.8) abc = 'A';
+      else if (cumulative <= 0.95) abc = 'B';
+      return { name: item.name, category: item.category, revenue: item.revenue, share, cumulativeShare: cumulative, abc };
+    });
     
     const groupLookup = new Map(abcByGroups.map(g => [`${g.name}|||${g.category}`, g.abc]));
+    
+    // Calculate ABC by articles
+    sendProgress('ABC анализ по артикулам...', 75);
+    const articleItems = Array.from(articleAggregates.entries())
+      .map(([name, data]) => ({ name, revenue: data.revenue }))
+      .sort((a, b) => b.revenue - a.revenue);
+    
+    const totalArticleRevenue = articleItems.reduce((s, i) => s + i.revenue, 0);
+    cumulative = 0;
+    const abcByArticles = articleItems.map(item => {
+      const share = totalArticleRevenue > 0 ? item.revenue / totalArticleRevenue : 0;
+      cumulative += share;
+      let abc = 'C';
+      if (cumulative <= 0.8) abc = 'A';
+      else if (cumulative <= 0.95) abc = 'B';
+      return { name: item.name, revenue: item.revenue, share, cumulativeShare: cumulative, abc };
+    });
+    
     const articleLookup = new Map(abcByArticles.map(a => [a.name, a.abc]));
     
-    for (const row of rows) {
-      const groupKey = `${row['Группа товаров']}|||${row['Категория']}`;
-      row['ABC Группа'] = groupLookup.get(groupKey) || 'C';
-      row['ABC Артикул'] = articleLookup.get(String(row['Артикул'])) || 'C';
-    }
-    
     // Calculate XYZ
-    sendProgress('XYZ анализ...', 80);
-    const xyzResults = calculateXYZByArticles(rows, newHeaders);
+    sendProgress('XYZ анализ...', 78);
+    const xyzResults = new Map();
     
-    for (const row of rows) {
-      const article = String(row['Артикул'] || '');
-      const xyzData = xyzResults.get(article);
-      if (xyzData) {
-        row['XYZ-Группа'] = xyzData.xyz;
-        row['Рекомендация'] = getABCXYZRecommendation(String(row['ABC Артикул'] || 'C'), xyzData.xyz);
+    if (qtyColIndices.length >= 3) {
+      for (const [article, data] of articleAggregates) {
+        const values = data.quantities;
+        const nonZero = values.filter(v => v > 0);
+        
+        if (nonZero.length < 3) {
+          xyzResults.set(article, { xyz: 'Z', cv: 999, mean: 0, stdDev: 0, periodCount: nonZero.length });
+          continue;
+        }
+        
+        const mean = nonZero.reduce((s, v) => s + v, 0) / nonZero.length;
+        if (mean === 0) {
+          xyzResults.set(article, { xyz: 'Z', cv: 999, mean: 0, stdDev: 0, periodCount: nonZero.length });
+          continue;
+        }
+        
+        const variance = nonZero.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / nonZero.length;
+        const stdDev = Math.sqrt(variance);
+        const cv = (stdDev / mean) * 100;
+        
+        let xyz = 'Z';
+        if (cv <= 10) xyz = 'X';
+        else if (cv <= 25) xyz = 'Y';
+        
+        xyzResults.set(article, { xyz, cv, mean, stdDev, periodCount: nonZero.length });
       }
     }
     
-    // Calculate metrics
-    sendProgress('Расчёт метрик...', 82);
-    const articleMetrics = calculateArticleMetrics(rows, newHeaders, abcByGroups, abcByArticles, xyzResults);
+    // Calculate production metrics
+    sendProgress('Расчёт плана производства...', 82);
+    const articleMetrics = [];
+    
+    for (const [article, data] of articleAggregates) {
+      const groupKey = `${data.groupCode}|||${data.category}`;
+      const abcGroup = groupLookup.get(groupKey) || 'C';
+      const abcArticle = articleLookup.get(article) || 'C';
+      const xyzData = xyzResults.get(article) || { xyz: 'Z', cv: 999, mean: 0, stdDev: 0, periodCount: 0 };
+      
+      const totalQuantity = data.quantities.reduce((s, v) => s + v, 0);
+      const avgPrice = data.priceCount > 0 ? data.priceSum / data.priceCount : (totalQuantity > 0 ? data.revenue / totalQuantity : 0);
+      
+      const periodsWithSales = xyzData.periodCount || (qtyColIndices.length > 0 ? qtyColIndices.length : 1);
+      const avgMonthlySales = periodsWithSales > 0 ? totalQuantity / periodsWithSales : 0;
+      const dailySalesVelocity = avgMonthlySales / 30;
+      
+      const daysToStockout = dailySalesVelocity > 0 ? Math.round(data.stock / dailySalesVelocity) : 9999;
+      
+      const safetyMultiplier = xyzData.xyz === 'X' ? 1.0 : xyzData.xyz === 'Y' ? 1.2 : 1.5;
+      
+      articleMetrics.push({
+        article,
+        category: data.category,
+        groupCode: data.groupCode,
+        abcGroup,
+        abcArticle,
+        xyzGroup: xyzData.xyz,
+        recommendation: getABCXYZRecommendation(abcArticle, xyzData.xyz),
+        totalRevenue: data.revenue,
+        totalQuantity,
+        currentStock: data.stock,
+        avgPrice,
+        avgMonthlySales,
+        dailySalesVelocity,
+        daysToStockout,
+        plan1M: Math.ceil(avgMonthlySales * 1 * safetyMultiplier),
+        plan3M: Math.ceil(avgMonthlySales * 3 * safetyMultiplier),
+        plan6M: Math.ceil(avgMonthlySales * 6 * safetyMultiplier),
+        capitalizationByPrice: data.stock * avgPrice,
+        cv: xyzData.cv,
+      });
+    }
+    
+    articleMetrics.sort((a, b) => b.totalRevenue - a.totalRevenue);
     
     // Detect periods
     const periods = [];
-    const maxCol = itogoColIdx >= 0 ? itogoColIdx : newHeaders.length;
-    for (let i = 0; i < maxCol; i++) {
-      const parsed = parseMonthYear(newHeaders[i]);
+    for (const h of qtyColHeaders) {
+      const parsed = parseMonthYear(h);
       if (parsed) {
         const label = formatMonthYear(parsed.month, parsed.year);
         if (!periods.includes(label)) periods.push(label);
@@ -755,19 +595,99 @@ function processExcel(arrayBuffer, fileSizeMB) {
     
     const lastPeriod = periods.length > 0 ? periods[periods.length - 1] : null;
     
-    // Generate Excel files
-    sendProgress('Генерация отчётов...', 90);
+    // Generate reports (memory efficient - direct to buffer)
+    sendProgress('Генерация отчётов...', 88);
     
-    const processedData = {
-      dataSheet: rows,
-      abcByGroups,
-      abcByArticles,
-      articleMetrics,
-      headers: newHeaders,
-    };
+    // Generate processed report
+    const processedWorkbook = XLSX.utils.book_new();
     
-    const processedReportBuffer = generateProcessedReport(processedData);
-    const productionPlanBuffer = generateProductionPlan(processedData);
+    // Data sheet - build from aggregates, not raw rows
+    const dataHeaders = ['Группа товаров', 'Артикул', 'ABC Группа', 'ABC Артикул', 'Категория', 'XYZ-Группа', 'Рекомендация', 'Выручка'];
+    const dataRows = articleMetrics.map(m => [
+      m.groupCode, m.article, m.abcGroup, m.abcArticle, m.category, m.xyzGroup, m.recommendation, Math.round(m.totalRevenue)
+    ]);
+    const dataSheet = XLSX.utils.aoa_to_sheet([dataHeaders, ...dataRows]);
+    XLSX.utils.book_append_sheet(processedWorkbook, dataSheet, 'Данные');
+    
+    // ABC by groups sheet
+    if (abcByGroups.length > 0) {
+      const groupHeaders = ['Группа', 'Категория', 'Выручка', 'Доля %', 'Накопл. доля %', 'ABC'];
+      const groupRows = abcByGroups.map(item => [
+        item.name, item.category || '', Math.round(item.revenue),
+        Math.round(item.share * 10000) / 100,
+        Math.round(item.cumulativeShare * 10000) / 100,
+        item.abc,
+      ]);
+      const groupSheet = XLSX.utils.aoa_to_sheet([groupHeaders, ...groupRows]);
+      XLSX.utils.book_append_sheet(processedWorkbook, groupSheet, 'АБЦ по группам');
+    }
+    
+    // ABC by articles sheet
+    if (abcByArticles.length > 0) {
+      const articleHeaders = ['Артикул', 'Выручка', 'Доля %', 'Накопл. доля %', 'ABC'];
+      const articleRows = abcByArticles.map(item => [
+        item.name, Math.round(item.revenue),
+        Math.round(item.share * 10000) / 100,
+        Math.round(item.cumulativeShare * 10000) / 100,
+        item.abc,
+      ]);
+      const articleSheet = XLSX.utils.aoa_to_sheet([articleHeaders, ...articleRows]);
+      XLSX.utils.book_append_sheet(processedWorkbook, articleSheet, 'АБЦ по артикулам');
+    }
+    
+    sendProgress('Запись отчёта...', 92);
+    const processedReportBuffer = XLSX.write(processedWorkbook, { bookType: 'xlsx', type: 'array' });
+    
+    // Generate production plan
+    sendProgress('Генерация плана производства...', 94);
+    const planWorkbook = XLSX.utils.book_new();
+    
+    const planHeaders = [
+      'Артикул', 'Категория', 'Группа товаров', 'ABC Группа', 'ABC Артикул',
+      'XYZ-Группа', 'Коэф. вариации %', 'Рекомендация', 'Выручка', 'Продано шт.',
+      'Остаток', 'Ср. цена', 'Скорость мес.', 'Скорость день', 'Дней до стокаута',
+      'План 1М', 'План 3М', 'План 6М', 'Капитализация',
+    ];
+    
+    const planRows = articleMetrics.map(m => [
+      m.article, m.category, m.groupCode, m.abcGroup, m.abcArticle,
+      m.xyzGroup, m.cv < 999 ? Math.round(m.cv * 10) / 10 : '-', m.recommendation,
+      Math.round(m.totalRevenue), Math.round(m.totalQuantity), Math.round(m.currentStock),
+      Math.round(m.avgPrice * 100) / 100, Math.round(m.avgMonthlySales),
+      Math.round(m.dailySalesVelocity * 10) / 10,
+      m.daysToStockout < 9999 ? m.daysToStockout : '∞',
+      m.plan1M, m.plan3M, m.plan6M, Math.round(m.capitalizationByPrice),
+    ]);
+    
+    const planSheet = XLSX.utils.aoa_to_sheet([planHeaders, ...planRows]);
+    XLSX.utils.book_append_sheet(planWorkbook, planSheet, 'План производства');
+    
+    // Summary
+    const totalRevenue = articleMetrics.reduce((s, m) => s + m.totalRevenue, 0);
+    const totalStock = articleMetrics.reduce((s, m) => s + m.currentStock, 0);
+    const totalCapitalization = articleMetrics.reduce((s, m) => s + m.capitalizationByPrice, 0);
+    
+    const countA = articleMetrics.filter(m => m.abcArticle === 'A').length;
+    const countB = articleMetrics.filter(m => m.abcArticle === 'B').length;
+    const countC = articleMetrics.filter(m => m.abcArticle === 'C').length;
+    
+    const summaryHeaders = ['Метрика', 'Значение'];
+    const summaryRows = [
+      ['Всего артикулов', articleMetrics.length],
+      ['Общая выручка', Math.round(totalRevenue)],
+      ['Общий остаток', Math.round(totalStock)],
+      ['Капитализация', Math.round(totalCapitalization)],
+      ['Артикулов A', countA],
+      ['Артикулов B', countB],
+      ['Артикулов C', countC],
+      ['Периодов найдено', periods.length],
+    ];
+    
+    const summarySheet = XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryRows]);
+    XLSX.utils.book_append_sheet(planWorkbook, summarySheet, 'Сводка');
+    
+    sendProgress('Запись плана...', 98);
+    const productionPlanBuffer = XLSX.write(planWorkbook, { bookType: 'xlsx', type: 'array' });
     
     sendProgress('Готово!', 100);
     
@@ -777,12 +697,11 @@ function processExcel(arrayBuffer, fileSizeMB) {
       productionPlanBuffer,
       metrics: {
         periodsFound: periods.length,
-        rowsProcessed: rows.length,
+        rowsProcessed: totalRowsProcessed,
         lastPeriod,
         periodStart,
         periodEnd,
       },
-      logs,
     };
     
   } catch (error) {
@@ -790,7 +709,6 @@ function processExcel(arrayBuffer, fileSizeMB) {
       success: false,
       error: error.message || 'Unknown error',
       metrics: { periodsFound: 0, rowsProcessed: 0, lastPeriod: null, periodStart: null, periodEnd: null },
-      logs,
     };
   }
 }
@@ -800,7 +718,7 @@ self.onmessage = function(e) {
   const { arrayBuffer, fileSizeMB } = e.data;
   
   try {
-    const result = processExcel(arrayBuffer, fileSizeMB);
+    const result = processExcelChunked(arrayBuffer, fileSizeMB);
     
     if (result.success) {
       self.postMessage({
