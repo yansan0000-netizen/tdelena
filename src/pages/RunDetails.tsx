@@ -349,7 +349,15 @@ export default function RunDetails() {
           </CardContent>
         </Card>
 
-        {/* Logs */}
+        {/* Data Table - сначала таблица */}
+        {run.status === 'DONE' && (run.processed_file_path || run.result_file_path) && (
+          <RunDataTable 
+            processedFilePath={run.processed_file_path}
+            resultFilePath={run.result_file_path}
+          />
+        )}
+
+        {/* Logs - потом логи */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -430,14 +438,6 @@ export default function RunDetails() {
             )}
           </CardContent>
         </Card>
-
-        {/* Data Table */}
-        {run.status === 'DONE' && (run.processed_file_path || run.result_file_path) && (
-          <RunDataTable 
-            processedFilePath={run.processed_file_path}
-            resultFilePath={run.result_file_path}
-          />
-        )}
       </div>
     </AppLayout>
   );
