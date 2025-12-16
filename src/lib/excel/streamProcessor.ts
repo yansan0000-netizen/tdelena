@@ -39,6 +39,13 @@ const CATEGORY_PATTERNS: [RegExp, string][] = [
   [/ясел|baby|infant|newborn/i, 'Детское (ясельное)'],
 ];
 
+// Normalize all types of spaces to regular space
+function normalizeSpaces(str: string): string {
+  if (!str) return '';
+  // Replace ALL unicode spaces (non-breaking, thin, zero-width, etc.) with regular space
+  return str.replace(/[\s\u00A0\u202F\u2007\u200B\u2009\u200A\u200C\u200D\uFEFF]+/g, ' ').trim();
+}
+
 function parseNumber(value: unknown): number {
   if (typeof value === 'number') return isNaN(value) ? 0 : value;
   if (!value) return 0;
@@ -47,13 +54,16 @@ function parseNumber(value: unknown): number {
   let str = String(value);
   
   // Remove all types of spaces (regular, non-breaking, thin, etc.)
-  str = str.replace(/[\s\u00A0\u202F\u2007\u200B]/g, '');
+  str = str.replace(/[\s\u00A0\u202F\u2007\u200B\u2009\u200A\u200C\u200D\uFEFF]/g, '');
   
   // Remove currency symbols
   str = str.replace(/[₽руб\.р]/gi, '');
   
   // Keep only digits, minus, comma, period
   str = str.replace(/[^\d.,\-]/g, '');
+  
+  // If empty after cleanup, return 0
+  if (!str || str === '-' || str === '.' || str === ',') return 0;
   
   // Handle Russian format: replace comma with period if it's the decimal separator
   // If there's both comma and period, comma is thousands separator
@@ -71,11 +81,13 @@ function parseNumber(value: unknown): number {
 
 function parseMonthYear(header: string): { month: number; year: number } | null {
   if (!header) return null;
-  const lower = header.toLowerCase().trim();
+  // Normalize spaces before matching
+  const normalized = normalizeSpaces(header);
+  const lower = normalized.toLowerCase();
   
   for (const [name, month] of Object.entries(MONTH_NAMES_RU)) {
     if (lower.includes(name)) {
-      const yearMatch = header.match(/20\d{2}/);
+      const yearMatch = normalized.match(/20\d{2}/);
       if (yearMatch) {
         return { month, year: parseInt(yearMatch[0]) };
       }
@@ -98,13 +110,15 @@ function parsePeriodString(periodStr: string): { start: Date | null; end: Date |
 }
 
 function isQuantityColumn(header: string): boolean {
-  const h = header.toLowerCase();
+  // Normalize spaces before matching
+  const h = normalizeSpaces(header).toLowerCase();
   // Match: "кол-во", "количество", "qty", also "Январь 2024 кол-во"
   return h.includes('кол-во') || h.includes('кол.') || h.includes('количество') || h.includes('qty') || h.includes('шт');
 }
 
 function isRevenueColumn(header: string): boolean {
-  const h = header.toLowerCase();
+  // Normalize spaces before matching
+  const h = normalizeSpaces(header).toLowerCase();
   // Match: "сумма", "выручка", "revenue", also month columns with sum, "руб"
   return h.includes('сумма') || h.includes('выручка') || h.includes('revenue') || h.includes('руб') || 
          h.includes('sum') || h.includes('итог сумма');
@@ -318,13 +332,17 @@ export async function processExcelFileStream(
       for (let row = headerRowIdx; row <= headerRowIdx + 2 && row < rawData.length; row++) {
         const val = rawData[row]?.[col];
         if (val !== null && val !== undefined && val !== '') {
-          parts.push(String(val).trim());
+          // Normalize spaces when extracting header parts
+          parts.push(normalizeSpaces(String(val)));
         }
       }
-      headers.push(parts.join(' ').trim() || `Колонка ${col + 1}`);
+      // Normalize the final header
+      headers.push(normalizeSpaces(parts.join(' ')) || `Колонка ${col + 1}`);
     }
 
     log(`Заголовков: ${headers.length}`, 38);
+    // Log first 20 headers for debugging
+    log(`Первые 20 заголовков: ${headers.slice(0, 20).map((h, i) => `[${i}]${h}`).join(' | ')}`, 38);
     checkAbort();
 
     // Find key columns
