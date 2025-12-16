@@ -391,13 +391,13 @@ export async function processExcelFileStream(
       }
     }
 
-    // Find revenue column - check for "Итого сумма", "Итого выручка", or just "Итого" followed by numeric data
+    // Find revenue column - check for "Итого сумма", "Итого выручка"
     let itogoSummaIdx = headers.findIndex(h => {
       const hl = h.toLowerCase();
       return hl.includes('итого') && (hl.includes('сумма') || hl.includes('выручка'));
     });
     
-    // Fallback: look for any "Итого" column that's not quantity
+    // Fallback 1: look for any "Итого" column that's not quantity
     if (itogoSummaIdx < 0) {
       for (let i = 0; i < headers.length; i++) {
         const hl = headers[i].toLowerCase();
@@ -407,6 +407,25 @@ export async function processExcelFileStream(
         }
       }
     }
+    
+    // Fallback 2: look for standalone "Сумма" column (without "Итого")
+    if (itogoSummaIdx < 0) {
+      for (let i = 0; i < headers.length; i++) {
+        const hl = headers[i].toLowerCase().trim();
+        // Look for column that is exactly "сумма" or starts/ends with it
+        if (hl === 'сумма' || hl === 'сумма, руб' || hl === 'сумма руб' || 
+            hl === 'выручка' || hl === 'revenue' || hl === 'total') {
+          itogoSummaIdx = i;
+          log(`Найдена standalone колонка суммы: "${headers[i]}" (индекс ${i})`, 44);
+          break;
+        }
+      }
+    }
+    
+    // Log all columns containing "сумма" for debugging
+    const summaColumns = headers.map((h, i) => ({ header: h, idx: i }))
+      .filter(({ header }) => header.toLowerCase().includes('сумма'));
+    log(`Все колонки с "сумма": ${JSON.stringify(summaColumns.slice(0, 10))}`, 44);
 
     // Find category column
     const categoryHeaders = ['номенклатура.группа', 'группа номенклатуры', 'группа', 'категория'];
@@ -483,7 +502,9 @@ export async function processExcelFileStream(
       log(`Первые заголовки: ${headers.slice(0, 10).join(' | ')}`, 46);
     }
     if (itogoSummaIdx >= 0) {
-      log(`Итого сумма колонка: ${headers[itogoSummaIdx]}`, 46);
+      log(`Итого/Сумма колонка найдена: "${headers[itogoSummaIdx]}" (индекс ${itogoSummaIdx})`, 46);
+    } else {
+      log(`ВНИМАНИЕ: Итого/Сумма колонка НЕ найдена! Выручка будет суммой revenueColIndices`, 46);
     }
 
     log('Обработка строк данных...', 47);
