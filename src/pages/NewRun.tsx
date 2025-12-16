@@ -5,17 +5,17 @@ import { FileDropzone } from '@/components/FileDropzone';
 import { ModeSelector, RunMode } from '@/components/ModeSelector';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { useRuns } from '@/hooks/useRuns';
-import { useProcessingContext } from '@/contexts/ProcessingContext';
+import { useProcessing } from '@/hooks/useProcessing';
 import { useToast } from '@/hooks/use-toast';
-import { Play, Loader2 } from 'lucide-react';
+import { Play, Loader2, AlertCircle } from 'lucide-react';
 
 export default function NewRun() {
   const [file, setFile] = useState<File | null>(null);
   const [mode, setMode] = useState<RunMode>('1C_RAW');
-  const [isCreating, setIsCreating] = useState(false);
   const { createRun } = useRuns();
-  const { setPendingProcessing } = useProcessingContext();
+  const { isProcessing, progress, progressPercent, error, processRunClient } = useProcessing();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -29,10 +29,8 @@ export default function NewRun() {
       return;
     }
 
-    setIsCreating(true);
-
     try {
-      // Create run record and upload original file
+      // Create run record with PROCESSING status
       const runId = await createRun(file, mode);
 
       if (!runId) {
@@ -41,22 +39,34 @@ export default function NewRun() {
           description: 'Не удалось создать запуск',
           variant: 'destructive',
         });
-        setIsCreating(false);
         return;
       }
 
-      // Set pending processing data (file will be processed on RunDetails page)
-      setPendingProcessing({ runId, file, mode });
+      // Process file directly here
+      const result = await processRunClient(runId, mode, file);
 
-      // Redirect immediately to run details page
-      navigate(`/runs/${runId}`);
+      if (result) {
+        toast({
+          title: 'Обработка завершена!',
+          description: `Обработано ${result.metrics.rowsProcessed} строк`,
+        });
+        // Redirect to run details after success
+        navigate(`/runs/${runId}`);
+      } else {
+        toast({
+          title: 'Ошибка обработки',
+          description: 'Проверьте формат файла или уменьшите его размер',
+          variant: 'destructive',
+        });
+        // Still redirect to see error details
+        navigate(`/runs/${runId}`);
+      }
     } catch (error) {
       toast({
         title: 'Ошибка',
-        description: 'Не удалось создать запуск',
+        description: error instanceof Error ? error.message : 'Не удалось создать запуск',
         variant: 'destructive',
       });
-      setIsCreating(false);
     }
   };
 
@@ -70,12 +80,48 @@ export default function NewRun() {
           </p>
         </div>
 
+        {/* Processing Progress */}
+        {isProcessing && (
+          <Card className="border-primary/50 bg-primary/5">
+            <CardContent className="pt-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium">{progress || 'Обработка...'}</span>
+                    <span className="text-muted-foreground">{progressPercent}%</span>
+                  </div>
+                  <Progress value={progressPercent} className="h-3" />
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground text-center">
+                Обработка выполняется локально в вашем браузере. Не закрывайте страницу.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Error Display */}
+        {error && !isProcessing && (
+          <Card className="border-destructive/50 bg-destructive/5">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-destructive">Ошибка обработки</p>
+                  <p className="text-sm text-muted-foreground mt-1">{error}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Upload Section */}
         <Card>
           <CardHeader>
             <CardTitle>1. Загрузка файла</CardTitle>
             <CardDescription>
-              Перетащите файл или выберите из проводника (до 100MB)
+              Перетащите файл или выберите из проводника (до 30MB)
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -83,7 +129,7 @@ export default function NewRun() {
               selectedFile={file}
               onFileSelect={setFile}
               onClear={() => setFile(null)}
-              disabled={isCreating}
+              disabled={isProcessing}
             />
           </CardContent>
         </Card>
@@ -100,7 +146,7 @@ export default function NewRun() {
             <ModeSelector
               value={mode}
               onChange={setMode}
-              disabled={isCreating}
+              disabled={isProcessing}
             />
           </CardContent>
         </Card>
@@ -108,14 +154,14 @@ export default function NewRun() {
         {/* Action Button */}
         <Button
           onClick={handleStartRun}
-          disabled={!file || isCreating}
+          disabled={!file || isProcessing}
           size="lg"
           className="w-full gap-2"
         >
-          {isCreating ? (
+          {isProcessing ? (
             <>
               <Loader2 className="h-5 w-5 animate-spin" />
-              Создание запуска...
+              Обработка...
             </>
           ) : (
             <>

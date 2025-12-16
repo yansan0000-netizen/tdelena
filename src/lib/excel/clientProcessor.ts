@@ -489,19 +489,44 @@ export async function processExcelFile(
   };
 
   try {
+    // Check file size limit (30MB)
+    const fileSizeMB = file.size / 1024 / 1024;
+    if (fileSizeMB > 30) {
+      throw new Error(`Файл слишком большой (${fileSizeMB.toFixed(1)}MB). Максимальный размер: 30MB. Попробуйте уменьшить файл.`);
+    }
+
     log('Чтение файла...', 5);
     
-    const arrayBuffer = await file.arrayBuffer();
-    const fileSizeMB = (arrayBuffer.byteLength / 1024 / 1024).toFixed(2);
-    log(`Размер файла: ${fileSizeMB}MB`, 10);
+    let arrayBuffer: ArrayBuffer;
+    try {
+      arrayBuffer = await file.arrayBuffer();
+    } catch (e) {
+      throw new Error('Не удалось прочитать файл. Попробуйте уменьшить размер файла или закрыть другие вкладки браузера.');
+    }
+    
+    log(`Размер файла: ${fileSizeMB.toFixed(2)}MB`, 10);
     
     log('Парсинг Excel...', 15);
-    const workbook = XLSX.read(arrayBuffer, {
-      type: 'array',
-      cellDates: true,
-      cellNF: false,
-      cellStyles: false,
-    });
+    let workbook: XLSX.WorkBook;
+    try {
+      workbook = XLSX.read(arrayBuffer, {
+        type: 'array',
+        cellDates: true,
+        cellNF: false,
+        cellStyles: false,
+        sheetRows: 100000, // Limit rows to prevent memory issues
+      });
+    } catch (e) {
+      // Free memory
+      (arrayBuffer as unknown) = null;
+      if (e instanceof Error && (e.message.includes('memory') || e.message.includes('allocation'))) {
+        throw new Error('Недостаточно памяти для обработки файла. Попробуйте уменьшить файл или закрыть другие вкладки.');
+      }
+      throw new Error('Ошибка чтения Excel файла. Проверьте формат файла.');
+    }
+    
+    // Free memory immediately after parsing
+    (arrayBuffer as unknown) = null;
     log(`Файл прочитан, листов: ${workbook.SheetNames.length}`, 25);
     
     // Select data sheet
