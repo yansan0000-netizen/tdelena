@@ -416,16 +416,16 @@ export async function processExcelFileStream(
         if (hl === 'сумма' || hl === 'сумма, руб' || hl === 'сумма руб' || 
             hl === 'выручка' || hl === 'revenue' || hl === 'total') {
           itogoSummaIdx = i;
-          log(`Найдена standalone колонка суммы: "${headers[i]}" (индекс ${i})`, 44);
+          log(`Найдена standalone колонка суммы: "${headers[i]}" (индекс ${i})`, 44, true);
           break;
         }
       }
     }
     
-    // Log all columns containing "сумма" for debugging
+    // Log all columns containing "сумма" for debugging (FORCE log to bypass throttle)
     const summaColumns = headers.map((h, i) => ({ header: h, idx: i }))
       .filter(({ header }) => header.toLowerCase().includes('сумма'));
-    log(`Все колонки с "сумма": ${JSON.stringify(summaColumns.slice(0, 10))}`, 44);
+    log(`Все колонки с "сумма": ${JSON.stringify(summaColumns.slice(0, 10))}`, 44, true);
 
     // Find category column
     const categoryHeaders = ['номенклатура.группа', 'группа номенклатуры', 'группа', 'категория'];
@@ -493,18 +493,18 @@ export async function processExcelFileStream(
       }
     }
 
-    // Log detected revenue columns for debugging
-    log(`Колонок с выручкой найдено: ${revenueColIndices.length}`, 46);
+    // Log detected revenue columns for debugging (FORCE all these logs)
+    log(`Колонок с выручкой найдено: ${revenueColIndices.length}`, 46, true);
     if (revenueColIndices.length > 0) {
-      log(`Выручка колонки: ${revenueColIndices.slice(0, 5).map(i => headers[i]).join(', ')}`, 46);
+      log(`Выручка колонки: ${revenueColIndices.slice(0, 5).map(i => headers[i]).join(', ')}`, 46, true);
     } else {
-      log(`ВНИМАНИЕ: Колонки с выручкой не найдены! Проверьте заголовки файла.`, 46);
-      log(`Первые заголовки: ${headers.slice(0, 10).join(' | ')}`, 46);
+      log(`ВНИМАНИЕ: Колонки с выручкой не найдены! Проверьте заголовки файла.`, 46, true);
+      log(`Первые заголовки: ${headers.slice(0, 10).join(' | ')}`, 46, true);
     }
     if (itogoSummaIdx >= 0) {
-      log(`Итого/Сумма колонка найдена: "${headers[itogoSummaIdx]}" (индекс ${itogoSummaIdx})`, 46);
+      log(`Итого/Сумма колонка найдена: "${headers[itogoSummaIdx]}" (индекс ${itogoSummaIdx})`, 46, true);
     } else {
-      log(`ВНИМАНИЕ: Итого/Сумма колонка НЕ найдена! Выручка будет суммой revenueColIndices`, 46);
+      log(`ВНИМАНИЕ: Итого/Сумма колонка НЕ найдена! Выручка будет суммой revenueColIndices`, 46, true);
     }
 
     log('Обработка строк данных...', 47);
@@ -572,10 +572,10 @@ export async function processExcelFileStream(
         }
         row['Выручка'] = totalRevenue;
 
-        // Debug: log first 3 revenue values
+        // Debug: log first 3 revenue values (FORCE)
         if (processedCount < 3) {
           const rawVal = itogoSummaIdx >= 0 ? rawRow[itogoSummaIdx] : (revenueColIndices.length > 0 ? rawRow[revenueColIndices[0]] : 'N/A');
-          log(`Отладка выручки [${processedCount}]: сырое="${rawVal}" (${typeof rawVal}), parsed=${totalRevenue}`, 48);
+          log(`Отладка выручки [${processedCount}]: сырое="${rawVal}" (${typeof rawVal}), parsed=${totalRevenue}`, 48, true);
         }
 
         rows.push(row);
