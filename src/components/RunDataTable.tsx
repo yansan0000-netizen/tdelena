@@ -40,6 +40,7 @@ export function RunDataTable({ processedFilePath, resultFilePath }: RunDataTable
   const [abcFilter, setAbcFilter] = useState<string>('all');
   const [xyzFilter, setXyzFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [groupFilter, setGroupFilter] = useState<string>('all');
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -128,6 +129,15 @@ export function RunDataTable({ processedFilePath, resultFilePath }: RunDataTable
     return Array.from(values).sort();
   }, [data]);
 
+  const uniqueGroups = useMemo(() => {
+    const values = new Set<string>();
+    data.forEach(row => {
+      const val = row['Группа товаров'] || row['Группа'];
+      if (val) values.add(String(val));
+    });
+    return Array.from(values).sort();
+  }, [data]);
+
   // Filter data
   const filteredData = useMemo(() => {
     return data.filter(row => {
@@ -166,9 +176,15 @@ export function RunDataTable({ processedFilePath, resultFilePath }: RunDataTable
         if (String(category) !== categoryFilter) return false;
       }
 
+      // Group filter (мужская/женская/детская)
+      if (groupFilter !== 'all') {
+        const group = row['Группа товаров'] || row['Группа'] || '';
+        if (String(group) !== groupFilter) return false;
+      }
+
       return true;
     });
-  }, [data, searchTerm, articleFilter, abcFilter, xyzFilter, categoryFilter]);
+  }, [data, searchTerm, articleFilter, abcFilter, xyzFilter, categoryFilter, groupFilter]);
 
   // Pagination
   const totalPages = Math.ceil(filteredData.length / ROWS_PER_PAGE);
@@ -180,7 +196,7 @@ export function RunDataTable({ processedFilePath, resultFilePath }: RunDataTable
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, articleFilter, abcFilter, xyzFilter, categoryFilter]);
+  }, [searchTerm, articleFilter, abcFilter, xyzFilter, categoryFilter, groupFilter]);
 
   const clearFilters = () => {
     setSearchTerm('');
@@ -188,9 +204,10 @@ export function RunDataTable({ processedFilePath, resultFilePath }: RunDataTable
     setAbcFilter('all');
     setXyzFilter('all');
     setCategoryFilter('all');
+    setGroupFilter('all');
   };
 
-  const hasActiveFilters = searchTerm || articleFilter || abcFilter !== 'all' || xyzFilter !== 'all' || categoryFilter !== 'all';
+  const hasActiveFilters = searchTerm || articleFilter || abcFilter !== 'all' || xyzFilter !== 'all' || categoryFilter !== 'all' || groupFilter !== 'all';
 
   // Format cell value for display
   const formatCellValue = (value: string | number | null, column: string): string => {
@@ -339,6 +356,20 @@ export function RunDataTable({ processedFilePath, resultFilePath }: RunDataTable
                   <SelectContent>
                     <SelectItem value="all">Все категории</SelectItem>
                     {uniqueCategories.map(val => (
+                      <SelectItem key={val} value={val}>{val}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {uniqueGroups.length > 0 && (
+                <Select value={groupFilter} onValueChange={setGroupFilter}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Группа" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Все группы</SelectItem>
+                    {uniqueGroups.map(val => (
                       <SelectItem key={val} value={val}>{val}</SelectItem>
                     ))}
                   </SelectContent>
