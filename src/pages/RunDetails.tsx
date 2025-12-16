@@ -325,7 +325,6 @@ export default function RunDetails() {
                                 return log.ts;
                               }
                             })()}
-                            {format(new Date(log.ts), 'HH:mm:ss.SSS')}
                           </span>
                         </div>
                         <p className="text-sm">{log.message}</p>
