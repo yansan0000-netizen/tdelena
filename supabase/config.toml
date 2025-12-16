@@ -8,3 +8,9 @@ verify_jwt = true
 
 [functions.run-analytics]
 verify_jwt = true
+
+[functions.upload-raw-data]
+verify_jwt = false
+
+[functions.run-analytics-sql]
+verify_jwt = false

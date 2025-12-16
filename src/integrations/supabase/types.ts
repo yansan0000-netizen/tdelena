@@ -237,6 +237,56 @@ export type Database = {
           },
         ]
       }
+      sales_data_raw: {
+        Row: {
+          article: string
+          category: string | null
+          chunk_index: number
+          created_at: string | null
+          id: string
+          period: string
+          price: number | null
+          quantity: number | null
+          revenue: number | null
+          run_id: string
+          stock: number | null
+        }
+        Insert: {
+          article: string
+          category?: string | null
+          chunk_index?: number
+          created_at?: string | null
+          id?: string
+          period: string
+          price?: number | null
+          quantity?: number | null
+          revenue?: number | null
+          run_id: string
+          stock?: number | null
+        }
+        Update: {
+          article?: string
+          category?: string | null
+          chunk_index?: number
+          created_at?: string | null
+          id?: string
+          period?: string
+          price?: number | null
+          quantity?: number | null
+          revenue?: number | null
+          run_id?: string
+          stock?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_data_raw_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
