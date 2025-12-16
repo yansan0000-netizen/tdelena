@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,20 +10,6 @@ const corsHeaders = {
 interface RequestBody {
   runId: string;
   userId: string;
-}
-
-function escapeCSV(value: unknown): string {
-  if (value === null || value === undefined) return '';
-  const str = String(value);
-  if (str.includes(';') || str.includes('"') || str.includes('\n')) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
-function formatNumber(num: number, decimals = 2): string {
-  if (num === null || num === undefined || isNaN(num)) return '0';
-  return num.toFixed(decimals).replace('.', ',');
 }
 
 function getRecommendation(abc: string, xyz: string): string {
@@ -222,15 +209,16 @@ serve(async (req) => {
         plan_3m: plan3m,
         plan_6m: plan6m,
         recommendation: getRecommendation(abcGroup, xyzGroup),
+        periodQuantities: item.periodQuantities,
       };
     });
     
     console.log(`[run-analytics-sql] Inserting ${analyticsData.length} analytics records...`);
     
-    // Insert analytics in batches
+    // Insert analytics in batches (without periodQuantities)
     const BATCH_SIZE = 500;
     for (let i = 0; i < analyticsData.length; i += BATCH_SIZE) {
-      const batch = analyticsData.slice(i, i + BATCH_SIZE);
+      const batch = analyticsData.slice(i, i + BATCH_SIZE).map(({ periodQuantities, ...rest }) => rest);
       const { error: insertError } = await supabase
         .from('sales_analytics')
         .insert(batch);
@@ -241,85 +229,152 @@ serve(async (req) => {
       }
     }
     
-    console.log(`[run-analytics-sql] Generating CSV reports...`);
+    console.log(`[run-analytics-sql] Generating XLSX reports...`);
     
-    // Step 4: Generate CSV reports
-    // Main report
-    const reportHeaders = [
-      'Артикул', 'Категория', 'Группа', 'ABC', 'XYZ', 'Рекомендация',
-      'Выручка', 'Доля выручки %', 'Накопл. доля %', 'Кол-во продаж',
-      'Остаток', 'Цена', 'Ср.мес.продажи', 'Скор.продаж/день',
-      'Дней до 0', 'CV %', 'План 1м', 'План 3м', 'План 6м'
+    // Step 4: Generate XLSX reports
+    // Main processed report with all data
+    const reportData = analyticsData.map(row => ({
+      'Артикул': row.article,
+      'Категория': row.category,
+      'Группа': row.group_code,
+      'ABC': row.abc_group,
+      'XYZ': row.xyz_group,
+      'Рекомендация': row.recommendation,
+      'Выручка': Math.round(row.total_revenue),
+      'Доля выручки %': Math.round(row.revenue_share * 100) / 100,
+      'Накопл. доля %': Math.round(row.cumulative_share * 100) / 100,
+      'Кол-во продаж': row.total_quantity,
+      'Остаток': row.current_stock,
+      'Цена': Math.round(row.avg_price * 100) / 100,
+      'Ср.мес.продажи': Math.round(row.avg_monthly_qty * 10) / 10,
+      'Скор.продаж/день': Math.round(row.sales_velocity_day * 100) / 100,
+      'Дней до 0': row.days_until_stockout,
+      'CV %': Math.round(row.coefficient_of_variation * 10) / 10,
+      'План 1м': row.plan_1m,
+      'План 3м': row.plan_3m,
+      'План 6м': row.plan_6m,
+    }));
+    
+    // Create main report workbook
+    const reportWb = XLSX.utils.book_new();
+    const reportWs = XLSX.utils.json_to_sheet(reportData);
+    
+    // Set column widths
+    reportWs['!cols'] = [
+      { wch: 25 }, // Артикул
+      { wch: 20 }, // Категория
+      { wch: 10 }, // Группа
+      { wch: 5 },  // ABC
+      { wch: 5 },  // XYZ
+      { wch: 45 }, // Рекомендация
+      { wch: 12 }, // Выручка
+      { wch: 12 }, // Доля выручки
+      { wch: 12 }, // Накопл. доля
+      { wch: 12 }, // Кол-во продаж
+      { wch: 10 }, // Остаток
+      { wch: 10 }, // Цена
+      { wch: 12 }, // Ср.мес.продажи
+      { wch: 15 }, // Скор.продаж
+      { wch: 10 }, // Дней до 0
+      { wch: 8 },  // CV
+      { wch: 10 }, // План 1м
+      { wch: 10 }, // План 3м
+      { wch: 10 }, // План 6м
     ];
     
-    let reportCSV = '\ufeff' + reportHeaders.join(';') + '\n';
+    XLSX.utils.book_append_sheet(reportWb, reportWs, 'Данные');
     
-    for (const row of analyticsData) {
-      reportCSV += [
-        escapeCSV(row.article),
-        escapeCSV(row.category),
-        escapeCSV(row.group_code),
-        row.abc_group,
-        row.xyz_group,
-        escapeCSV(row.recommendation),
-        formatNumber(row.total_revenue, 0),
-        formatNumber(row.revenue_share, 2),
-        formatNumber(row.cumulative_share, 2),
-        row.total_quantity,
-        row.current_stock,
-        formatNumber(row.avg_price, 2),
-        formatNumber(row.avg_monthly_qty, 1),
-        formatNumber(row.sales_velocity_day, 2),
-        row.days_until_stockout,
-        formatNumber(row.coefficient_of_variation, 1),
-        row.plan_1m,
-        row.plan_3m,
-        row.plan_6m,
-      ].join(';') + '\n';
-    }
+    // Add ABC summary sheet
+    const abcSummary = [
+      { 'ABC Группа': 'A', 'Кол-во артикулов': analyticsData.filter(r => r.abc_group === 'A').length, 'Доля выручки %': 80 },
+      { 'ABC Группа': 'B', 'Кол-во артикулов': analyticsData.filter(r => r.abc_group === 'B').length, 'Доля выручки %': 15 },
+      { 'ABC Группа': 'C', 'Кол-во артикулов': analyticsData.filter(r => r.abc_group === 'C').length, 'Доля выручки %': 5 },
+    ];
+    const abcWs = XLSX.utils.json_to_sheet(abcSummary);
+    XLSX.utils.book_append_sheet(reportWb, abcWs, 'ABC Сводка');
     
-    // Production plan report
-    const planHeaders = ['Артикул', 'Категория', 'ABC', 'XYZ', 'Остаток', 'Ср.мес.продажи', 'План 1м', 'План 3м', 'План 6м', 'Рекомендация'];
-    let planCSV = '\ufeff' + planHeaders.join(';') + '\n';
+    // Add XYZ summary sheet
+    const xyzSummary = [
+      { 'XYZ Группа': 'X', 'Кол-во артикулов': analyticsData.filter(r => r.xyz_group === 'X').length, 'CV': '≤10%', 'Описание': 'Стабильный спрос' },
+      { 'XYZ Группа': 'Y', 'Кол-во артикулов': analyticsData.filter(r => r.xyz_group === 'Y').length, 'CV': '10-25%', 'Описание': 'Умеренные колебания' },
+      { 'XYZ Группа': 'Z', 'Кол-во артикулов': analyticsData.filter(r => r.xyz_group === 'Z').length, 'CV': '>25%', 'Описание': 'Нестабильный спрос' },
+    ];
+    const xyzWs = XLSX.utils.json_to_sheet(xyzSummary);
+    XLSX.utils.book_append_sheet(reportWb, xyzWs, 'XYZ Сводка');
     
-    // Filter for items that need production (plan > 0)
+    // Production plan report - filtered for items needing production
     const needsProduction = analyticsData.filter(r => r.plan_1m > 0 || r.plan_3m > 0);
     needsProduction.sort((a, b) => b.plan_3m - a.plan_3m);
     
-    for (const row of needsProduction) {
-      planCSV += [
-        escapeCSV(row.article),
-        escapeCSV(row.category),
-        row.abc_group,
-        row.xyz_group,
-        row.current_stock,
-        formatNumber(row.avg_monthly_qty, 1),
-        row.plan_1m,
-        row.plan_3m,
-        row.plan_6m,
-        escapeCSV(row.recommendation),
-      ].join(';') + '\n';
-    }
+    const planData = needsProduction.map(row => ({
+      'Артикул': row.article,
+      'Категория': row.category,
+      'ABC': row.abc_group,
+      'XYZ': row.xyz_group,
+      'Текущий остаток': row.current_stock,
+      'Ср.мес.продажи': Math.round(row.avg_monthly_qty * 10) / 10,
+      'Дней до 0': row.days_until_stockout,
+      'План 1 мес.': row.plan_1m,
+      'План 3 мес.': row.plan_3m,
+      'План 6 мес.': row.plan_6m,
+      'Рекомендация': row.recommendation,
+    }));
     
-    // Step 5: Upload CSV files to storage
+    const planWb = XLSX.utils.book_new();
+    const planWs = XLSX.utils.json_to_sheet(planData);
+    
+    planWs['!cols'] = [
+      { wch: 25 }, // Артикул
+      { wch: 20 }, // Категория
+      { wch: 5 },  // ABC
+      { wch: 5 },  // XYZ
+      { wch: 15 }, // Остаток
+      { wch: 15 }, // Ср.мес.продажи
+      { wch: 10 }, // Дней до 0
+      { wch: 12 }, // План 1м
+      { wch: 12 }, // План 3м
+      { wch: 12 }, // План 6м
+      { wch: 45 }, // Рекомендация
+    ];
+    
+    XLSX.utils.book_append_sheet(planWb, planWs, 'План производства');
+    
+    // Add summary to production plan
+    const planSummary = [
+      { 'Метрика': 'Всего артикулов', 'Значение': analyticsData.length },
+      { 'Метрика': 'Требуют пополнения', 'Значение': needsProduction.length },
+      { 'Метрика': 'Итого План 1м', 'Значение': needsProduction.reduce((s, r) => s + r.plan_1m, 0) },
+      { 'Метрика': 'Итого План 3м', 'Значение': needsProduction.reduce((s, r) => s + r.plan_3m, 0) },
+      { 'Метрика': 'Итого План 6м', 'Значение': needsProduction.reduce((s, r) => s + r.plan_6m, 0) },
+    ];
+    const summaryWs = XLSX.utils.json_to_sheet(planSummary);
+    XLSX.utils.book_append_sheet(planWb, summaryWs, 'Сводка');
+    
+    // Generate XLSX buffers
+    const reportBuffer = XLSX.write(reportWb, { type: 'buffer', bookType: 'xlsx' });
+    const planBuffer = XLSX.write(planWb, { type: 'buffer', bookType: 'xlsx' });
+    
+    // Step 5: Upload XLSX files to storage
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const reportPath = `${userId}/${runId}/report_${timestamp}.csv`;
-    const planPath = `${userId}/${runId}/plan_${timestamp}.csv`;
+    const reportPath = `${userId}/${runId}/report_${timestamp}.xlsx`;
+    const planPath = `${userId}/${runId}/plan_${timestamp}.xlsx`;
     
     const { error: reportUploadError } = await supabase.storage
-      .from('sales-results')
-      .upload(reportPath, new Blob([reportCSV], { type: 'text/csv;charset=utf-8' }));
+      .from('sales-processed')
+      .upload(reportPath, new Blob([reportBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
     
     if (reportUploadError) {
       console.error('[run-analytics-sql] Report upload error:', reportUploadError);
+      throw new Error(`Failed to upload report: ${reportUploadError.message}`);
     }
     
     const { error: planUploadError } = await supabase.storage
       .from('sales-results')
-      .upload(planPath, new Blob([planCSV], { type: 'text/csv;charset=utf-8' }));
+      .upload(planPath, new Blob([planBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
     
     if (planUploadError) {
       console.error('[run-analytics-sql] Plan upload error:', planUploadError);
+      throw new Error(`Failed to upload plan: ${planUploadError.message}`);
     }
     
     // Step 6: Update run status
@@ -333,17 +388,14 @@ serve(async (req) => {
         periods_found: periodCount,
         last_period: periods[periods.length - 1] || null,
         processing_time_ms: processingTime,
-        result_file_path: reportPath,
-        processed_file_path: planPath,
+        processed_file_path: reportPath,
+        result_file_path: planPath,
       })
       .eq('id', runId);
     
     if (updateError) {
       console.error('[run-analytics-sql] Update error:', updateError);
     }
-    
-    // Step 7: Clean up raw data (optional - keep for debugging)
-    // await supabase.from('sales_data_raw').delete().eq('run_id', runId);
     
     console.log(`[run-analytics-sql] Completed in ${processingTime}ms. ${articles.length} articles processed.`);
     
