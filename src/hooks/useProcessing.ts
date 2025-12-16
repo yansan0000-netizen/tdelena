@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { useExcelWorker } from './useExcelWorker';
 import { RunMode } from '@/lib/types';
 
 interface ProcessingState {
@@ -10,11 +11,10 @@ interface ProcessingState {
   error: string | null;
 }
 
-// Polling interval for status checks
-const POLL_INTERVAL_MS = 2000;
-
 export function useProcessing() {
   const { user } = useAuth();
+  const { processFile: processWithWorker, cancelProcessing: cancelWorker, progress: workerProgress } = useExcelWorker();
+  
   const [state, setState] = useState<ProcessingState>({
     isProcessing: false,
     progress: '',
@@ -22,29 +22,22 @@ export function useProcessing() {
     error: null,
   });
   
-  const pollingRef = useRef<number | null>(null);
   const currentRunIdRef = useRef<string | null>(null);
 
-  // Cleanup polling on unmount
+  // Sync worker progress to state
   useEffect(() => {
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-      }
-    };
-  }, []);
-
-  const stopPolling = useCallback(() => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
+    if (workerProgress.message) {
+      setState(s => ({
+        ...s,
+        progress: workerProgress.message,
+        progressPercent: workerProgress.percent,
+      }));
     }
-  }, []);
+  }, [workerProgress]);
 
   const cancelProcessing = useCallback(async (runId?: string) => {
-    stopPolling();
+    cancelWorker();
     
-    // Update run status to ERROR if runId provided
     const id = runId || currentRunIdRef.current;
     if (id) {
       await supabase
@@ -63,7 +56,7 @@ export function useProcessing() {
       progressPercent: 0,
       error: 'Обработка отменена',
     });
-  }, [stopPolling]);
+  }, [cancelWorker]);
 
   // Generate safe filename for storage (ASCII only)
   const generateSafeFileName = (originalName: string): string => {
@@ -81,10 +74,11 @@ export function useProcessing() {
     if (!user) return { success: false };
 
     currentRunIdRef.current = runId;
+    const startTime = Date.now();
     setState({ isProcessing: true, progress: 'Загрузка файла...', progressPercent: 5, error: null });
 
     try {
-      // 1. Upload file to storage first (use ASCII-safe filename)
+      // 1. Upload original file to storage (use ASCII-safe filename)
       const safeFileName = generateSafeFileName(file.name);
       const inputPath = `${user.id}/${runId}/${safeFileName}`;
       
@@ -103,25 +97,69 @@ export function useProcessing() {
         input_file_path: inputPath,
       }).eq('id', runId);
       
-      setState(s => ({ ...s, progress: 'Отправка на обработку...', progressPercent: 15 }));
+      // 2. Process file using Web Worker (client-side)
+      setState(s => ({ ...s, progress: 'Обработка файла...', progressPercent: 10 }));
       
-      // 2. Call edge function
-      const { data, error } = await supabase.functions.invoke('process-excel-stream', {
-        body: {
-          runId,
-          inputFilePath: inputPath,
-          userId: user.id,
-          mode,
-        },
-      });
+      const result = await processWithWorker(file);
       
-      if (error) {
-        throw new Error(`Ошибка вызова функции: ${error.message}`);
+      if (!result.success) {
+        throw new Error(result.error || 'Ошибка обработки файла');
       }
       
-      if (!data?.success) {
-        throw new Error(data?.error || 'Ошибка обработки на сервере');
+      // 3. Upload processed files to storage
+      setState(s => ({ ...s, progress: 'Сохранение отчётов...', progressPercent: 92 }));
+      
+      const processedPath = `${user.id}/${runId}/processed_report.xlsx`;
+      const planPath = `${user.id}/${runId}/production_plan.xlsx`;
+      
+      // Upload processed report
+      if (result.processedReportBuffer) {
+        const processedBlob = new Blob([result.processedReportBuffer], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        
+        const { error: processedUploadError } = await supabase.storage
+          .from('sales-results')
+          .upload(processedPath, processedBlob, {
+            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          });
+        
+        if (processedUploadError) {
+          console.error('Error uploading processed report:', processedUploadError);
+        }
       }
+      
+      // Upload production plan
+      if (result.productionPlanBuffer) {
+        const planBlob = new Blob([result.productionPlanBuffer], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        
+        const { error: planUploadError } = await supabase.storage
+          .from('sales-results')
+          .upload(planPath, planBlob, {
+            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          });
+        
+        if (planUploadError) {
+          console.error('Error uploading production plan:', planUploadError);
+        }
+      }
+      
+      // 4. Update run record with results
+      const processingTimeMs = Date.now() - startTime;
+      
+      await supabase.from('runs').update({
+        status: 'DONE',
+        processed_file_path: processedPath,
+        result_file_path: planPath,
+        periods_found: result.metrics.periodsFound,
+        rows_processed: result.metrics.rowsProcessed,
+        last_period: result.metrics.lastPeriod,
+        period_start: result.metrics.periodStart,
+        period_end: result.metrics.periodEnd,
+        processing_time_ms: processingTimeMs,
+      }).eq('id', runId);
       
       setState({ 
         isProcessing: false, 
@@ -131,7 +169,7 @@ export function useProcessing() {
       });
       
       currentRunIdRef.current = null;
-      return { success: true, rowsProcessed: data.metrics?.rowsProcessed };
+      return { success: true, rowsProcessed: result.metrics.rowsProcessed };
 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
@@ -149,7 +187,7 @@ export function useProcessing() {
       currentRunIdRef.current = null;
       return { success: false };
     }
-  }, [user]);
+  }, [user, processWithWorker]);
 
   return {
     isProcessing: state.isProcessing,
