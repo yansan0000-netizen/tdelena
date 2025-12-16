@@ -486,11 +486,11 @@ export async function processExcelFileStream(
     const articleMetrics = calculateArticleMetricsLocal(rows, newHeaders, abcByGroups, abcByArticles, xyzResults);
     log(`Метрики рассчитаны для ${articleMetrics.length} артикулов`, 84);
 
-    // Detect periods
+    // Detect periods from ORIGINAL headers (not newHeaders which has base columns prepended)
     const periods: string[] = [];
-    const maxCol = itogoColIdx >= 0 ? itogoColIdx : newHeaders.length;
+    const maxCol = itogoColIdx >= 0 ? itogoColIdx : headers.length;
     for (let i = 0; i < maxCol; i++) {
-      const parsed = parseMonthYear(newHeaders[i]);
+      const parsed = parseMonthYear(headers[i]);
       if (parsed) {
         const label = formatMonthYear(parsed.month, parsed.year);
         if (!periods.includes(label)) periods.push(label);
@@ -507,7 +507,7 @@ export async function processExcelFileStream(
       periodEnd,
     };
 
-    log(`Периодов: ${periods.length}, Строк: ${rows.length}`, 90);
+    log(`Периодов: ${periods.length}, Последний: ${lastPeriod}, Строк: ${rows.length}`, 90);
 
     return {
       success: true,
