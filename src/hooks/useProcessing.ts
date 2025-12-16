@@ -112,7 +112,8 @@ export function useProcessing() {
   const processRunServer = useCallback(async (
     runId: string, 
     mode: RunMode, 
-    file: File
+    file: File,
+    categoryFilter?: string
   ): Promise<{ success: boolean; rowsProcessed?: number }> => {
     if (!user) return { success: false };
 
@@ -141,9 +142,9 @@ export function useProcessing() {
       }).eq('id', runId);
       
       // 2. Process file using Streaming Worker (parses Excel and uploads to DB in batches)
-      setState(s => ({ ...s, progress: 'Обработка файла...', progressPercent: 10 }));
+      setState(s => ({ ...s, progress: categoryFilter ? `Обработка категории "${categoryFilter}"...` : 'Обработка файла...', progressPercent: 10 }));
       
-      const result = await processWithStreamingWorker(file, runId, user.id);
+      const result = await processWithStreamingWorker(file, runId, user.id, categoryFilter);
       
       if (!result.success) {
         throw new Error(result.error || 'Ошибка обработки файла');
