@@ -120,6 +120,7 @@ export type Database = {
           revenue_share: number | null
           run_id: string
           sales_velocity_day: number | null
+          size: string | null
           total_quantity: number | null
           total_revenue: number | null
           xyz_group: string | null
@@ -145,6 +146,7 @@ export type Database = {
           revenue_share?: number | null
           run_id: string
           sales_velocity_day?: number | null
+          size?: string | null
           total_quantity?: number | null
           total_revenue?: number | null
           xyz_group?: string | null
@@ -170,6 +172,7 @@ export type Database = {
           revenue_share?: number | null
           run_id?: string
           sales_velocity_day?: number | null
+          size?: string | null
           total_quantity?: number | null
           total_revenue?: number | null
           xyz_group?: string | null
@@ -253,6 +256,7 @@ export type Database = {
           quantity: number | null
           revenue: number | null
           run_id: string
+          size: string | null
           stock: number | null
         }
         Insert: {
@@ -267,6 +271,7 @@ export type Database = {
           quantity?: number | null
           revenue?: number | null
           run_id: string
+          size?: string | null
           stock?: number | null
         }
         Update: {
@@ -281,6 +286,7 @@ export type Database = {
           quantity?: number | null
           revenue?: number | null
           run_id?: string
+          size?: string | null
           stock?: number | null
         }
         Relationships: [

@@ -8,6 +8,7 @@ const corsHeaders = {
 
 interface RawRow {
   article: string;
+  size: string;
   category: string;
   productGroup: string;
   groupCode: string;
@@ -55,6 +56,7 @@ serve(async (req) => {
       run_id: runId,
       chunk_index: chunkIndex,
       article: r.article,
+      size: r.size || '',
       category: r.category || 'Без категории',
       product_group: r.productGroup || 'другая',
       stock: Math.round(r.stock || 0),

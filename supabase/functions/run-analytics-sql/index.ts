@@ -62,33 +62,32 @@ serve(async (req) => {
     
     console.log(`[run-analytics-sql] Aggregating raw data...`);
     
-    // Step 1: Fetch ALL raw data using pagination (Supabase limits to 1000 per query)
+    // Step 1: Fetch ALL raw data using cursor-based pagination
     const PAGE_SIZE = 10000;
     let aggregatedData: any[] = [];
-    let offset = 0;
+    let lastId = '00000000-0000-0000-0000-000000000000';
     let hasMore = true;
     
     while (hasMore) {
       const { data: pageData, error: pageError } = await supabase
         .from('sales_data_raw')
-        .select('article, category, product_group, stock, price, period, quantity, revenue')
+        .select('id, article, size, category, product_group, stock, price, period, quantity, revenue')
         .eq('run_id', runId)
+        .gt('id', lastId)
         .order('id')
-        .range(offset, offset + PAGE_SIZE - 1)
         .limit(PAGE_SIZE);
       
       if (pageError) {
-        throw new Error(`Failed to fetch raw data at offset ${offset}: ${pageError.message}`);
+        throw new Error(`Failed to fetch raw data: ${pageError.message}`);
       }
       
       if (pageData && pageData.length > 0) {
         aggregatedData = aggregatedData.concat(pageData);
+        lastId = pageData[pageData.length - 1].id;
         console.log(`[run-analytics-sql] Fetched ${aggregatedData.length} records...`);
         
         if (pageData.length < PAGE_SIZE) {
           hasMore = false;
-        } else {
-          offset += pageData.length;
         }
       } else {
         hasMore = false;
@@ -101,9 +100,10 @@ serve(async (req) => {
     
     console.log(`[run-analytics-sql] Processing ${aggregatedData.length} raw records...`);
     
-    // Aggregate by article
+    // Aggregate by article + size (unique key)
     const articleMap = new Map<string, {
       article: string;
+      size: string;
       category: string;
       product_group: string;
       stock: number;
@@ -119,9 +119,13 @@ serve(async (req) => {
     for (const row of aggregatedData) {
       allPeriods.add(row.period);
       
-      if (!articleMap.has(row.article)) {
-        articleMap.set(row.article, {
+      // Create unique key from article + size
+      const uniqueKey = `${row.article}|||${row.size || ''}`;
+      
+      if (!articleMap.has(uniqueKey)) {
+        articleMap.set(uniqueKey, {
           article: row.article,
+          size: row.size || '',
           category: row.category || 'Без категории',
           product_group: row.product_group || 'другая',
           stock: row.stock || 0,
@@ -133,7 +137,7 @@ serve(async (req) => {
         });
       }
       
-      const item = articleMap.get(row.article)!
+      const item = articleMap.get(uniqueKey)!;
       
       // Update stock and price (take max)
       if (row.stock > item.stock) item.stock = row.stock;
@@ -216,6 +220,7 @@ serve(async (req) => {
       return {
         run_id: runId,
         article: item.article,
+        size: item.size,
         category: item.category,
         product_group: item.product_group,
         group_code: groupCode,
@@ -261,6 +266,7 @@ serve(async (req) => {
     // Main processed report with all data
     const reportData = analyticsData.map(row => ({
       'Артикул': row.article,
+      'Размер': row.size,
       'Категория': row.category,
       'Группа товаров': row.product_group,
       'Код группы': row.group_code,
@@ -289,6 +295,7 @@ serve(async (req) => {
     // Set column widths
     reportWs['!cols'] = [
       { wch: 25 }, // Артикул
+      { wch: 10 }, // Размер
       { wch: 20 }, // Категория
       { wch: 12 }, // Группа товаров
       { wch: 10 }, // Код группы
@@ -336,6 +343,7 @@ serve(async (req) => {
     
     const planData = needsProduction.map(row => ({
       'Артикул': row.article,
+      'Размер': row.size,
       'Категория': row.category,
       'Группа товаров': row.product_group,
       'ABC': row.abc_group,
@@ -354,6 +362,7 @@ serve(async (req) => {
     
     planWs['!cols'] = [
       { wch: 25 }, // Артикул
+      { wch: 10 }, // Размер
       { wch: 20 }, // Категория
       { wch: 12 }, // Группа товаров
       { wch: 5 },  // ABC
