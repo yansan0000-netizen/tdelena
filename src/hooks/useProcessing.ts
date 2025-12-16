@@ -140,6 +140,7 @@ export function useProcessing() {
         last_period: result.metrics.lastPeriod,
         period_start: result.metrics.periodStart,
         period_end: result.metrics.periodEnd,
+        processing_time_ms: result.metrics.processingTimeMs || null,
         log: result.logs,
       }).eq('id', runId);
 

@@ -52,6 +52,7 @@ export type Database = {
           period_start: string | null
           periods_found: number | null
           processed_file_path: string | null
+          processing_time_ms: number | null
           result_file_path: string | null
           rows_processed: number | null
           status: Database["public"]["Enums"]["run_status"]
@@ -70,6 +71,7 @@ export type Database = {
           period_start?: string | null
           periods_found?: number | null
           processed_file_path?: string | null
+          processing_time_ms?: number | null
           result_file_path?: string | null
           rows_processed?: number | null
           status?: Database["public"]["Enums"]["run_status"]
@@ -88,6 +90,7 @@ export type Database = {
           period_start?: string | null
           periods_found?: number | null
           processed_file_path?: string | null
+          processing_time_ms?: number | null
           result_file_path?: string | null
           rows_processed?: number | null
           status?: Database["public"]["Enums"]["run_status"]

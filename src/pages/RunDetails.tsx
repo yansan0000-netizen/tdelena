@@ -272,7 +272,7 @@ export default function RunDetails() {
               <CardTitle className="text-base">Метрики</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="text-center p-3 bg-muted rounded-lg">
                   <Calendar className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
                   <p className="text-2xl font-bold">{run.periods_found ?? '-'}</p>
@@ -280,13 +280,24 @@ export default function RunDetails() {
                 </div>
                 <div className="text-center p-3 bg-muted rounded-lg">
                   <Rows3 className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
-                  <p className="text-2xl font-bold">{run.rows_processed ?? '-'}</p>
+                  <p className="text-2xl font-bold">{run.rows_processed?.toLocaleString('ru-RU') ?? '-'}</p>
                   <p className="text-xs text-muted-foreground">Строк</p>
                 </div>
                 <div className="text-center p-3 bg-muted rounded-lg">
                   <BarChart3 className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
-                  <p className="text-2xl font-bold">{run.last_period ?? '-'}</p>
+                  <p className="text-xl font-bold">{run.last_period ?? '-'}</p>
                   <p className="text-xs text-muted-foreground">Посл. период</p>
+                </div>
+                <div className="text-center p-3 bg-muted rounded-lg">
+                  <Clock className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+                  <p className="text-2xl font-bold">
+                    {run.processing_time_ms 
+                      ? run.processing_time_ms >= 60000 
+                        ? `${(run.processing_time_ms / 60000).toFixed(1)} мин`
+                        : `${(run.processing_time_ms / 1000).toFixed(1)} сек`
+                      : '-'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Время</p>
                 </div>
               </div>
             </CardContent>
