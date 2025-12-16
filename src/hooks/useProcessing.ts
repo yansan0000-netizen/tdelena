@@ -70,7 +70,7 @@ export function useProcessing() {
     runId: string, 
     mode: RunMode, 
     file: File
-  ): Promise<{ success: boolean; rowsProcessed?: number }> => {
+  ): Promise<{ success: boolean; rowsProcessed?: number; isCSV?: boolean }> => {
     if (!user) return { success: false };
 
     currentRunIdRef.current = runId;
@@ -109,20 +109,34 @@ export function useProcessing() {
       // 3. Upload processed files to storage
       setState(s => ({ ...s, progress: 'Сохранение отчётов...', progressPercent: 92 }));
       
-      const processedPath = `${user.id}/${runId}/processed_report.xlsx`;
-      const planPath = `${user.id}/${runId}/production_plan.xlsx`;
+      // Determine file format (CSV or XLSX)
+      const isCSV = result.isCSV || false;
+      const fileExt = isCSV ? 'csv' : 'xlsx';
+      const mimeType = isCSV 
+        ? 'text/csv;charset=utf-8' 
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      
+      const processedPath = `${user.id}/${runId}/processed_report.${fileExt}`;
+      const planPath = `${user.id}/${runId}/production_plan.${fileExt}`;
       
       // Upload processed report
-      if (result.processedReportBuffer) {
-        const processedBlob = new Blob([result.processedReportBuffer], {
-          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
+      if (isCSV && result.processedReportCSV) {
+        // CSV with BOM for proper Cyrillic display in Excel
+        const csvBlob = new Blob(['\ufeff' + result.processedReportCSV], { type: mimeType });
         
         const { error: processedUploadError } = await supabase.storage
           .from('sales-results')
-          .upload(processedPath, processedBlob, {
-            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          });
+          .upload(processedPath, csvBlob, { contentType: mimeType });
+        
+        if (processedUploadError) {
+          console.error('Error uploading processed report:', processedUploadError);
+        }
+      } else if (result.processedReportBuffer) {
+        const processedBlob = new Blob([result.processedReportBuffer], { type: mimeType });
+        
+        const { error: processedUploadError } = await supabase.storage
+          .from('sales-results')
+          .upload(processedPath, processedBlob, { contentType: mimeType });
         
         if (processedUploadError) {
           console.error('Error uploading processed report:', processedUploadError);
@@ -130,16 +144,22 @@ export function useProcessing() {
       }
       
       // Upload production plan
-      if (result.productionPlanBuffer) {
-        const planBlob = new Blob([result.productionPlanBuffer], {
-          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
+      if (isCSV && result.productionPlanCSV) {
+        const csvBlob = new Blob(['\ufeff' + result.productionPlanCSV], { type: mimeType });
         
         const { error: planUploadError } = await supabase.storage
           .from('sales-results')
-          .upload(planPath, planBlob, {
-            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          });
+          .upload(planPath, csvBlob, { contentType: mimeType });
+        
+        if (planUploadError) {
+          console.error('Error uploading production plan:', planUploadError);
+        }
+      } else if (result.productionPlanBuffer) {
+        const planBlob = new Blob([result.productionPlanBuffer], { type: mimeType });
+        
+        const { error: planUploadError } = await supabase.storage
+          .from('sales-results')
+          .upload(planPath, planBlob, { contentType: mimeType });
         
         if (planUploadError) {
           console.error('Error uploading production plan:', planUploadError);
@@ -169,7 +189,7 @@ export function useProcessing() {
       });
       
       currentRunIdRef.current = null;
-      return { success: true, rowsProcessed: result.metrics.rowsProcessed };
+      return { success: true, rowsProcessed: result.metrics.rowsProcessed, isCSV: result.isCSV };
 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Неизвестная ошибка';

@@ -137,6 +137,26 @@ function getABCXYZRecommendation(abc, xyz) {
   return matrix[abc]?.[xyz] || 'Нет рекомендации';
 }
 
+// CSV generation helper - memory efficient
+function escapeCSV(val) {
+  const str = String(val ?? '');
+  if (str.includes(';') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
+function buildCSVFromRows(headers, rowsIterator) {
+  let csv = headers.map(escapeCSV).join(';') + '\n';
+  for (const row of rowsIterator) {
+    csv += row.map(escapeCSV).join(';') + '\n';
+  }
+  return csv;
+}
+
+// CSV threshold - above this count we use CSV instead of XLSX
+const CSV_THRESHOLD = 50000;
+
 // Memory-efficient chunk processor
 function processExcelChunked(arrayBuffer, fileSizeMB) {
   const CHUNK_SIZE = 20000; // Process 20k rows at a time
@@ -578,8 +598,111 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
 
     const lastPeriod = periods.length > 0 ? periods[periods.length - 1] : null;
 
-    // ============ SAFER / BIGGER REPORT GENERATION (adaptive limits) ============
-    // Target: allow more rows than 30k but avoid crashes by adapting on OOM.
+    // Determine if we should use CSV (memory efficient) or XLSX
+    const useCSV = totalArticleCount > CSV_THRESHOLD;
+    
+    if (useCSV) {
+      sendProgress(`Файл большой (${totalArticleCount} артикулов), экспорт в CSV...`, 88);
+      
+      // ============ CSV GENERATION (memory efficient) ============
+      
+      // Generate Processed Report CSV
+      sendProgress('Генерация CSV отчёта "Данные"...', 89);
+      const dataHeaders = ['Группа товаров', 'Артикул', 'ABC Группа', 'ABC Артикул', 'Категория', 'XYZ-Группа', 'Рекомендация', 'Выручка'];
+      
+      function* generateDataRows() {
+        for (const [article, data] of articleAggregates) {
+          const groupKey = `${data.groupCode}|||${data.category}`;
+          const abcGroup = groupLookup.get(groupKey) || 'C';
+          const abcArticle = articleLookup.get(article) || 'C';
+          const xyzData = computeXYZForArticle(article, data.quantities);
+          const recommendation = getABCXYZRecommendation(abcArticle, xyzData.xyz);
+          yield [data.groupCode, article, abcGroup, abcArticle, data.category, xyzData.xyz, recommendation, Math.round(data.revenue)];
+        }
+      }
+      
+      const processedReportCSV = buildCSVFromRows(dataHeaders, generateDataRows());
+      
+      // Generate Production Plan CSV
+      sendProgress('Генерация CSV плана производства...', 94);
+      const planHeaders = [
+        'Артикул', 'Категория', 'Группа товаров', 'ABC Группа', 'ABC Артикул',
+        'XYZ-Группа', 'Коэф. вариации %', 'Рекомендация', 'Выручка', 'Продано шт.',
+        'Остаток', 'Ср. цена', 'Скорость мес.', 'Скорость день', 'Дней до стокаута',
+        'План 1М', 'План 3М', 'План 6М', 'Капитализация',
+      ];
+      
+      function* generatePlanRows() {
+        for (const [article, data] of articleAggregates) {
+          const groupKey = `${data.groupCode}|||${data.category}`;
+          const abcGroup = groupLookup.get(groupKey) || 'C';
+          const abcArticle = articleLookup.get(article) || 'C';
+          
+          const xyzData = computeXYZForArticle(article, data.quantities);
+          const xyzGroup = xyzData.xyz;
+          const cvVal = xyzData.cv;
+          
+          const totalQuantity = data.quantities.reduce((s, v) => s + v, 0);
+          const avgPrice = data.priceCount > 0 ? data.priceSum / data.priceCount : (totalQuantity > 0 ? data.revenue / totalQuantity : 0);
+          
+          const periodsWithSales = xyzData.periodCount || (qtyColIndices.length > 0 ? qtyColIndices.length : 1);
+          const avgMonthlySales = periodsWithSales > 0 ? totalQuantity / periodsWithSales : 0;
+          const dailySalesVelocity = avgMonthlySales / 30;
+          
+          const daysToStockout = dailySalesVelocity > 0 ? Math.round(data.stock / dailySalesVelocity) : 9999;
+          
+          const safetyMultiplier = xyzGroup === 'X' ? 1.0 : xyzGroup === 'Y' ? 1.2 : 1.5;
+          const plan1M = Math.ceil(avgMonthlySales * 1 * safetyMultiplier);
+          const plan3M = Math.ceil(avgMonthlySales * 3 * safetyMultiplier);
+          const plan6M = Math.ceil(avgMonthlySales * 6 * safetyMultiplier);
+          
+          const capitalizationByPrice = data.stock * avgPrice;
+          const recommendation = getABCXYZRecommendation(abcArticle, xyzGroup);
+          
+          yield [
+            article,
+            data.category,
+            data.groupCode,
+            abcGroup,
+            abcArticle,
+            xyzGroup,
+            cvVal < 999 ? Math.round(cvVal * 10) / 10 : '-',
+            recommendation,
+            Math.round(data.revenue),
+            Math.round(totalQuantity),
+            Math.round(data.stock),
+            Math.round(avgPrice * 100) / 100,
+            Math.round(avgMonthlySales),
+            Math.round(dailySalesVelocity * 10) / 10,
+            daysToStockout < 9999 ? daysToStockout : '∞',
+            plan1M,
+            plan3M,
+            plan6M,
+            Math.round(capitalizationByPrice),
+          ];
+        }
+      }
+      
+      const productionPlanCSV = buildCSVFromRows(planHeaders, generatePlanRows());
+      
+      sendProgress('Готово!', 100);
+      
+      return {
+        success: true,
+        processedReportCSV,
+        productionPlanCSV,
+        isCSV: true,
+        metrics: {
+          periodsFound: periods.length,
+          rowsProcessed: totalRowsProcessed,
+          lastPeriod,
+          periodStart,
+          periodEnd,
+        },
+      };
+    }
+
+    // ============ XLSX GENERATION (for smaller files) ============
     const TARGET_DATA_ROWS = 120000;
     const TARGET_PLAN_ROWS = 80000;
     const MIN_DATA_ROWS = 5000;
@@ -830,6 +953,7 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
       success: true,
       processedReportBuffer,
       productionPlanBuffer,
+      isCSV: false,
       metrics: {
         periodsFound: periods.length,
         rowsProcessed: totalRowsProcessed,
@@ -856,13 +980,27 @@ self.onmessage = function(e) {
     const result = processExcelChunked(arrayBuffer, fileSizeMB);
     
     if (result.success) {
-      self.postMessage({
-        type: 'complete',
-        success: true,
-        processedReportBuffer: result.processedReportBuffer,
-        productionPlanBuffer: result.productionPlanBuffer,
-        metrics: result.metrics,
-      }, [result.processedReportBuffer, result.productionPlanBuffer]);
+      if (result.isCSV) {
+        // CSV mode - send strings (can't use transferable)
+        self.postMessage({
+          type: 'complete',
+          success: true,
+          processedReportCSV: result.processedReportCSV,
+          productionPlanCSV: result.productionPlanCSV,
+          isCSV: true,
+          metrics: result.metrics,
+        });
+      } else {
+        // XLSX mode - use transferable buffers
+        self.postMessage({
+          type: 'complete',
+          success: true,
+          processedReportBuffer: result.processedReportBuffer,
+          productionPlanBuffer: result.productionPlanBuffer,
+          isCSV: false,
+          metrics: result.metrics,
+        }, [result.processedReportBuffer, result.productionPlanBuffer]);
+      }
     } else {
       self.postMessage({
         type: 'complete',

@@ -51,7 +51,9 @@ export default function NewRun() {
       if (result.success) {
         toast({
           title: 'Обработка завершена!',
-          description: `Обработано ${result.rowsProcessed || 0} строк`,
+          description: result.isCSV 
+            ? `Обработано ${result.rowsProcessed || 0} строк. Экспорт в CSV (большой файл)`
+            : `Обработано ${result.rowsProcessed || 0} строк`,
         });
         navigate(`/runs/${runId}`);
       } else {
