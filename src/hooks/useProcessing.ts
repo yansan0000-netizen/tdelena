@@ -65,6 +65,14 @@ export function useProcessing() {
     });
   }, [stopPolling]);
 
+  // Generate safe filename for storage (ASCII only)
+  const generateSafeFileName = (originalName: string): string => {
+    const ext = originalName.split('.').pop() || 'xlsx';
+    const timestamp = Date.now();
+    const randomStr = Math.random().toString(36).substring(2, 8);
+    return `file_${timestamp}_${randomStr}.${ext}`;
+  };
+
   const processRunServer = useCallback(async (
     runId: string, 
     mode: RunMode, 
@@ -76,8 +84,9 @@ export function useProcessing() {
     setState({ isProcessing: true, progress: 'Загрузка файла...', progressPercent: 5, error: null });
 
     try {
-      // 1. Upload file to storage first
-      const inputPath = `${user.id}/${runId}/${file.name}`;
+      // 1. Upload file to storage first (use ASCII-safe filename)
+      const safeFileName = generateSafeFileName(file.name);
+      const inputPath = `${user.id}/${runId}/${safeFileName}`;
       
       const { error: uploadError } = await supabase.storage
         .from('sales-input')
