@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
-import { useExcelWorker } from './useExcelWorker';
+import { useExcelWorker, AggregatedData } from './useExcelWorker';
 import { RunMode } from '@/lib/types';
 
 interface ProcessingState {
@@ -58,7 +58,7 @@ export function useProcessing() {
     });
   }, [cancelWorker]);
 
-  // Generate safe filename for storage (ASCII only)
+  // Generate safe filename for storage
   const generateSafeFileName = (originalName: string): string => {
     const ext = originalName.split('.').pop() || 'xlsx';
     const timestamp = Date.now();
@@ -66,19 +66,57 @@ export function useProcessing() {
     return `file_${timestamp}_${randomStr}.${ext}`;
   };
 
+  // Call Edge Function to generate reports
+  const generateReportsOnServer = async (
+    runId: string, 
+    userId: string, 
+    aggregatedData: AggregatedData,
+    metrics: {
+      periodsFound: number;
+      rowsProcessed: number;
+      lastPeriod: string | null;
+      periodStart?: string;
+      periodEnd?: string;
+    }
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-reports', {
+        body: {
+          runId,
+          userId,
+          aggregatedData,
+          metrics,
+        },
+      });
+      
+      if (error) {
+        console.error('Edge function error:', error);
+        return { success: false, error: error.message };
+      }
+      
+      if (!data?.success) {
+        return { success: false, error: data?.error || 'Unknown server error' };
+      }
+      
+      return { success: true };
+    } catch (err) {
+      console.error('Error calling generate-reports:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Network error' };
+    }
+  };
+
   const processRunServer = useCallback(async (
     runId: string, 
     mode: RunMode, 
     file: File
-  ): Promise<{ success: boolean; rowsProcessed?: number; isCSV?: boolean }> => {
+  ): Promise<{ success: boolean; rowsProcessed?: number }> => {
     if (!user) return { success: false };
 
     currentRunIdRef.current = runId;
-    const startTime = Date.now();
     setState({ isProcessing: true, progress: 'Загрузка файла...', progressPercent: 5, error: null });
 
     try {
-      // 1. Upload original file to storage (use ASCII-safe filename)
+      // 1. Upload original file to storage
       const safeFileName = generateSafeFileName(file.name);
       const inputPath = `${user.id}/${runId}/${safeFileName}`;
       
@@ -97,89 +135,28 @@ export function useProcessing() {
         input_file_path: inputPath,
       }).eq('id', runId);
       
-      // 2. Process file using Web Worker (client-side)
+      // 2. Process file using Web Worker (client-side parsing only)
       setState(s => ({ ...s, progress: 'Обработка файла...', progressPercent: 10 }));
       
       const result = await processWithWorker(file);
       
-      if (!result.success) {
+      if (!result.success || !result.aggregatedData) {
         throw new Error(result.error || 'Ошибка обработки файла');
       }
       
-      // 3. Upload processed files to storage
-      setState(s => ({ ...s, progress: 'Сохранение отчётов...', progressPercent: 92 }));
+      // 3. Send aggregated data to Edge Function for report generation
+      setState(s => ({ ...s, progress: 'Генерация отчётов на сервере...', progressPercent: 88 }));
       
-      // Determine file format (CSV or XLSX)
-      const isCSV = result.isCSV || false;
-      const fileExt = isCSV ? 'csv' : 'xlsx';
-      const mimeType = isCSV 
-        ? 'text/csv;charset=utf-8' 
-        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      const serverResult = await generateReportsOnServer(
+        runId,
+        user.id,
+        result.aggregatedData,
+        result.metrics
+      );
       
-      const processedPath = `${user.id}/${runId}/processed_report.${fileExt}`;
-      const planPath = `${user.id}/${runId}/production_plan.${fileExt}`;
-      
-      // Upload processed report
-      if (isCSV && result.processedReportCSV) {
-        // CSV with BOM for proper Cyrillic display in Excel
-        const csvBlob = new Blob(['\ufeff' + result.processedReportCSV], { type: mimeType });
-        
-        const { error: processedUploadError } = await supabase.storage
-          .from('sales-results')
-          .upload(processedPath, csvBlob, { contentType: mimeType });
-        
-        if (processedUploadError) {
-          console.error('Error uploading processed report:', processedUploadError);
-        }
-      } else if (result.processedReportBuffer) {
-        const processedBlob = new Blob([result.processedReportBuffer], { type: mimeType });
-        
-        const { error: processedUploadError } = await supabase.storage
-          .from('sales-results')
-          .upload(processedPath, processedBlob, { contentType: mimeType });
-        
-        if (processedUploadError) {
-          console.error('Error uploading processed report:', processedUploadError);
-        }
+      if (!serverResult.success) {
+        throw new Error(serverResult.error || 'Ошибка генерации отчётов');
       }
-      
-      // Upload production plan
-      if (isCSV && result.productionPlanCSV) {
-        const csvBlob = new Blob(['\ufeff' + result.productionPlanCSV], { type: mimeType });
-        
-        const { error: planUploadError } = await supabase.storage
-          .from('sales-results')
-          .upload(planPath, csvBlob, { contentType: mimeType });
-        
-        if (planUploadError) {
-          console.error('Error uploading production plan:', planUploadError);
-        }
-      } else if (result.productionPlanBuffer) {
-        const planBlob = new Blob([result.productionPlanBuffer], { type: mimeType });
-        
-        const { error: planUploadError } = await supabase.storage
-          .from('sales-results')
-          .upload(planPath, planBlob, { contentType: mimeType });
-        
-        if (planUploadError) {
-          console.error('Error uploading production plan:', planUploadError);
-        }
-      }
-      
-      // 4. Update run record with results
-      const processingTimeMs = Date.now() - startTime;
-      
-      await supabase.from('runs').update({
-        status: 'DONE',
-        processed_file_path: processedPath,
-        result_file_path: planPath,
-        periods_found: result.metrics.periodsFound,
-        rows_processed: result.metrics.rowsProcessed,
-        last_period: result.metrics.lastPeriod,
-        period_start: result.metrics.periodStart,
-        period_end: result.metrics.periodEnd,
-        processing_time_ms: processingTimeMs,
-      }).eq('id', runId);
       
       setState({ 
         isProcessing: false, 
@@ -189,7 +166,7 @@ export function useProcessing() {
       });
       
       currentRunIdRef.current = null;
-      return { success: true, rowsProcessed: result.metrics.rowsProcessed, isCSV: result.isCSV };
+      return { success: true, rowsProcessed: result.metrics.rowsProcessed };
 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Неизвестная ошибка';

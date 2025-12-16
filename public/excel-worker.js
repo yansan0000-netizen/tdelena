@@ -1,5 +1,5 @@
-// Web Worker for Excel processing - Memory Optimized Version
-// Uses aggregation instead of storing all rows
+// Web Worker for Excel processing - Server-Side Report Generation Version
+// Only parses and aggregates data, sends to Edge Function for report generation
 importScripts('https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js');
 
 // Constants
@@ -128,38 +128,9 @@ function sendProgress(msg, percent) {
   self.postMessage({ type: 'progress', message: msg, percent });
 }
 
-function getABCXYZRecommendation(abc, xyz) {
-  const matrix = {
-    'A': { 'X': 'Стабильный лидер - максимальное наличие', 'Y': 'Важный товар - держать запас', 'Z': 'Высокая выручка но непредсказуемый - осторожный заказ' },
-    'B': { 'X': 'Стабильный середняк - регулярное пополнение', 'Y': 'Типичный товар - стандартный заказ', 'Z': 'Умеренная выручка, нестабильный - минимальный запас' },
-    'C': { 'X': 'Низкая выручка но стабильный - на заказ', 'Y': 'Маргинальный товар - под заказ', 'Z': 'Кандидат на вывод - не заказывать' },
-  };
-  return matrix[abc]?.[xyz] || 'Нет рекомендации';
-}
-
-// CSV generation helper - memory efficient
-function escapeCSV(val) {
-  const str = String(val ?? '');
-  if (str.includes(';') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-    return '"' + str.replace(/"/g, '""') + '"';
-  }
-  return str;
-}
-
-function buildCSVFromRows(headers, rowsIterator) {
-  let csv = headers.map(escapeCSV).join(';') + '\n';
-  for (const row of rowsIterator) {
-    csv += row.map(escapeCSV).join(';') + '\n';
-  }
-  return csv;
-}
-
-// CSV threshold - above this count we use CSV instead of XLSX
-const CSV_THRESHOLD = 50000;
-
-// Memory-efficient chunk processor
+// Memory-efficient chunk processor - now returns aggregated data for server processing
 function processExcelChunked(arrayBuffer, fileSizeMB) {
-  const CHUNK_SIZE = 20000; // Process 20k rows at a time
+  const CHUNK_SIZE = 20000;
   
   try {
     if (fileSizeMB > 50) {
@@ -168,7 +139,7 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
     
     sendProgress('Парсинг структуры файла...', 10);
     
-    // First pass: read only headers and structure (first 100 rows)
+    // First pass: read only headers and structure
     let workbook;
     try {
       workbook = XLSX.read(arrayBuffer, {
@@ -176,7 +147,7 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
         cellDates: true,
         cellNF: false,
         cellStyles: false,
-        sheetRows: 100, // Only read first 100 rows for structure
+        sheetRows: 100,
       });
     } catch (e) {
       if (e.message?.includes('memory') || e.message?.includes('allocation')) {
@@ -195,7 +166,7 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
     
     const structData = XLSX.utils.sheet_to_json(structSheet, { header: 1, raw: true, defval: null });
     
-    // Parse period from structure
+    // Parse period
     let periodStart = null;
     let periodEnd = null;
     
@@ -308,7 +279,7 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
       }
     }
     
-    // Find quantity columns for XYZ
+    // Find quantity columns
     const qtyColIndices = [];
     const qtyColHeaders = [];
     for (let i = 0; i < headers.length; i++) {
@@ -348,9 +319,9 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
     
     sendProgress('Подготовка к обработке данных...', 20);
     
-    // Data aggregation maps (memory efficient)
-    const articleAggregates = new Map(); // article -> {revenue, quantities[], stock, priceSum, priceCount, category, groupCode}
-    const groupAggregates = new Map(); // groupCode|||category -> revenue
+    // Data aggregation maps
+    const articleAggregates = new Map();
+    const groupAggregates = new Map();
     
     const dataStartRow = headerRowIdx + headerRows;
     let totalRowsProcessed = 0;
@@ -372,7 +343,6 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
         });
       } catch (e) {
         if (e.message?.includes('memory') || e.message?.includes('allocation')) {
-          // If we already have some data, proceed with what we have
           if (totalRowsProcessed > 0) {
             sendProgress(`Память ограничена. Обработано ${totalRowsProcessed} строк.`, 65);
             break;
@@ -385,7 +355,6 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
       const chunkSheet = chunkWorkbook.Sheets[sheetName];
       const chunkData = XLSX.utils.sheet_to_json(chunkSheet, { header: 1, raw: true, defval: null });
       
-      // Get only the rows we need for this chunk
       const startIdx = dataStartRow + chunkStart;
       const endIdx = Math.min(chunkData.length, dataStartRow + chunkStart + CHUNK_SIZE);
       
@@ -395,7 +364,7 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
         break;
       }
       
-      // Process rows in this chunk
+      // Process rows
       for (let i = startIdx; i < endIdx; i++) {
         const rawRow = chunkData[i];
         if (!rawRow || rawRow.length === 0) continue;
@@ -415,7 +384,7 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
         const rawCategory = categoryColIdx >= 0 ? String(rawRow[categoryColIdx] || '') : '';
         const category = normalizeCategory(rawCategory);
         
-        // Calculate revenue for this row
+        // Calculate revenue
         let rowRevenue = 0;
         if (itogoSummaIdx >= 0) {
           rowRevenue = parseNumber(rawRow[itogoSummaIdx]);
@@ -427,7 +396,7 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
           }
         }
         
-        // Get quantities for XYZ
+        // Get quantities
         const quantities = qtyColIndices.map(idx => parseNumber(rawRow[idx]));
         
         // Get stock and price
@@ -443,7 +412,6 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
             existing.priceSum += price;
             existing.priceCount++;
           }
-          // Aggregate quantities per period
           for (let q = 0; q < quantities.length; q++) {
             existing.quantities[q] = (existing.quantities[q] || 0) + quantities[q];
           }
@@ -466,15 +434,13 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
         totalRowsProcessed++;
       }
       
-      // Check if we've read all data
       if (endIdx >= chunkData.length || endIdx - startIdx < CHUNK_SIZE) {
         hasMoreData = false;
       }
       
       chunkStart += CHUNK_SIZE;
-      chunkWorkbook = null; // Release memory
+      chunkWorkbook = null;
       
-      // Force garbage collection hint
       if (typeof gc === 'function') gc();
     }
     
@@ -501,91 +467,9 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
       let abc = 'C';
       if (cumulative <= 0.8) abc = 'A';
       else if (cumulative <= 0.95) abc = 'B';
-      return { name: item.name, category: item.category, revenue: item.revenue, share, cumulativeShare: cumulative, abc };
+      return { n: item.name, c: item.category, r: Math.round(item.revenue), a: abc };
     });
     
-    const groupLookup = new Map(abcByGroups.map(g => [`${g.name}|||${g.category}`, g.abc]));
-    
-    // Calculate ABC by articles
-    sendProgress('ABC анализ по артикулам...', 75);
-    const articleItems = Array.from(articleAggregates.entries())
-      .map(([name, data]) => ({ name, revenue: data.revenue }))
-      .sort((a, b) => b.revenue - a.revenue);
-
-    const totalArticleCount = articleItems.length;
-    const totalArticleRevenue = articleItems.reduce((s, i) => s + i.revenue, 0);
-
-    // Store only ABC letter per article to reduce memory footprint
-    const articleLookup = new Map(); // article -> 'A' | 'B' | 'C'
-    let cumulativeArticleShare = 0;
-    let countA = 0;
-    let countB = 0;
-    let countC = 0;
-
-    for (const item of articleItems) {
-      const share = totalArticleRevenue > 0 ? item.revenue / totalArticleRevenue : 0;
-      cumulativeArticleShare += share;
-      let abc = 'C';
-      if (cumulativeArticleShare <= 0.8) abc = 'A';
-      else if (cumulativeArticleShare <= 0.95) abc = 'B';
-      articleLookup.set(item.name, abc);
-      if (abc === 'A') countA++;
-      else if (abc === 'B') countB++;
-      else countC++;
-    }
-
-    // XYZ is computed lazily only for articles that go to reports
-    const xyzCache = new Map(); // article -> { xyz, cv, periodCount }
-    const computeXYZForArticle = (article, quantities) => {
-      const cached = xyzCache.get(article);
-      if (cached) return cached;
-
-      // If we have too few periods, default to Z
-      if (!quantities || quantities.length < 3) {
-        const res = { xyz: 'Z', cv: 999, periodCount: 0 };
-        xyzCache.set(article, res);
-        return res;
-      }
-
-      const nonZero = quantities.filter(v => v > 0);
-      if (nonZero.length < 3) {
-        const res = { xyz: 'Z', cv: 999, periodCount: nonZero.length };
-        xyzCache.set(article, res);
-        return res;
-      }
-
-      const mean = nonZero.reduce((s, v) => s + v, 0) / nonZero.length;
-      if (mean === 0) {
-        const res = { xyz: 'Z', cv: 999, periodCount: nonZero.length };
-        xyzCache.set(article, res);
-        return res;
-      }
-
-      const variance = nonZero.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / nonZero.length;
-      const stdDev = Math.sqrt(variance);
-      const cv = (stdDev / mean) * 100;
-
-      let xyz = 'Z';
-      if (cv <= 10) xyz = 'X';
-      else if (cv <= 25) xyz = 'Y';
-
-      const res = { xyz, cv, periodCount: nonZero.length };
-      xyzCache.set(article, res);
-      return res;
-    };
-
-    // Pre-calculate summary (without building a giant articleMetrics array)
-    let totalRevenue = 0;
-    let totalStock = 0;
-    let totalCapitalization = 0;
-    for (const [, data] of articleAggregates) {
-      totalRevenue += data.revenue;
-      totalStock += data.stock;
-      const totalQuantity = data.quantities.reduce((s, v) => s + v, 0);
-      const avgPrice = data.priceCount > 0 ? data.priceSum / data.priceCount : (totalQuantity > 0 ? data.revenue / totalQuantity : 0);
-      totalCapitalization += data.stock * avgPrice;
-    }
-
     // Detect periods
     const periods = [];
     for (const h of qtyColHeaders) {
@@ -595,365 +479,48 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
         if (!periods.includes(label)) periods.push(label);
       }
     }
-
-    const lastPeriod = periods.length > 0 ? periods[periods.length - 1] : null;
-
-    // Determine if we should use CSV (memory efficient) or XLSX
-    const useCSV = totalArticleCount > CSV_THRESHOLD;
     
-    if (useCSV) {
-      sendProgress(`Файл большой (${totalArticleCount} артикулов), экспорт в CSV...`, 88);
-      
-      // ============ CSV GENERATION (memory efficient) ============
-      
-      // Generate Processed Report CSV
-      sendProgress('Генерация CSV отчёта "Данные"...', 89);
-      const dataHeaders = ['Группа товаров', 'Артикул', 'ABC Группа', 'ABC Артикул', 'Категория', 'XYZ-Группа', 'Рекомендация', 'Выручка'];
-      
-      function* generateDataRows() {
-        for (const [article, data] of articleAggregates) {
-          const groupKey = `${data.groupCode}|||${data.category}`;
-          const abcGroup = groupLookup.get(groupKey) || 'C';
-          const abcArticle = articleLookup.get(article) || 'C';
-          const xyzData = computeXYZForArticle(article, data.quantities);
-          const recommendation = getABCXYZRecommendation(abcArticle, xyzData.xyz);
-          yield [data.groupCode, article, abcGroup, abcArticle, data.category, xyzData.xyz, recommendation, Math.round(data.revenue)];
-        }
-      }
-      
-      const processedReportCSV = buildCSVFromRows(dataHeaders, generateDataRows());
-      
-      // Generate Production Plan CSV
-      sendProgress('Генерация CSV плана производства...', 94);
-      const planHeaders = [
-        'Артикул', 'Категория', 'Группа товаров', 'ABC Группа', 'ABC Артикул',
-        'XYZ-Группа', 'Коэф. вариации %', 'Рекомендация', 'Выручка', 'Продано шт.',
-        'Остаток', 'Ср. цена', 'Скорость мес.', 'Скорость день', 'Дней до стокаута',
-        'План 1М', 'План 3М', 'План 6М', 'Капитализация',
-      ];
-      
-      function* generatePlanRows() {
-        for (const [article, data] of articleAggregates) {
-          const groupKey = `${data.groupCode}|||${data.category}`;
-          const abcGroup = groupLookup.get(groupKey) || 'C';
-          const abcArticle = articleLookup.get(article) || 'C';
-          
-          const xyzData = computeXYZForArticle(article, data.quantities);
-          const xyzGroup = xyzData.xyz;
-          const cvVal = xyzData.cv;
-          
-          const totalQuantity = data.quantities.reduce((s, v) => s + v, 0);
-          const avgPrice = data.priceCount > 0 ? data.priceSum / data.priceCount : (totalQuantity > 0 ? data.revenue / totalQuantity : 0);
-          
-          const periodsWithSales = xyzData.periodCount || (qtyColIndices.length > 0 ? qtyColIndices.length : 1);
-          const avgMonthlySales = periodsWithSales > 0 ? totalQuantity / periodsWithSales : 0;
-          const dailySalesVelocity = avgMonthlySales / 30;
-          
-          const daysToStockout = dailySalesVelocity > 0 ? Math.round(data.stock / dailySalesVelocity) : 9999;
-          
-          const safetyMultiplier = xyzGroup === 'X' ? 1.0 : xyzGroup === 'Y' ? 1.2 : 1.5;
-          const plan1M = Math.ceil(avgMonthlySales * 1 * safetyMultiplier);
-          const plan3M = Math.ceil(avgMonthlySales * 3 * safetyMultiplier);
-          const plan6M = Math.ceil(avgMonthlySales * 6 * safetyMultiplier);
-          
-          const capitalizationByPrice = data.stock * avgPrice;
-          const recommendation = getABCXYZRecommendation(abcArticle, xyzGroup);
-          
-          yield [
-            article,
-            data.category,
-            data.groupCode,
-            abcGroup,
-            abcArticle,
-            xyzGroup,
-            cvVal < 999 ? Math.round(cvVal * 10) / 10 : '-',
-            recommendation,
-            Math.round(data.revenue),
-            Math.round(totalQuantity),
-            Math.round(data.stock),
-            Math.round(avgPrice * 100) / 100,
-            Math.round(avgMonthlySales),
-            Math.round(dailySalesVelocity * 10) / 10,
-            daysToStockout < 9999 ? daysToStockout : '∞',
-            plan1M,
-            plan3M,
-            plan6M,
-            Math.round(capitalizationByPrice),
-          ];
-        }
-      }
-      
-      const productionPlanCSV = buildCSVFromRows(planHeaders, generatePlanRows());
-      
-      sendProgress('Готово!', 100);
-      
-      return {
-        success: true,
-        processedReportCSV,
-        productionPlanCSV,
-        isCSV: true,
-        metrics: {
-          periodsFound: periods.length,
-          rowsProcessed: totalRowsProcessed,
-          lastPeriod,
-          periodStart,
-          periodEnd,
-        },
-      };
+    const lastPeriod = periods.length > 0 ? periods[periods.length - 1] : null;
+    
+    // Calculate total revenue
+    let totalRevenue = 0;
+    for (const [, data] of articleAggregates) {
+      totalRevenue += data.revenue;
     }
-
-    // ============ XLSX GENERATION (for smaller files) ============
-    const TARGET_DATA_ROWS = 120000;
-    const TARGET_PLAN_ROWS = 80000;
-    const MIN_DATA_ROWS = 5000;
-    const MIN_PLAN_ROWS = 5000;
-
-    let usedDataRows = Math.min(totalArticleCount, TARGET_DATA_ROWS);
-    let usedPlanRows = Math.min(totalArticleCount, TARGET_PLAN_ROWS);
-
-    const DATA_CHUNK = 5000;
-    const PLAN_CHUNK = 5000;
-
-    const isLikelyMemoryError = (err) => {
-      const msg = String(err?.message || err || '').toLowerCase();
-      return msg.includes('memory') || msg.includes('allocation') || msg.includes('out of memory') || msg.includes('array length');
-    };
-
-    const tryBuildWithAdaptiveLimit = (buildFn, initialLimit, minLimit, reduceFactor, maxAttempts) => {
-      let limit = initialLimit;
-      let lastErr = null;
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          return { buffer: buildFn(limit), limit };
-        } catch (e) {
-          lastErr = e;
-          if (!isLikelyMemoryError(e) && attempt === 1) throw e;
-          if (limit <= minLimit) throw e;
-          limit = Math.max(minLimit, Math.floor(limit * reduceFactor));
-        }
-      }
-      throw lastErr || new Error('Не удалось сгенерировать отчёт');
-    };
-
-    const buildProcessedReportBuffer = (limit) => {
-      const processedWorkbook = XLSX.utils.book_new();
-
-      // Data sheet
-      const dataHeaders = ['Группа товаров', 'Артикул', 'ABC Группа', 'ABC Артикул', 'Категория', 'XYZ-Группа', 'Рекомендация', 'Выручка'];
-      const dataSheet = XLSX.utils.aoa_to_sheet([dataHeaders]);
-
-      for (let i = 0; i < limit; i += DATA_CHUNK) {
-        const slice = articleItems.slice(i, i + DATA_CHUNK);
-        let chunkRows = new Array(slice.length);
-        for (let j = 0; j < slice.length; j++) {
-          const { name: article, revenue } = slice[j];
-          const data = articleAggregates.get(article);
-          const groupKey = `${data.groupCode}|||${data.category}`;
-          const abcGroup = groupLookup.get(groupKey) || 'C';
-          const abcArticle = articleLookup.get(article) || 'C';
-          const xyzData = computeXYZForArticle(article, data.quantities);
-          const recommendation = getABCXYZRecommendation(abcArticle, xyzData.xyz);
-          chunkRows[j] = [data.groupCode, article, abcGroup, abcArticle, data.category, xyzData.xyz, recommendation, Math.round(revenue)];
-        }
-        XLSX.utils.sheet_add_aoa(dataSheet, chunkRows, { origin: -1 });
-        chunkRows = null;
-      }
-      XLSX.utils.book_append_sheet(processedWorkbook, dataSheet, 'Данные');
-
-      // ABC by groups (usually small)
-      if (abcByGroups.length > 0) {
-        const groupHeaders = ['Группа', 'Категория', 'Выручка', 'Доля %', 'Накопл. доля %', 'ABC'];
-        const groupSheet = XLSX.utils.aoa_to_sheet([groupHeaders]);
-        const groupRows = abcByGroups.slice(0, 10000).map(item => [
-          item.name,
-          item.category || '',
-          Math.round(item.revenue),
-          Math.round(item.share * 10000) / 100,
-          Math.round(item.cumulativeShare * 10000) / 100,
-          item.abc,
-        ]);
-        XLSX.utils.sheet_add_aoa(groupSheet, groupRows, { origin: -1 });
-        XLSX.utils.book_append_sheet(processedWorkbook, groupSheet, 'АБЦ по группам');
-      }
-
-      // ABC by articles sheet (recomputed on the fly for top N)
-      const articleHeaders = ['Артикул', 'Выручка', 'Доля %', 'Накопл. доля %', 'ABC'];
-      const articleSheet = XLSX.utils.aoa_to_sheet([articleHeaders]);
-      let cumulative = 0;
-
-      for (let i = 0; i < limit; i += DATA_CHUNK) {
-        const slice = articleItems.slice(i, i + DATA_CHUNK);
-        let chunkRows = new Array(slice.length);
-        for (let j = 0; j < slice.length; j++) {
-          const { name, revenue } = slice[j];
-          const share = totalArticleRevenue > 0 ? revenue / totalArticleRevenue : 0;
-          cumulative += share;
-          const abc = articleLookup.get(name) || 'C';
-          chunkRows[j] = [
-            name,
-            Math.round(revenue),
-            Math.round(share * 10000) / 100,
-            Math.round(cumulative * 10000) / 100,
-            abc,
-          ];
-        }
-        XLSX.utils.sheet_add_aoa(articleSheet, chunkRows, { origin: -1 });
-        chunkRows = null;
-      }
-
-      XLSX.utils.book_append_sheet(processedWorkbook, articleSheet, 'АБЦ по артикулам');
-
-      const buf = XLSX.write(processedWorkbook, { bookType: 'xlsx', type: 'array' });
-      return buf;
-    };
-
-    const buildProductionPlanBuffer = (limit, usedDataRowsFinal, isDataTruncatedFinal) => {
-      const planWorkbook = XLSX.utils.book_new();
-
-      const planHeaders = [
-        'Артикул', 'Категория', 'Группа товаров', 'ABC Группа', 'ABC Артикул',
-        'XYZ-Группа', 'Коэф. вариации %', 'Рекомендация', 'Выручка', 'Продано шт.',
-        'Остаток', 'Ср. цена', 'Скорость мес.', 'Скорость день', 'Дней до стокаута',
-        'План 1М', 'План 3М', 'План 6М', 'Капитализация',
-      ];
-
-      const planSheet = XLSX.utils.aoa_to_sheet([planHeaders]);
-
-      for (let i = 0; i < limit; i += PLAN_CHUNK) {
-        const slice = articleItems.slice(i, i + PLAN_CHUNK);
-        let chunkRows = new Array(slice.length);
-
-        for (let j = 0; j < slice.length; j++) {
-          const { name: article, revenue } = slice[j];
-          const data = articleAggregates.get(article);
-
-          const groupKey = `${data.groupCode}|||${data.category}`;
-          const abcGroup = groupLookup.get(groupKey) || 'C';
-          const abcArticle = articleLookup.get(article) || 'C';
-
-          const xyzData = computeXYZForArticle(article, data.quantities);
-          const xyzGroup = xyzData.xyz;
-          const cvVal = xyzData.cv;
-
-          const totalQuantity = data.quantities.reduce((s, v) => s + v, 0);
-          const avgPrice = data.priceCount > 0 ? data.priceSum / data.priceCount : (totalQuantity > 0 ? data.revenue / totalQuantity : 0);
-
-          const periodsWithSales = xyzData.periodCount || (qtyColIndices.length > 0 ? qtyColIndices.length : 1);
-          const avgMonthlySales = periodsWithSales > 0 ? totalQuantity / periodsWithSales : 0;
-          const dailySalesVelocity = avgMonthlySales / 30;
-
-          const daysToStockout = dailySalesVelocity > 0 ? Math.round(data.stock / dailySalesVelocity) : 9999;
-
-          const safetyMultiplier = xyzGroup === 'X' ? 1.0 : xyzGroup === 'Y' ? 1.2 : 1.5;
-          const plan1M = Math.ceil(avgMonthlySales * 1 * safetyMultiplier);
-          const plan3M = Math.ceil(avgMonthlySales * 3 * safetyMultiplier);
-          const plan6M = Math.ceil(avgMonthlySales * 6 * safetyMultiplier);
-
-          const capitalizationByPrice = data.stock * avgPrice;
-          const recommendation = getABCXYZRecommendation(abcArticle, xyzGroup);
-
-          chunkRows[j] = [
-            article,
-            data.category,
-            data.groupCode,
-            abcGroup,
-            abcArticle,
-            xyzGroup,
-            cvVal < 999 ? Math.round(cvVal * 10) / 10 : '-',
-            recommendation,
-            Math.round(revenue),
-            Math.round(totalQuantity),
-            Math.round(data.stock),
-            Math.round(avgPrice * 100) / 100,
-            Math.round(avgMonthlySales),
-            Math.round(dailySalesVelocity * 10) / 10,
-            daysToStockout < 9999 ? daysToStockout : '∞',
-            plan1M,
-            plan3M,
-            plan6M,
-            Math.round(capitalizationByPrice),
-          ];
-        }
-
-        XLSX.utils.sheet_add_aoa(planSheet, chunkRows, { origin: -1 });
-        chunkRows = null;
-      }
-
-      XLSX.utils.book_append_sheet(planWorkbook, planSheet, 'План производства');
-
-      // Summary sheet with info about truncation
-      const isPlanTruncatedFinal = totalArticleCount > limit;
-      const summaryRows = [
-        ['Метрика', 'Значение'],
-        ['Всего артикулов в файле', totalArticleCount],
-        ['Артикулов в отчёте "Данные"', usedDataRowsFinal],
-        ['Артикулов в плане производства', limit],
-        ['Общая выручка', Math.round(totalRevenue)],
-        ['Общий остаток', Math.round(totalStock)],
-        ['Капитализация', Math.round(totalCapitalization)],
-        ['Артикулов A', countA],
-        ['Артикулов B', countB],
-        ['Артикулов C', countC],
-        ['Периодов найдено', periods.length],
-        [''],
-        isDataTruncatedFinal ? ['⚠️ Данные обрезаны', `Показаны топ ${usedDataRowsFinal} артикулов по выручке`] : [''],
-        isPlanTruncatedFinal ? ['⚠️ План обрезан', `Показаны топ ${limit} артикулов по выручке`] : [''],
-      ];
-
-      const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
-      XLSX.utils.book_append_sheet(planWorkbook, summarySheet, 'Сводка');
-
-      const buf = XLSX.write(planWorkbook, { bookType: 'xlsx', type: 'array' });
-      return buf;
-    };
-
-    sendProgress('Генерация отчётов...', 88);
-
-    let processedReportBuffer;
-    let productionPlanBuffer;
-
-    // ========= REPORT 1: Processed Data (adaptive) =========
-    sendProgress(`Подготовка отчёта (до ${usedDataRows} строк)...`, 89);
-    const processedResult = tryBuildWithAdaptiveLimit(
-      (limit) => {
-        sendProgress(`Запись отчёта (${limit} строк)...`, 91);
-        return buildProcessedReportBuffer(limit);
-      },
-      usedDataRows,
-      MIN_DATA_ROWS,
-      0.85,
-      6
-    );
-
-    processedReportBuffer = processedResult.buffer;
-    usedDataRows = processedResult.limit;
-
-    // ========= REPORT 2: Production Plan (adaptive) =========
-    sendProgress(`Генерация плана производства (до ${usedPlanRows} строк)...`, 93);
-
-    const isDataTruncated = totalArticleCount > usedDataRows;
-
-    const planResult = tryBuildWithAdaptiveLimit(
-      (limit) => {
-        sendProgress(`Запись плана (${limit} строк)...`, 98);
-        return buildProductionPlanBuffer(limit, usedDataRows, isDataTruncated);
-      },
-      usedPlanRows,
-      MIN_PLAN_ROWS,
-      0.85,
-      6
-    );
-
-    productionPlanBuffer = planResult.buffer;
-    usedPlanRows = planResult.limit;
-
-    sendProgress('Готово!', 100);
-
+    
+    // Build compact aggregated data for server
+    sendProgress('Подготовка данных для сервера...', 80);
+    
+    const articles = [];
+    for (const [name, data] of articleAggregates) {
+      const totalQuantity = data.quantities.reduce((s, v) => s + v, 0);
+      const avgPrice = data.priceCount > 0 
+        ? data.priceSum / data.priceCount 
+        : (totalQuantity > 0 ? data.revenue / totalQuantity : 0);
+      
+      articles.push({
+        n: name,                           // article name
+        r: Math.round(data.revenue),       // revenue
+        q: data.quantities,                // quantities per period
+        s: Math.round(data.stock),         // stock
+        c: data.category,                  // category
+        g: data.groupCode,                 // group code
+        p: Math.round(avgPrice * 100) / 100, // average price
+      });
+    }
+    
+    sendProgress('Готово! Отправка на сервер...', 85);
+    
     return {
       success: true,
-      processedReportBuffer,
-      productionPlanBuffer,
-      isCSV: false,
+      aggregatedData: {
+        articles,
+        groups: abcByGroups,
+        totalRevenue: Math.round(totalRevenue),
+        periods,
+        periodStart,
+        periodEnd,
+      },
       metrics: {
         periodsFound: periods.length,
         rowsProcessed: totalRowsProcessed,
@@ -980,27 +547,13 @@ self.onmessage = function(e) {
     const result = processExcelChunked(arrayBuffer, fileSizeMB);
     
     if (result.success) {
-      if (result.isCSV) {
-        // CSV mode - send strings (can't use transferable)
-        self.postMessage({
-          type: 'complete',
-          success: true,
-          processedReportCSV: result.processedReportCSV,
-          productionPlanCSV: result.productionPlanCSV,
-          isCSV: true,
-          metrics: result.metrics,
-        });
-      } else {
-        // XLSX mode - use transferable buffers
-        self.postMessage({
-          type: 'complete',
-          success: true,
-          processedReportBuffer: result.processedReportBuffer,
-          productionPlanBuffer: result.productionPlanBuffer,
-          isCSV: false,
-          metrics: result.metrics,
-        }, [result.processedReportBuffer, result.productionPlanBuffer]);
-      }
+      // Send aggregated data (JSON, not buffers)
+      self.postMessage({
+        type: 'complete',
+        success: true,
+        aggregatedData: result.aggregatedData,
+        metrics: result.metrics,
+      });
     } else {
       self.postMessage({
         type: 'complete',
