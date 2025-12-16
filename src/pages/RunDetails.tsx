@@ -317,6 +317,14 @@ export default function RunDetails() {
                             {log.step}
                           </Badge>
                           <span className="text-xs text-muted-foreground">
+                            {(() => {
+                              try {
+                                const date = new Date(log.ts);
+                                return isNaN(date.getTime()) ? log.ts : format(date, 'HH:mm:ss.SSS');
+                              } catch {
+                                return log.ts;
+                              }
+                            })()}
                             {format(new Date(log.ts), 'HH:mm:ss.SSS')}
                           </span>
                         </div>
