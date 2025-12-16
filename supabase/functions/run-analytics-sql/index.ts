@@ -74,7 +74,8 @@ serve(async (req) => {
         .select('article, category, product_group, stock, price, period, quantity, revenue')
         .eq('run_id', runId)
         .order('id')
-        .range(offset, offset + PAGE_SIZE - 1);
+        .range(offset, offset + PAGE_SIZE - 1)
+        .limit(PAGE_SIZE);
       
       if (pageError) {
         throw new Error(`Failed to fetch raw data at offset ${offset}: ${pageError.message}`);
