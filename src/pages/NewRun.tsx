@@ -11,17 +11,18 @@ import { useProcessing } from '@/hooks/useProcessing';
 import { useToast } from '@/hooks/use-toast';
 import { Play, Download, Loader2, BarChart3, Calendar, Rows3 } from 'lucide-react';
 import { Run } from '@/lib/types';
+import { generateProcessedReport, generateProductionPlan, downloadBlob } from '@/lib/excel/clientExport';
 
 export default function NewRun() {
   const [file, setFile] = useState<File | null>(null);
   const [mode, setMode] = useState<RunMode>('1C_RAW');
   const [currentRun, setCurrentRun] = useState<Run | null>(null);
   const { createRun, getRun, updateRunStatus, getDownloadUrl } = useRuns();
-  const { isProcessing, progress, processRun } = useProcessing();
+  const { isProcessing, progress, result, processRunClient } = useProcessing();
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // Poll for status updates
+  // Poll for status updates (for legacy runs)
   useEffect(() => {
     if (!currentRun || currentRun.status === 'DONE' || currentRun.status === 'ERROR') {
       return;
@@ -55,7 +56,7 @@ export default function NewRun() {
       return;
     }
 
-    // Create run record and upload file
+    // Create run record and upload original file (for history)
     const runId = await createRun(file, mode);
 
     if (!runId) {
@@ -69,7 +70,7 @@ export default function NewRun() {
 
     // Get the created run
     const run = await getRun(runId);
-    if (!run || !run.input_file_path) {
+    if (!run) {
       toast({
         title: 'Ошибка',
         description: 'Не удалось получить данные запуска',
@@ -85,14 +86,19 @@ export default function NewRun() {
     const updatedRun = await getRun(runId);
     setCurrentRun(updatedRun);
 
-    // Start actual processing
-    const success = await processRun(runId, mode, run.input_file_path);
+    // Process file locally in browser (no server-side processing)
+    const processingResult = await processRunClient(runId, mode, file);
     
-    if (!success) {
+    if (!processingResult) {
       toast({
         title: 'Ошибка обработки',
         description: 'Проверьте формат файла и попробуйте снова',
         variant: 'destructive',
+      });
+    } else {
+      toast({
+        title: 'Обработка завершена!',
+        description: `Обработано ${processingResult.metrics.rowsProcessed} строк`,
       });
     }
 
@@ -110,6 +116,27 @@ export default function NewRun() {
       a.href = url;
       a.download = filename;
       a.click();
+    }
+  };
+
+  // Download from local result (faster, no server round-trip)
+  const handleDownloadLocal = (type: 'processed' | 'plan') => {
+    if (!result?.processedData) return;
+    
+    try {
+      if (type === 'processed') {
+        const blob = generateProcessedReport(result.processedData);
+        downloadBlob(blob, 'report_processed.xlsx');
+      } else {
+        const blob = generateProductionPlan(result.processedData);
+        downloadBlob(blob, 'Production_Plan_Result.xlsx');
+      }
+    } catch (error) {
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось сгенерировать файл',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -133,7 +160,7 @@ export default function NewRun() {
           <CardHeader>
             <CardTitle>1. Загрузка файла</CardTitle>
             <CardDescription>
-              Перетащите файл или выберите из проводника
+              Перетащите файл или выберите из проводника (до 100MB)
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -202,7 +229,7 @@ export default function NewRun() {
                   <div>
                     <p className="font-medium">{progress || 'Обработка файла...'}</p>
                     <p className="text-sm text-muted-foreground">
-                      Это может занять несколько минут
+                      Обработка выполняется локально в вашем браузере
                     </p>
                   </div>
                 </div>
@@ -247,32 +274,55 @@ export default function NewRun() {
 
                   {/* Download buttons */}
                   <div className="flex flex-col sm:flex-row gap-3">
-                    {currentRun.processed_file_path && (
-                      <Button
-                        variant="outline"
-                        className="flex-1 gap-2"
-                        onClick={() => handleDownload(
-                          'sales-processed',
-                          currentRun.processed_file_path,
-                          'report_processed.xlsx'
+                    {/* Use local download if result available, otherwise fetch from storage */}
+                    {result?.processedData ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          className="flex-1 gap-2"
+                          onClick={() => handleDownloadLocal('processed')}
+                        >
+                          <Download className="h-4 w-4" />
+                          Скачать обработанный отчёт
+                        </Button>
+                        <Button
+                          className="flex-1 gap-2"
+                          onClick={() => handleDownloadLocal('plan')}
+                        >
+                          <Download className="h-4 w-4" />
+                          Скачать план производства
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        {currentRun.processed_file_path && (
+                          <Button
+                            variant="outline"
+                            className="flex-1 gap-2"
+                            onClick={() => handleDownload(
+                              'sales-processed',
+                              currentRun.processed_file_path,
+                              'report_processed.xlsx'
+                            )}
+                          >
+                            <Download className="h-4 w-4" />
+                            Скачать обработанный отчёт
+                          </Button>
                         )}
-                      >
-                        <Download className="h-4 w-4" />
-                        Скачать обработанный отчёт
-                      </Button>
-                    )}
-                    {currentRun.result_file_path && (
-                      <Button
-                        className="flex-1 gap-2"
-                        onClick={() => handleDownload(
-                          'sales-results',
-                          currentRun.result_file_path,
-                          'Production_Plan_Result.xlsx'
+                        {currentRun.result_file_path && (
+                          <Button
+                            className="flex-1 gap-2"
+                            onClick={() => handleDownload(
+                              'sales-results',
+                              currentRun.result_file_path,
+                              'Production_Plan_Result.xlsx'
+                            )}
+                          >
+                            <Download className="h-4 w-4" />
+                            Скачать план производства
+                          </Button>
                         )}
-                      >
-                        <Download className="h-4 w-4" />
-                        Скачать план производства
-                      </Button>
+                      </>
                     )}
                   </div>
 
