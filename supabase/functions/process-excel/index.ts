@@ -825,14 +825,35 @@ serve(async (req) => {
 
     if (!result.success || !result.processedData) {
       console.error("Processing error:", result.error);
+      
+      // Check for memory/file size errors
+      const errorMsg = result.error || "Ошибка обработки файла";
+      const isMemoryError = errorMsg.includes('FILE_TOO_LARGE') || errorMsg.includes('buffer') || errorMsg.includes('memory') || errorMsg.includes('allocation');
+      
       await supabase.from("runs").update({
         status: "ERROR",
-        error_message: result.error || "Ошибка обработки файла",
+        error_message: isMemoryError 
+          ? "Файл слишком большой для обработки. Рекомендации: 1) Удалите размерные разбивки, 2) Разбейте файл на части, 3) Оставьте только нужные колонки."
+          : errorMsg,
         log: result.logs,
       }).eq("id", runId);
       
+      if (isMemoryError) {
+        return new Response(
+          JSON.stringify({ 
+            error: "Файл слишком большой для обработки",
+            recommendations: [
+              "Удалите размерные разбивки из отчёта",
+              "Разбейте файл на части (например, по 12 месяцев)",
+              "Оставьте только нужные колонки"
+            ]
+          }),
+          { status: 507, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
       return new Response(
-        JSON.stringify({ error: result.error }),
+        JSON.stringify({ error: errorMsg }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

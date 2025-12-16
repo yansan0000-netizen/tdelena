@@ -36,11 +36,13 @@ export function useProcessing() {
       });
 
       if (error) {
-        throw new Error(error.message || 'Ошибка вызова функции обработки');
+        const errorData = data as { error?: string; recommendations?: string[] } | null;
+        throw new Error(errorData?.error || error.message || 'Ошибка вызова функции обработки');
       }
 
       if (!data?.success) {
-        throw new Error(data?.error || 'Ошибка обработки файла');
+        const errorData = data as { error?: string; recommendations?: string[] };
+        throw new Error(errorData?.error || 'Ошибка обработки файла');
       }
 
       setState({ isProcessing: false, progress: '', error: null });
