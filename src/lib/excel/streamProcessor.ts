@@ -170,21 +170,35 @@ export async function processExcelFileStream(
     log('Парсинг Excel (без изображений)...', 15);
     
     // Use XLSX with memory-optimized options - skip images entirely
-    const workbook = XLSX.read(arrayBuffer, {
-      type: 'array',
-      cellDates: true,
-      cellNF: false,
-      cellHTML: false,
-      cellStyles: false,
-      // Only load sheet data, not metadata
-      bookProps: false,
-      bookSheets: true,
-      // Optimize for large files
-      dense: false,
-      // WTF mode for faster parsing
-      WTF: true,
-    });
+    let workbook: XLSX.WorkBook;
+    try {
+      workbook = XLSX.read(arrayBuffer, {
+        type: 'array',
+        cellDates: true,
+        cellNF: false,
+        cellHTML: false,
+        cellStyles: false,
+        // Skip all metadata
+        bookProps: false,
+        bookSheets: false,
+        // Optimize for large files
+        dense: false,
+        // DO NOT use WTF mode - causes errors on some files
+      });
+    } catch (parseError) {
+      console.error('XLSX parse error:', parseError);
+      throw new Error(`Не удалось прочитать Excel файл. Попробуйте пересохранить его в Excel. Ошибка: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+    }
     checkAbort();
+
+    // Defensive check for workbook structure
+    if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+      throw new Error('Файл не содержит данных. Попробуйте пересохранить его в Excel.');
+    }
+    
+    if (!workbook.Sheets || Object.keys(workbook.Sheets).length === 0) {
+      throw new Error('Не удалось прочитать листы файла. Попробуйте пересохранить файл в Excel и загрузить снова.');
+    }
 
     log(`Файл загружен, листов: ${workbook.SheetNames.length}`, 20);
 
@@ -196,7 +210,7 @@ export async function processExcelFileStream(
 
     const worksheet = workbook.Sheets[sheetName];
     if (!worksheet) {
-      throw new Error('В файле нет листа с данными');
+      throw new Error(`Лист "${sheetName}" не найден. Доступные листы: ${workbook.SheetNames.join(', ')}`);
     }
 
     log(`Выбран лист: ${sheetName}`, 25);
