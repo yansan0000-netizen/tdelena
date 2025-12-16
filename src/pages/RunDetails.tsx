@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatusBadge } from '@/components/StatusBadge';
+import { RunDataTable } from '@/components/RunDataTable';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +10,8 @@ import { Progress } from '@/components/ui/progress';
 import { useRuns } from '@/hooks/useRuns';
 import { toast } from 'sonner';
 import { Run, LogEntry } from '@/lib/types';
+import { supabase } from '@/integrations/supabase/client';
+import * as XLSX from 'xlsx';
 import { 
   ArrowLeft, 
   Download, 
@@ -18,6 +21,7 @@ import {
   BarChart3,
   FileInput,
   FileOutput,
+  FileStack,
   Clock,
   AlertCircle,
   CheckCircle,
@@ -89,6 +93,76 @@ export default function RunDetails() {
       a.href = url;
       a.download = filename;
       a.click();
+    }
+  };
+
+  const [downloadingFull, setDownloadingFull] = useState(false);
+
+  const handleDownloadFullReport = async () => {
+    if (!run?.processed_file_path || !run?.result_file_path) {
+      toast.error('Оба файла должны быть готовы для создания полного отчёта');
+      return;
+    }
+
+    setDownloadingFull(true);
+    try {
+      // Get both files
+      const [processedUrl, resultUrl] = await Promise.all([
+        getDownloadUrl('sales-processed', run.processed_file_path),
+        getDownloadUrl('sales-results', run.result_file_path)
+      ]);
+
+      if (!processedUrl || !resultUrl) {
+        throw new Error('Не удалось получить ссылки на файлы');
+      }
+
+      // Fetch both files
+      const [processedRes, resultRes] = await Promise.all([
+        fetch(processedUrl),
+        fetch(resultUrl)
+      ]);
+
+      const [processedBuffer, resultBuffer] = await Promise.all([
+        processedRes.arrayBuffer(),
+        resultRes.arrayBuffer()
+      ]);
+
+      // Parse both workbooks
+      const processedWb = XLSX.read(processedBuffer, { type: 'array' });
+      const resultWb = XLSX.read(resultBuffer, { type: 'array' });
+
+      // Create new combined workbook
+      const combinedWb = XLSX.utils.book_new();
+
+      // Add all sheets from result workbook first (Production Plan)
+      resultWb.SheetNames.forEach(name => {
+        const newName = name === 'Sheet1' || name === 'Лист1' ? 'План производства' : name;
+        XLSX.utils.book_append_sheet(combinedWb, resultWb.Sheets[name], newName);
+      });
+
+      // Add all sheets from processed workbook
+      processedWb.SheetNames.forEach(name => {
+        const newName = name === 'Sheet1' || name === 'Лист1' ? 'Обработанные данные' : `Отчёт - ${name}`;
+        XLSX.utils.book_append_sheet(combinedWb, processedWb.Sheets[name], newName);
+      });
+
+      // Generate and download
+      const combinedBuffer = XLSX.write(combinedWb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([combinedBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Full_Report_${run.input_filename.replace(/\.[^/.]+$/, '')}.xlsx`;
+      a.click();
+      
+      URL.revokeObjectURL(url);
+      toast.success('Полный отчёт скачан');
+    } catch (err) {
+      console.error('Error creating full report:', err);
+      toast.error('Ошибка создания полного отчёта');
+    } finally {
+      setDownloadingFull(false);
     }
   };
 
@@ -226,7 +300,7 @@ export default function RunDetails() {
             <CardDescription>Скачайте входные и выходные файлы</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {run.input_file_path && (
                 <Button
                   variant="outline"
@@ -249,11 +323,26 @@ export default function RunDetails() {
               )}
               {run.result_file_path && (
                 <Button
+                  variant="outline"
                   className="h-auto py-4 flex-col gap-2"
                   onClick={() => handleDownload('sales-results', run.result_file_path, 'Production_Plan_Result.xlsx')}
                 >
                   <Download className="h-6 w-6" />
                   <span className="text-sm">План производства</span>
+                </Button>
+              )}
+              {run.processed_file_path && run.result_file_path && (
+                <Button
+                  className="h-auto py-4 flex-col gap-2 gradient-primary"
+                  onClick={handleDownloadFullReport}
+                  disabled={downloadingFull}
+                >
+                  {downloadingFull ? (
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  ) : (
+                    <FileStack className="h-6 w-6" />
+                  )}
+                  <span className="text-sm">Полный отчёт</span>
                 </Button>
               )}
             </div>
@@ -341,6 +430,14 @@ export default function RunDetails() {
             )}
           </CardContent>
         </Card>
+
+        {/* Data Table */}
+        {run.status === 'DONE' && (run.processed_file_path || run.result_file_path) && (
+          <RunDataTable 
+            processedFilePath={run.processed_file_path}
+            resultFilePath={run.result_file_path}
+          />
+        )}
       </div>
     </AppLayout>
   );
