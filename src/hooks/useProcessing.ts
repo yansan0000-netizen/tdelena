@@ -2,11 +2,14 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { RunMode } from '@/lib/types';
+import { processExcelFile, ProcessingResult } from '@/lib/excel/clientProcessor';
+import { generateProcessedReport, generateProductionPlan } from '@/lib/excel/clientExport';
 
 interface ProcessingState {
   isProcessing: boolean;
   progress: string;
   error: string | null;
+  result: ProcessingResult | null;
 }
 
 export function useProcessing() {
@@ -15,43 +18,76 @@ export function useProcessing() {
     isProcessing: false,
     progress: '',
     error: null,
+    result: null,
   });
 
-  const processRun = useCallback(async (runId: string, mode: RunMode, inputFilePath: string): Promise<boolean> => {
-    if (!user) return false;
+  const processRunClient = useCallback(async (
+    runId: string, 
+    mode: RunMode, 
+    file: File
+  ): Promise<ProcessingResult | null> => {
+    if (!user) return null;
 
-    setState({ isProcessing: true, progress: 'Отправка на обработку...', error: null });
+    setState({ isProcessing: true, progress: 'Начало обработки...', error: null, result: null });
 
     try {
-      // Call Edge Function to process the file on the server
-      setState(s => ({ ...s, progress: 'Обработка файла на сервере...' }));
-      
-      const { data, error } = await supabase.functions.invoke('process-excel', {
-        body: {
-          runId,
-          inputFilePath,
-          userId: user.id,
-          mode,
-        },
+      // Process file locally in browser
+      const result = await processExcelFile(file, (msg) => {
+        setState(s => ({ ...s, progress: msg }));
       });
 
-      if (error) {
-        const errorData = data as { error?: string; recommendations?: string[] } | null;
-        throw new Error(errorData?.error || error.message || 'Ошибка вызова функции обработки');
+      if (!result.success || !result.processedData) {
+        throw new Error(result.error || 'Ошибка обработки файла');
       }
 
-      if (!data?.success) {
-        const errorData = data as { error?: string; recommendations?: string[] };
-        throw new Error(errorData?.error || 'Ошибка обработки файла');
-      }
+      setState(s => ({ ...s, progress: 'Генерация отчётов...' }));
 
-      setState({ isProcessing: false, progress: '', error: null });
-      return true;
+      // Generate Excel files locally
+      const processedBlob = generateProcessedReport(result.processedData);
+      const planBlob = generateProductionPlan(result.processedData);
+
+      setState(s => ({ ...s, progress: 'Загрузка результатов...' }));
+
+      // Upload generated files to storage
+      const processedPath = `${user.id}/${runId}/report_processed.xlsx`;
+      const planPath = `${user.id}/${runId}/Production_Plan_Result.xlsx`;
+
+      const [processedUpload, planUpload] = await Promise.all([
+        supabase.storage
+          .from('sales-processed')
+          .upload(processedPath, processedBlob, {
+            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          }),
+        supabase.storage
+          .from('sales-results')
+          .upload(planPath, planBlob, {
+            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          }),
+      ]);
+
+      const processedFilePath = processedUpload.error ? null : processedPath;
+      const resultFilePath = planUpload.error ? null : planPath;
+
+      // Update run record with results
+      await supabase.from('runs').update({
+        status: 'DONE',
+        processed_file_path: processedFilePath,
+        result_file_path: resultFilePath,
+        periods_found: result.metrics.periodsFound,
+        rows_processed: result.metrics.rowsProcessed,
+        last_period: result.metrics.lastPeriod,
+        period_start: result.metrics.periodStart,
+        period_end: result.metrics.periodEnd,
+        log: result.logs,
+      }).eq('id', runId);
+
+      setState({ isProcessing: false, progress: '', error: null, result });
+      return result;
 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
       
-      // Update run with error if not already updated by edge function
+      // Update run with error
       await supabase
         .from('runs')
         .update({
@@ -60,13 +96,16 @@ export function useProcessing() {
         })
         .eq('id', runId);
 
-      setState({ isProcessing: false, progress: '', error: message });
-      return false;
+      setState({ isProcessing: false, progress: '', error: message, result: null });
+      return null;
     }
   }, [user]);
 
   return {
-    ...state,
-    processRun,
+    isProcessing: state.isProcessing,
+    progress: state.progress,
+    error: state.error,
+    result: state.result,
+    processRunClient,
   };
 }
