@@ -476,14 +476,22 @@ function getABCXYZRecommendation(abc: string, xyz: string): string {
   return matrix[abc]?.[xyz] || 'Нет рекомендации';
 }
 
+// Yield to browser to prevent UI freezing
+const yieldToMain = () => new Promise(resolve => setTimeout(resolve, 0));
+
 // Main processor with progress callback
 export async function processExcelFile(
   file: File, 
   onProgress?: (msg: string, percent?: number) => void
 ): Promise<ProcessingResult> {
   const logs: string[] = [];
-  const log = (msg: string, percent?: number) => {
-    console.log(msg);
+  let lastLogTime = 0;
+  
+  const log = (msg: string, percent?: number, force = false) => {
+    const now = Date.now();
+    // Throttle logging to once per 200ms unless forced
+    if (!force && now - lastLogTime < 200) return;
+    lastLogTime = now;
     logs.push(`[${new Date().toISOString()}] ${msg}`);
     onProgress?.(msg, percent);
   };
@@ -683,14 +691,40 @@ export async function processExcelFile(
     const totalRawRows = rawRows.length;
     let processedCount = 0;
     
-    for (const rawRow of rawRows) {
-      if (!rawRow || rawRow.every(c => c === null || c === undefined || c === '')) continue;
+    // Pre-calculate itogoSummaIdx once (not inside loop!)
+    const itogoSummaIdx = headers.findIndex(h => {
+      const hl = h.toLowerCase();
+      return hl.includes('итого') && (hl.includes('сумма') || hl.includes('выручка'));
+    });
+    
+    // Pre-calculate which columns are numeric
+    const numericCols = new Set<number>();
+    for (let i = 0; i < headers.length; i++) {
+      const headerLower = headers[i].toLowerCase();
+      if (isQuantityColumn(headers[i]) || isRevenueColumn(headers[i]) || 
+          headerLower.includes('остаток') || headerLower.includes('цена') ||
+          headerLower.includes('кол-во') || headerLower.includes('сумма')) {
+        numericCols.add(i);
+      }
+    }
+    
+    // Pre-calculate revenue column indices for fallback calculation
+    const revenueColIndices: number[] = [];
+    for (let i = 0; i < headers.length; i++) {
+      if (itogoColIdx >= 0 && i >= itogoColIdx) break;
+      if (isRevenueColumn(headers[i])) {
+        revenueColIndices.push(i);
+      }
+    }
+    
+    for (let rowIdx = 0; rowIdx < rawRows.length; rowIdx++) {
+      const rawRow = rawRows[rowIdx];
+      if (!rawRow || rawRow.length === 0) continue;
       
       const cellValue = rawRow[articleColIdx];
-      const rawArticle = cellValue !== null && cellValue !== undefined && cellValue !== '' 
-        ? String(cellValue).trim() 
-        : '';
+      if (cellValue === null || cellValue === undefined || cellValue === '') continue;
       
+      const rawArticle = String(cellValue).trim();
       if (!rawArticle) continue;
       
       const lowerArticle = rawArticle.toLowerCase();
@@ -712,36 +746,21 @@ export async function processExcelFile(
         'Рекомендация': '',
       };
       
+      // Optimized: use pre-calculated numericCols set
       for (let i = 0; i < headers.length; i++) {
         const val = rawRow[i];
-        const headerLower = headers[i].toLowerCase();
-        
-        if (isQuantityColumn(headers[i]) || isRevenueColumn(headers[i]) || 
-            headerLower.includes('остаток') || headerLower.includes('цена') ||
-            headerLower.includes('кол-во') || headerLower.includes('сумма')) {
-          row[headers[i]] = parseNumber(val);
-        } else {
-          row[headers[i]] = val;
-        }
+        row[headers[i]] = numericCols.has(i) ? parseNumber(val) : val;
       }
       
-      // Calculate total revenue
+      // Calculate total revenue - optimized
       let totalRevenue = 0;
-      const itogoSummaIdx = headers.findIndex(h => {
-        const hl = h.toLowerCase();
-        return hl.includes('итого') && (hl.includes('сумма') || hl.includes('выручка'));
-      });
-      
       if (itogoSummaIdx >= 0) {
         totalRevenue = parseNumber(rawRow[itogoSummaIdx]);
       } else if (revenueColIdx >= 0) {
         totalRevenue = parseNumber(rawRow[revenueColIdx]);
       } else {
-        for (let i = 0; i < headers.length; i++) {
-          if (itogoColIdx >= 0 && i >= itogoColIdx) break;
-          if (isRevenueColumn(headers[i])) {
-            totalRevenue += parseNumber(rawRow[i]);
-          }
+        for (const idx of revenueColIndices) {
+          totalRevenue += parseNumber(rawRow[idx]);
         }
       }
       row['Выручка'] = totalRevenue;
@@ -749,10 +768,11 @@ export async function processExcelFile(
       rows.push(row);
       processedCount++;
       
-      // Progress update every 500 rows
-      if (processedCount % 500 === 0) {
+      // Progress update every 2000 rows + yield to browser
+      if (processedCount % 2000 === 0) {
         const percent = Math.round(55 + (processedCount / totalRawRows) * 15);
-        log(`Обработано строк: ${processedCount}`, percent);
+        log(`Обработано строк: ${processedCount}`, percent, true);
+        await yieldToMain(); // Let browser breathe
       }
     }
     
