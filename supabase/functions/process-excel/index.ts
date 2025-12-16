@@ -324,14 +324,22 @@ function getABCXYZRecommendation(abc: string, xyz: string): string {
 
 // Excel processing
 function readExcelFile(data: ArrayBuffer) {
-  return XLSX.read(data, {
-    type: 'array',
-    cellDates: true,
-    cellNF: false,
-    cellStyles: false,
-    dense: true, // Memory optimization: use dense array format
-    sheetRows: MAX_ROWS + 10,
-  });
+  try {
+    return XLSX.read(data, {
+      type: 'array',
+      cellDates: true,
+      cellNF: false,
+      cellStyles: false,
+      dense: true, // Memory optimization: use dense array format
+      sheetRows: MAX_ROWS + 10,
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes('buffer') || msg.includes('memory') || msg.includes('allocation')) {
+      throw new Error('FILE_TOO_LARGE: Файл слишком большой для обработки в памяти. Уменьшите файл.');
+    }
+    throw error;
+  }
 }
 
 function sheetToArray(sheet: XLSX.WorkSheet): (string | number | null)[][] {
@@ -767,16 +775,28 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    // Check file size BEFORE downloading content
-    console.log("Checking file size...");
-    const { data: fileInfo } = await supabase.storage
+    // Download input file
+    console.log("Downloading input file...");
+    const { data: fileData, error: downloadError } = await supabase.storage
       .from("sales-input")
-      .list(inputFilePath.substring(0, inputFilePath.lastIndexOf('/')), {
-        search: inputFilePath.substring(inputFilePath.lastIndexOf('/') + 1)
-      });
-    
-    const fileMeta = fileInfo?.find(f => inputFilePath.endsWith(f.name));
-    const fileSizeMB = fileMeta?.metadata?.size ? fileMeta.metadata.size / (1024 * 1024) : 0;
+      .download(inputFilePath);
+
+    if (downloadError || !fileData) {
+      console.error("Download error:", downloadError);
+      await supabase.from("runs").update({
+        status: "ERROR",
+        error_message: `Ошибка загрузки файла: ${downloadError?.message || "файл не найден"}`,
+      }).eq("id", runId);
+      
+      return new Response(
+        JSON.stringify({ error: "Failed to download file" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Check file size AFTER downloading (fileData is a Blob with size property)
+    const fileSizeMB = fileData.size / (1024 * 1024);
+    console.log(`File size: ${fileSizeMB.toFixed(2)}MB`);
     
     if (fileSizeMB > MAX_FILE_SIZE_MB) {
       console.error(`File too large: ${fileSizeMB.toFixed(1)}MB (max: ${MAX_FILE_SIZE_MB}MB)`);
@@ -798,49 +818,9 @@ serve(async (req) => {
       );
     }
 
-    // Download input file
-    console.log("Downloading input file...");
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from("sales-input")
-      .download(inputFilePath);
-
-    if (downloadError || !fileData) {
-      console.error("Download error:", downloadError);
-      await supabase.from("runs").update({
-        status: "ERROR",
-        error_message: `Ошибка загрузки файла: ${downloadError?.message || "файл не найден"}`,
-      }).eq("id", runId);
-      
-      return new Response(
-        JSON.stringify({ error: "Failed to download file" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     // Process file
     console.log("Processing file...");
-    let arrayBuffer: ArrayBuffer;
-    try {
-      arrayBuffer = await fileData.arrayBuffer();
-    } catch (memError) {
-      console.error("Memory error loading file:", memError);
-      await supabase.from("runs").update({
-        status: "ERROR",
-        error_message: `Недостаточно памяти для обработки файла. Попробуйте уменьшить файл: удалите размерные разбивки или разбейте на части.`,
-      }).eq("id", runId);
-      
-      return new Response(
-        JSON.stringify({ 
-          error: "Недостаточно памяти для обработки файла",
-          recommendations: [
-            "Удалите размерные разбивки из отчёта",
-            "Разбейте файл на части (например, по 12 месяцев)",
-            "Оставьте только нужные колонки"
-          ]
-        }),
-        { status: 507, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const arrayBuffer = await fileData.arrayBuffer();
     const result = await processExcelFile(arrayBuffer);
 
     if (!result.success || !result.processedData) {
@@ -922,9 +902,26 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error("Edge function error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error("Edge function error:", errorMessage);
+    
+    // Handle memory/file size errors
+    if (errorMessage.includes('FILE_TOO_LARGE') || errorMessage.includes('buffer') || errorMessage.includes('memory') || errorMessage.includes('allocation')) {
+      return new Response(
+        JSON.stringify({ 
+          error: "Файл слишком большой для обработки. Уменьшите файл.",
+          recommendations: [
+            "Удалите размерные разбивки из отчёта",
+            "Разбейте файл на части (например, по 12 месяцев)",
+            "Оставьте только нужные колонки"
+          ]
+        }),
+        { status: 507, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
