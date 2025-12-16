@@ -9,8 +9,8 @@ interface FileDropzoneProps {
   disabled?: boolean;
 }
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB - Edge Function limit
-const WARN_FILE_SIZE = 30 * 1024 * 1024; // 30MB - warning threshold
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const WARN_FILE_SIZE = 20 * 1024 * 1024; // 20MB - warning threshold (browser memory)
 const ALLOWED_EXTENSIONS = ['.xlsx', '.xls', '.csv'];
 
 export function FileDropzone({ onFileSelect, selectedFile, onClear, disabled }: FileDropzoneProps) {

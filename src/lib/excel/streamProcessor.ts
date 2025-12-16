@@ -216,31 +216,33 @@ export async function processExcelFileStream(
     checkAbort();
 
     log('Чтение файла...', 10);
-    const arrayBuffer = await file.arrayBuffer();
+    let arrayBuffer: ArrayBuffer | null = await file.arrayBuffer();
     checkAbort();
     
-    log('Парсинг Excel (без изображений)...', 15);
+    log('Парсинг Excel (оптимизировано)...', 15);
     
-    // Use XLSX with memory-optimized options - skip images entirely
-    let workbook: XLSX.WorkBook;
+    // Use XLSX with MEMORY-OPTIMIZED options
+    let workbook: XLSX.WorkBook | null;
     try {
       workbook = XLSX.read(arrayBuffer, {
         type: 'array',
-        cellDates: true,
-        cellNF: false,
+        cellDates: false,     // Don't convert dates - saves memory
+        cellNF: false,        // No number formats
         cellHTML: false,
         cellStyles: false,
-        // Skip all metadata
         bookProps: false,
         bookSheets: false,
-        // Optimize for large files
-        dense: false,
-        // DO NOT use WTF mode - causes errors on some files
+        dense: true,          // More compact storage format
+        sheetRows: 100000,    // Limit max rows
       });
     } catch (parseError) {
       console.error('XLSX parse error:', parseError);
       throw new Error(`Не удалось прочитать Excel файл. Попробуйте пересохранить его в Excel. Ошибка: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
     }
+    
+    // FREE arrayBuffer immediately after parsing
+    arrayBuffer = null;
+    await yieldToMain();
     checkAbort();
 
     // Defensive check for workbook structure
@@ -252,17 +254,17 @@ export async function processExcelFileStream(
       throw new Error('Не удалось прочитать листы файла. Попробуйте пересохранить файл в Excel и загрузить снова.');
     }
 
-    log(`Файл загружен, листов: ${workbook.SheetNames.length}`, 20);
+    log(`Файл загружен, листов: ${workbook!.SheetNames.length}`, 20);
 
     // Select data sheet
-    let sheetName = workbook.SheetNames[0];
-    if (sheetName.toLowerCase() === 'логи' && workbook.SheetNames.length > 1) {
-      sheetName = workbook.SheetNames[1];
+    let sheetName = workbook!.SheetNames[0];
+    if (sheetName.toLowerCase() === 'логи' && workbook!.SheetNames.length > 1) {
+      sheetName = workbook!.SheetNames[1];
     }
 
-    const worksheet = workbook.Sheets[sheetName];
+    const worksheet = workbook!.Sheets[sheetName];
     if (!worksheet) {
-      throw new Error(`Лист "${sheetName}" не найден. Доступные листы: ${workbook.SheetNames.join(', ')}`);
+      throw new Error(`Лист "${sheetName}" не найден. Доступные листы: ${workbook!.SheetNames.join(', ')}`);
     }
 
     log(`Выбран лист: ${sheetName}`, 25);
@@ -276,8 +278,12 @@ export async function processExcelFileStream(
       raw: true,
     });
 
-    // Free worksheet reference
-    delete workbook.Sheets[sheetName];
+    // FREE workbook and all sheets immediately after extraction
+    for (const name of workbook!.SheetNames) {
+      delete workbook!.Sheets[name];
+    }
+    workbook!.SheetNames.length = 0;
+    workbook = null;
     await yieldToMain();
 
     const totalRawRows = rawData.length;
@@ -622,6 +628,12 @@ export async function processExcelFileStream(
 
         rows.push(row);
         processedCount++;
+        
+        // Yield every 5000 rows for GC
+        if (processedCount % 5000 === 0) {
+          await yieldToMain();
+          checkAbort();
+        }
       }
 
       // Progress and memory relief after each chunk
@@ -731,7 +743,21 @@ export async function processExcelFileStream(
     };
 
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
+    let message = error instanceof Error ? error.message : 'Неизвестная ошибка';
+    
+    // Detect memory errors and provide helpful message
+    const lowerMsg = message.toLowerCase();
+    if (lowerMsg.includes('memory') || lowerMsg.includes('heap') || 
+        lowerMsg.includes('allocation') || lowerMsg.includes('out of memory') ||
+        lowerMsg.includes('aw, snap')) {
+      message = 'Недостаточно памяти браузера для обработки файла.\n\n' +
+                'Рекомендации:\n' +
+                '• Закройте другие вкладки браузера\n' +
+                '• Удалите размерные разбивки из файла\n' +
+                '• Используйте Chrome или Edge\n' +
+                '• Обновите страницу и попробуйте снова';
+    }
+    
     log(`Ошибка: ${message}`, 0, true);
     const processingTimeMs = Date.now() - startTime;
     
