@@ -135,10 +135,10 @@ function isStockColumn(header) {
 
 function normalizeCategory(raw) {
   if (!raw || typeof raw !== 'string') return 'ДРУГОЕ';
-  for (const [category, pattern] of Object.entries(CATEGORY_PATTERNS)) {
-    if (pattern.test(raw)) return category;
-  }
-  return 'ДРУГОЕ';
+  const trimmed = raw.trim();
+  if (!trimmed) return 'ДРУГОЕ';
+  // Use real category from file, just normalize case
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
 function extractGroupCode(article) {
