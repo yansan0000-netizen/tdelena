@@ -174,8 +174,11 @@ async function processExcelRaw(arrayBuffer, categoryFilter) {
   
   sendProgress('Определение колонок...', 15);
   
-  // Find key columns
-  const articleCol = findColIndexFlexible(headers, ['артикул', 'article', 'код товара', 'sku']);
+  // Find key columns - expanded for 1C exports
+  const articleCol = findColIndexFlexible(headers, [
+    'артикул', 'article', 'код товара', 'sku', 
+    'номенклатура', 'наименование', 'товар', 'код', 'name', 'product', 'item'
+  ]);
   const categoryCol = findColIndexFlexible(headers, ['категория', 'category', 'группа', 'тип']);
   const stockCol = findColIndexFlexible(headers, ['остаток', 'stock', 'склад', 'наличие', 'остатки']);
   const priceCol = findColIndexFlexible(headers, ['цена', 'price', 'розн', 'стоимость']);
