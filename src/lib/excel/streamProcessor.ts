@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { ProcessingResult, ProcessingMetrics, RowData, ABCItem, ArticleMetrics, XYZData } from './clientProcessor';
+import { ProcessingResult, ProcessingMetrics, RowData, ABCItem, ArticleMetrics, XYZData, processExcelFile } from './clientProcessor';
 
 // Russian month names
 const MONTH_NAMES_RU: Record<string, number> = {
@@ -168,7 +168,18 @@ export async function processExcelFileStream(
     const workbook = new ExcelJS.Workbook();
     
     // Use buffer-based loading which is more memory efficient than full parse
-    await workbook.xlsx.load(arrayBuffer);
+    try {
+      await workbook.xlsx.load(arrayBuffer);
+    } catch (excelJsError) {
+      // ExcelJS has a known bug with files containing images/drawings
+      if (String(excelJsError).includes('anchors') || String(excelJsError).includes('drawings')) {
+        log('ExcelJS ошибка с рисунками, переключение на XLSX парсер...', 18);
+        arrayBuffer = null;
+        // Fallback to regular XLSX parser which handles images better
+        return processExcelFile(file, onProgress, signal);
+      }
+      throw excelJsError;
+    }
     checkAbort();
 
     // Free the array buffer
