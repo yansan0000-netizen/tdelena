@@ -119,7 +119,8 @@ CREATE TABLE public.runs (
     rows_processed integer,
     last_period text,
     error_message text,
-    log jsonb DEFAULT '[]'::jsonb
+    log jsonb DEFAULT '[]'::jsonb,
+    processing_time_ms integer
 );
 
 

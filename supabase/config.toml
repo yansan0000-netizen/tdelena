@@ -1,7 +1,1 @@
-project_id = "ackaazztuvjxfuudwdur"
-
-[functions.process-excel]
-verify_jwt = false
-
-[functions.process-excel-stream]
-verify_jwt = false
+project_id = "mvzkbonzpatpjydlggdj"
