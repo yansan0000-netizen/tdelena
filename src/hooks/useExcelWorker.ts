@@ -1,19 +1,42 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 
+// Compact article data format for server transmission
+interface ArticleData {
+  n: string;  // name
+  r: number;  // revenue
+  q: number[];// quantities per period
+  s: number;  // stock
+  c: string;  // category
+  g: string;  // group code
+  p: number;  // price
+}
+
+interface GroupData {
+  n: string;  // name
+  c: string;  // category
+  r: number;  // revenue
+  a: string;  // abc class
+}
+
+export interface AggregatedData {
+  articles: ArticleData[];
+  groups: GroupData[];
+  totalRevenue: number;
+  periods: string[];
+  periodStart?: string;
+  periodEnd?: string;
+}
+
 export interface WorkerResult {
   success: boolean;
-  processedReportBuffer?: ArrayBuffer;
-  productionPlanBuffer?: ArrayBuffer;
-  processedReportCSV?: string;
-  productionPlanCSV?: string;
-  isCSV?: boolean;
+  aggregatedData?: AggregatedData;
   error?: string;
   metrics: {
     periodsFound: number;
     rowsProcessed: number;
     lastPeriod: string | null;
-    periodStart: string | null;
-    periodEnd: string | null;
+    periodStart?: string;
+    periodEnd?: string;
   };
 }
 
@@ -51,7 +74,7 @@ export function useExcelWorker() {
         resolve({
           success: false,
           error: 'Web Workers не поддерживаются в вашем браузере',
-          metrics: { periodsFound: 0, rowsProcessed: 0, lastPeriod: null, periodStart: null, periodEnd: null },
+          metrics: { periodsFound: 0, rowsProcessed: 0, lastPeriod: null },
         });
         return;
       }
@@ -71,7 +94,7 @@ export function useExcelWorker() {
         resolve({
           success: false,
           error: errMsg,
-          metrics: { periodsFound: 0, rowsProcessed: 0, lastPeriod: null, periodStart: null, periodEnd: null },
+          metrics: { periodsFound: 0, rowsProcessed: 0, lastPeriod: null },
         });
         return;
       }
@@ -91,11 +114,7 @@ export function useExcelWorker() {
             setProgress({ message: 'Готово!', percent: 100 });
             resolve({
               success: true,
-              processedReportBuffer: data.processedReportBuffer,
-              productionPlanBuffer: data.productionPlanBuffer,
-              processedReportCSV: data.processedReportCSV,
-              productionPlanCSV: data.productionPlanCSV,
-              isCSV: data.isCSV,
+              aggregatedData: data.aggregatedData,
               metrics: data.metrics,
             });
           } else {
@@ -121,7 +140,7 @@ export function useExcelWorker() {
         resolve({
           success: false,
           error: errMsg,
-          metrics: { periodsFound: 0, rowsProcessed: 0, lastPeriod: null, periodStart: null, periodEnd: null },
+          metrics: { periodsFound: 0, rowsProcessed: 0, lastPeriod: null },
         });
         
         worker.terminate();
@@ -140,14 +159,14 @@ export function useExcelWorker() {
             [arrayBuffer]
           );
         })
-        .catch((e) => {
+        .catch(() => {
           setIsProcessing(false);
           const errMsg = 'Не удалось прочитать файл';
           setError(errMsg);
           resolve({
             success: false,
             error: errMsg,
-            metrics: { periodsFound: 0, rowsProcessed: 0, lastPeriod: null, periodStart: null, periodEnd: null },
+            metrics: { periodsFound: 0, rowsProcessed: 0, lastPeriod: null },
           });
         });
     });
