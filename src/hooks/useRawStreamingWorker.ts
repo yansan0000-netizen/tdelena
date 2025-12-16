@@ -90,8 +90,8 @@ export function useRawStreamingWorker() {
         workerRef.current.terminate();
       }
 
-      // Create new worker
-      const worker = new Worker('/excel-worker-raw.js');
+      // Create new worker (cache-bust to avoid stale public/ worker code)
+      const worker = new Worker(`/excel-worker-raw.js?v=raw-3`);
       workerRef.current = worker;
 
       let totalChunks = 0;

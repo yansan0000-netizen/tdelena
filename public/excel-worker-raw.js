@@ -150,28 +150,55 @@ async function processExcelRaw(arrayBuffer, categoryFilter) {
     throw new Error('Файл пуст или содержит только заголовок');
   }
   
-  // Find header row (look in first 20 rows)
+  // Find header row robustly (1C exports often have "Параметры/Отбор" blocks above the real table)
+  // Strategy: scan the first 60 rows and pick the row that actually contains the "article" column.
+  const ARTICLE_HEADER_CANDIDATES = [
+    'номенклатура.артикул', 'номенклатура.код',
+    'артикул', 'article', 'код товара', 'sku',
+    'номенклатура', 'код'
+  ];
+
   let headerRowIndex = -1;
   let headers = [];
-  
-  for (let i = 0; i < Math.min(20, data.length); i++) {
+  let bestScore = -Infinity;
+
+  const scanLimit = Math.min(60, data.length);
+  for (let i = 0; i < scanLimit; i++) {
     const row = data[i];
-    if (!row || row.length < 3) continue;
-    
-    const rowStr = row.map(c => String(c || '').toLowerCase()).join(' ');
-    // Check for 1C format "номенклатура.артикул" or standard headers
-    if (rowStr.includes('номенклатура.артикул') || rowStr.includes('номенклатура.код') ||
-        rowStr.includes('артикул') || rowStr.includes('article') || 
-        rowStr.includes('наименование') || rowStr.includes('товар')) {
+    if (!row) continue;
+
+    const candidateHeaders = row.map(c => String(c || '').trim());
+    const nonEmpty = candidateHeaders.filter(Boolean).length;
+    if (nonEmpty < 4) continue; // header rows usually have multiple columns
+
+    const candArticleCol = findColIndexFlexible(candidateHeaders, ARTICLE_HEADER_CANDIDATES);
+    if (candArticleCol === -1) continue;
+
+    // Score the row: prefer rows that also include stock/price/category and 1C dot-notation fields
+    let score = 0;
+    for (const cell of candidateHeaders) {
+      const s = String(cell || '').toLowerCase().trim();
+      if (!s) continue;
+      if (s.includes('параметр') || s.includes('отбор')) score -= 5;
+      if (s.includes('номенклатура.')) score += 2;
+      if (s.includes('артикул')) score += 4;
+      if (s.includes('остаток') || s.includes('stock')) score += 2;
+      if (s.includes('цена') || s.includes('price')) score += 2;
+      if (s.includes('категор') || s.includes('группа') || s.includes('category')) score += 1;
+    }
+    score += Math.min(nonEmpty, 12); // more columns -> more likely a real header row
+
+    if (score > bestScore) {
+      bestScore = score;
       headerRowIndex = i;
-      headers = row.map(c => String(c || '').trim());
-      break;
+      headers = candidateHeaders;
     }
   }
-  
+
+  // Fallback: first row
   if (headerRowIndex === -1) {
     headerRowIndex = 0;
-    headers = data[0].map(c => String(c || '').trim());
+    headers = (data[0] || []).map(c => String(c || '').trim());
   }
   
   console.log('Found headers at row:', headerRowIndex, headers.slice(0, 10));
