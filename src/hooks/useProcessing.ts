@@ -109,7 +109,7 @@ export function useProcessing() {
     runId: string, 
     mode: RunMode, 
     file: File
-  ): Promise<{ success: boolean; rowsProcessed?: number }> => {
+  ): Promise<{ success: boolean; rowsProcessed?: number; aggregatedByBase?: boolean; originalArticleCount?: number; finalArticleCount?: number }> => {
     if (!user) return { success: false };
 
     currentRunIdRef.current = runId;
@@ -166,7 +166,13 @@ export function useProcessing() {
       });
       
       currentRunIdRef.current = null;
-      return { success: true, rowsProcessed: result.metrics.rowsProcessed };
+      return { 
+        success: true, 
+        rowsProcessed: result.metrics.rowsProcessed,
+        aggregatedByBase: result.metrics.aggregatedByBase,
+        originalArticleCount: result.metrics.originalArticleCount,
+        finalArticleCount: result.metrics.finalArticleCount,
+      };
 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Неизвестная ошибка';

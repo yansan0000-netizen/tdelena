@@ -1,5 +1,5 @@
 // Web Worker for Excel processing - Server-Side Report Generation Version
-// Only parses and aggregates data, sends to Edge Function for report generation
+// Uses base article aggregation for large files to reduce memory usage
 importScripts('https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js');
 
 // Constants
@@ -38,6 +38,10 @@ const CATEGORY_PATTERNS = [
   [/юбк|skirt/i, 'Юбки'],
   [/ясел|baby|infant|newborn/i, 'Детское (ясельное)'],
 ];
+
+// Thresholds for optimization
+const AGGREGATE_BY_BASE_THRESHOLD = 30000; // If > 30k unique articles -> aggregate by base
+const MAX_FILE_SIZE_MB = 50;
 
 // Utility functions
 function parseNumber(value) {
@@ -104,6 +108,16 @@ function extractGroupCode(article) {
   return str.substring(0, 4);
 }
 
+// Extract base article (without size)
+// Examples: "10001-001/42" -> "10001-001", "ART123/размер S" -> "ART123"
+function extractBaseArticle(article) {
+  if (!article) return '';
+  const str = String(article).trim();
+  // Split by common size separators
+  const parts = str.split(/[\/\\|,;]/);
+  return parts[0].trim();
+}
+
 function cleanArticleForDisplay(article) {
   return String(article || '').trim();
 }
@@ -128,18 +142,18 @@ function sendProgress(msg, percent) {
   self.postMessage({ type: 'progress', message: msg, percent });
 }
 
-// Memory-efficient chunk processor - now returns aggregated data for server processing
-function processExcelChunked(arrayBuffer, fileSizeMB) {
-  const CHUNK_SIZE = 20000;
-  
+// Process Excel file with single-pass parsing
+function processExcelFile(arrayBuffer, fileSizeMB) {
   try {
-    if (fileSizeMB > 50) {
-      throw new Error(`Файл слишком большой (${fileSizeMB.toFixed(1)}MB). Максимальный размер: 50MB.`);
+    console.log(`[Worker] Starting processing, file size: ${fileSizeMB.toFixed(1)}MB`);
+    
+    if (fileSizeMB > MAX_FILE_SIZE_MB) {
+      throw new Error(`Файл слишком большой (${fileSizeMB.toFixed(1)}MB). Максимум: ${MAX_FILE_SIZE_MB}MB.`);
     }
     
-    sendProgress('Парсинг структуры файла...', 10);
+    sendProgress('Парсинг файла...', 10);
     
-    // First pass: read only headers and structure
+    // Single-pass parsing - read entire file once
     let workbook;
     try {
       workbook = XLSX.read(arrayBuffer, {
@@ -147,31 +161,41 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
         cellDates: true,
         cellNF: false,
         cellStyles: false,
-        sheetRows: 100,
+        dense: true, // Use dense mode for better memory efficiency
       });
     } catch (e) {
+      console.error('[Worker] XLSX.read error:', e);
       if (e.message?.includes('memory') || e.message?.includes('allocation')) {
         throw new Error('Недостаточно памяти для чтения файла. Попробуйте файл меньшего размера.');
       }
       throw new Error('Ошибка чтения Excel файла: ' + e.message);
     }
     
+    console.log('[Worker] File parsed successfully');
+    sendProgress('Файл прочитан, анализ данных...', 20);
+    
+    // Find data sheet
     let sheetName = workbook.SheetNames[0];
     if (sheetName.toLowerCase() === 'логи' && workbook.SheetNames.length > 1) {
       sheetName = workbook.SheetNames[1];
     }
     
-    const structSheet = workbook.Sheets[sheetName];
-    if (!structSheet) throw new Error('В файле нет листа с данными');
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) throw new Error('В файле нет листа с данными');
     
-    const structData = XLSX.utils.sheet_to_json(structSheet, { header: 1, raw: true, defval: null });
+    // Convert to array of arrays
+    const data = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
+    console.log(`[Worker] Total rows: ${data.length}`);
     
-    // Parse period
+    // Free workbook memory
+    workbook = null;
+    
+    // Parse period from first rows
     let periodStart = null;
     let periodEnd = null;
     
-    for (let rowIdx = 0; rowIdx < Math.min(5, structData.length); rowIdx++) {
-      const row = structData[rowIdx];
+    for (let rowIdx = 0; rowIdx < Math.min(5, data.length); rowIdx++) {
+      const row = data[rowIdx];
       for (let colIdx = 0; colIdx < Math.min(10, row?.length || 0); colIdx++) {
         const cellValue = row[colIdx];
         if (cellValue) {
@@ -190,10 +214,10 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
     }
     
     // Find header row
-    sendProgress('Анализ заголовков...', 15);
+    sendProgress('Поиск заголовков...', 25);
     let headerRowIdx = 0;
-    for (let i = 0; i < Math.min(15, structData.length); i++) {
-      const row = structData[i];
+    for (let i = 0; i < Math.min(15, data.length); i++) {
+      const row = data[i];
       if (!row) continue;
       
       let monthCount = 0;
@@ -212,24 +236,25 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
       }
     }
     
-    if (headerRowIdx === 0) headerRowIdx = Math.min(5, structData.length);
+    if (headerRowIdx === 0) headerRowIdx = Math.min(5, data.length);
     
-    // Extract headers
-    const headerData = structData.slice(headerRowIdx);
-    const headerRows = Math.min(3, headerData.length);
-    const maxCols = Math.max(...headerData.slice(0, headerRows).map(r => r?.length || 0));
+    // Extract headers (handle multi-row headers)
+    const headerRows = Math.min(3, data.length - headerRowIdx);
+    const maxCols = Math.max(...data.slice(headerRowIdx, headerRowIdx + headerRows).map(r => r?.length || 0));
     
     const headers = [];
     for (let col = 0; col < maxCols; col++) {
       const parts = [];
       for (let row = 0; row < headerRows; row++) {
-        const val = headerData[row]?.[col];
+        const val = data[headerRowIdx + row]?.[col];
         if (val !== null && val !== undefined && val !== '') {
           parts.push(String(val).trim());
         }
       }
       headers.push(parts.join(' ').trim() || `Колонка ${col + 1}`);
     }
+    
+    console.log(`[Worker] Headers found: ${headers.length}, starting at row ${headerRowIdx}`);
     
     // Find key columns
     const articleHeaders = ['номенклатура.артикул', 'артикул', 'sku', 'код артикула'];
@@ -247,7 +272,7 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
     const categoryHeaders = ['номенклатура.группа', 'группа номенклатуры', 'группа', 'категория'];
     const categoryColIdx = findColIndexFlexible(headers, categoryHeaders);
     
-    // Find revenue columns
+    // Find revenue column
     const itogoSummaIdx = headers.findIndex(h => {
       const hl = String(h).toLowerCase();
       return hl.includes('итого') && (hl.includes('сумма') || hl.includes('выручка'));
@@ -314,141 +339,137 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
       return hl.includes('цена') || hl.includes('price');
     });
     
-    // Release structure workbook
-    workbook = null;
+    console.log(`[Worker] Columns: article=${articleColIdx}, category=${categoryColIdx}, revenue=${revenueColIdx}, stock=${stockColIdx}, price=${priceColIdx}, qtyColumns=${qtyColIndices.length}`);
     
-    sendProgress('Подготовка к обработке данных...', 20);
-    
-    // Data aggregation maps
-    const articleAggregates = new Map();
-    const groupAggregates = new Map();
-    
+    // First pass: count unique articles to decide aggregation strategy
+    sendProgress('Подсчёт артикулов...', 30);
     const dataStartRow = headerRowIdx + headerRows;
-    let totalRowsProcessed = 0;
-    let chunkStart = 0;
-    let hasMoreData = true;
+    const uniqueArticles = new Set();
+    let hasArticlesWithSizes = false;
     
-    // Process in chunks
-    while (hasMoreData) {
-      sendProgress(`Чтение данных (чанк ${Math.floor(chunkStart / CHUNK_SIZE) + 1})...`, 25 + Math.min(40, (chunkStart / 100000) * 40));
+    for (let i = dataStartRow; i < data.length; i++) {
+      const rawRow = data[i];
+      if (!rawRow || rawRow.length === 0) continue;
       
-      let chunkWorkbook;
-      try {
-        chunkWorkbook = XLSX.read(arrayBuffer, {
-          type: 'array',
-          cellDates: true,
-          cellNF: false,
-          cellStyles: false,
-          sheetRows: dataStartRow + chunkStart + CHUNK_SIZE + 10,
-        });
-      } catch (e) {
-        if (e.message?.includes('memory') || e.message?.includes('allocation')) {
-          if (totalRowsProcessed > 0) {
-            sendProgress(`Память ограничена. Обработано ${totalRowsProcessed} строк.`, 65);
-            break;
-          }
-          throw new Error('Недостаточно памяти. Попробуйте файл меньшего размера.');
-        }
-        throw e;
+      const cellValue = rawRow[articleColIdx];
+      if (cellValue === null || cellValue === undefined || cellValue === '') continue;
+      
+      const rawArticle = String(cellValue).trim();
+      if (!rawArticle) continue;
+      
+      const lowerArticle = rawArticle.toLowerCase();
+      if (lowerArticle === 'артикул' || lowerArticle === 'номенклатура' || 
+          lowerArticle === 'код' || lowerArticle === 'итого') continue;
+      
+      uniqueArticles.add(rawArticle);
+      
+      // Check if article has size separator
+      if (rawArticle.includes('/') || rawArticle.includes('\\')) {
+        hasArticlesWithSizes = true;
       }
-      
-      const chunkSheet = chunkWorkbook.Sheets[sheetName];
-      const chunkData = XLSX.utils.sheet_to_json(chunkSheet, { header: 1, raw: true, defval: null });
-      
-      const startIdx = dataStartRow + chunkStart;
-      const endIdx = Math.min(chunkData.length, dataStartRow + chunkStart + CHUNK_SIZE);
-      
-      if (startIdx >= chunkData.length) {
-        hasMoreData = false;
-        chunkWorkbook = null;
-        break;
-      }
-      
-      // Process rows
-      for (let i = startIdx; i < endIdx; i++) {
-        const rawRow = chunkData[i];
-        if (!rawRow || rawRow.length === 0) continue;
-        
-        const cellValue = rawRow[articleColIdx];
-        if (cellValue === null || cellValue === undefined || cellValue === '') continue;
-        
-        const rawArticle = String(cellValue).trim();
-        if (!rawArticle) continue;
-        
-        const lowerArticle = rawArticle.toLowerCase();
-        if (lowerArticle === 'артикул' || lowerArticle === 'номенклатура' || 
-            lowerArticle === 'код' || lowerArticle === 'итого') continue;
-        
-        const displayArticle = cleanArticleForDisplay(rawArticle);
-        const groupCode = extractGroupCode(rawArticle);
-        const rawCategory = categoryColIdx >= 0 ? String(rawRow[categoryColIdx] || '') : '';
-        const category = normalizeCategory(rawCategory);
-        
-        // Calculate revenue
-        let rowRevenue = 0;
-        if (itogoSummaIdx >= 0) {
-          rowRevenue = parseNumber(rawRow[itogoSummaIdx]);
-        } else if (revenueColIdx >= 0) {
-          rowRevenue = parseNumber(rawRow[revenueColIdx]);
-        } else {
-          for (const idx of revenueColIndices) {
-            rowRevenue += parseNumber(rawRow[idx]);
-          }
-        }
-        
-        // Get quantities
-        const quantities = qtyColIndices.map(idx => parseNumber(rawRow[idx]));
-        
-        // Get stock and price
-        const stock = stockColIdx >= 0 ? parseNumber(rawRow[stockColIdx]) : 0;
-        const price = priceColIdx >= 0 ? parseNumber(rawRow[priceColIdx]) : 0;
-        
-        // Aggregate by article
-        const existing = articleAggregates.get(displayArticle);
-        if (existing) {
-          existing.revenue += rowRevenue;
-          existing.stock += stock;
-          if (price > 0) {
-            existing.priceSum += price;
-            existing.priceCount++;
-          }
-          for (let q = 0; q < quantities.length; q++) {
-            existing.quantities[q] = (existing.quantities[q] || 0) + quantities[q];
-          }
-        } else {
-          articleAggregates.set(displayArticle, {
-            revenue: rowRevenue,
-            quantities: [...quantities],
-            stock,
-            priceSum: price,
-            priceCount: price > 0 ? 1 : 0,
-            category,
-            groupCode,
-          });
-        }
-        
-        // Aggregate by group
-        const groupKey = `${groupCode}|||${category}`;
-        groupAggregates.set(groupKey, (groupAggregates.get(groupKey) || 0) + rowRevenue);
-        
-        totalRowsProcessed++;
-      }
-      
-      if (endIdx >= chunkData.length || endIdx - startIdx < CHUNK_SIZE) {
-        hasMoreData = false;
-      }
-      
-      chunkStart += CHUNK_SIZE;
-      chunkWorkbook = null;
-      
-      if (typeof gc === 'function') gc();
     }
     
-    sendProgress(`Агрегировано ${totalRowsProcessed} строк, ${articleAggregates.size} артикулов`, 70);
+    const totalUniqueArticles = uniqueArticles.size;
+    console.log(`[Worker] Unique articles: ${totalUniqueArticles}, has sizes: ${hasArticlesWithSizes}`);
+    
+    // Decide aggregation strategy
+    const useBaseArticleAggregation = totalUniqueArticles > AGGREGATE_BY_BASE_THRESHOLD && hasArticlesWithSizes;
+    
+    if (useBaseArticleAggregation) {
+      console.log(`[Worker] Using base article aggregation (${totalUniqueArticles} > ${AGGREGATE_BY_BASE_THRESHOLD})`);
+      sendProgress(`Агрегация по базовым артикулам (${totalUniqueArticles} артикулов)...`, 35);
+    }
+    
+    // Process data rows
+    sendProgress('Обработка данных...', 40);
+    const articleAggregates = new Map();
+    const groupAggregates = new Map();
+    let totalRowsProcessed = 0;
+    
+    for (let i = dataStartRow; i < data.length; i++) {
+      if (i % 10000 === 0) {
+        const percent = 40 + Math.min(30, ((i - dataStartRow) / (data.length - dataStartRow)) * 30);
+        sendProgress(`Обработка строк (${i - dataStartRow}/${data.length - dataStartRow})...`, percent);
+      }
+      
+      const rawRow = data[i];
+      if (!rawRow || rawRow.length === 0) continue;
+      
+      const cellValue = rawRow[articleColIdx];
+      if (cellValue === null || cellValue === undefined || cellValue === '') continue;
+      
+      const rawArticle = String(cellValue).trim();
+      if (!rawArticle) continue;
+      
+      const lowerArticle = rawArticle.toLowerCase();
+      if (lowerArticle === 'артикул' || lowerArticle === 'номенклатура' || 
+          lowerArticle === 'код' || lowerArticle === 'итого') continue;
+      
+      // Get article key (base or full depending on strategy)
+      const articleKey = useBaseArticleAggregation ? extractBaseArticle(rawArticle) : cleanArticleForDisplay(rawArticle);
+      const groupCode = extractGroupCode(rawArticle);
+      const rawCategory = categoryColIdx >= 0 ? String(rawRow[categoryColIdx] || '') : '';
+      const category = normalizeCategory(rawCategory);
+      
+      // Calculate revenue
+      let rowRevenue = 0;
+      if (itogoSummaIdx >= 0) {
+        rowRevenue = parseNumber(rawRow[itogoSummaIdx]);
+      } else if (revenueColIdx >= 0) {
+        rowRevenue = parseNumber(rawRow[revenueColIdx]);
+      } else {
+        for (const idx of revenueColIndices) {
+          rowRevenue += parseNumber(rawRow[idx]);
+        }
+      }
+      
+      // Get quantities
+      const quantities = qtyColIndices.map(idx => parseNumber(rawRow[idx]));
+      
+      // Get stock and price
+      const stock = stockColIdx >= 0 ? parseNumber(rawRow[stockColIdx]) : 0;
+      const price = priceColIdx >= 0 ? parseNumber(rawRow[priceColIdx]) : 0;
+      
+      // Aggregate by article
+      const existing = articleAggregates.get(articleKey);
+      if (existing) {
+        existing.revenue += rowRevenue;
+        existing.stock += stock;
+        if (price > 0) {
+          existing.priceSum += price;
+          existing.priceCount++;
+        }
+        for (let q = 0; q < quantities.length; q++) {
+          existing.quantities[q] = (existing.quantities[q] || 0) + quantities[q];
+        }
+      } else {
+        articleAggregates.set(articleKey, {
+          revenue: rowRevenue,
+          quantities: [...quantities],
+          stock,
+          priceSum: price,
+          priceCount: price > 0 ? 1 : 0,
+          category,
+          groupCode,
+        });
+      }
+      
+      // Aggregate by group
+      const groupKey = `${groupCode}|||${category}`;
+      groupAggregates.set(groupKey, (groupAggregates.get(groupKey) || 0) + rowRevenue);
+      
+      totalRowsProcessed++;
+    }
+    
+    console.log(`[Worker] Processed ${totalRowsProcessed} rows, ${articleAggregates.size} aggregated articles`);
+    sendProgress(`Обработано ${totalRowsProcessed} строк, ${articleAggregates.size} артикулов`, 70);
     
     if (articleAggregates.size === 0) {
       throw new Error('Не найдено данных для обработки');
     }
+    
+    // Free original data
+    data.length = 0;
     
     // Calculate ABC by groups
     sendProgress('ABC анализ по группам...', 72);
@@ -499,16 +520,17 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
         : (totalQuantity > 0 ? data.revenue / totalQuantity : 0);
       
       articles.push({
-        n: name,                           // article name
-        r: Math.round(data.revenue),       // revenue
-        q: data.quantities,                // quantities per period
-        s: Math.round(data.stock),         // stock
-        c: data.category,                  // category
-        g: data.groupCode,                 // group code
-        p: Math.round(avgPrice * 100) / 100, // average price
+        n: name,
+        r: Math.round(data.revenue),
+        q: data.quantities,
+        s: Math.round(data.stock),
+        c: data.category,
+        g: data.groupCode,
+        p: Math.round(avgPrice * 100) / 100,
       });
     }
     
+    console.log(`[Worker] Sending ${articles.length} articles to server`);
     sendProgress('Готово! Отправка на сервер...', 85);
     
     return {
@@ -527,10 +549,14 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
         lastPeriod,
         periodStart,
         periodEnd,
+        aggregatedByBase: useBaseArticleAggregation,
+        originalArticleCount: totalUniqueArticles,
+        finalArticleCount: articles.length,
       },
     };
     
   } catch (error) {
+    console.error('[Worker] Error:', error);
     return {
       success: false,
       error: error.message || 'Unknown error',
@@ -543,11 +569,13 @@ function processExcelChunked(arrayBuffer, fileSizeMB) {
 self.onmessage = function(e) {
   const { arrayBuffer, fileSizeMB } = e.data;
   
+  console.log(`[Worker] Received file, size: ${fileSizeMB}MB`);
+  
   try {
-    const result = processExcelChunked(arrayBuffer, fileSizeMB);
+    const result = processExcelFile(arrayBuffer, fileSizeMB);
     
     if (result.success) {
-      // Send aggregated data (JSON, not buffers)
+      console.log(`[Worker] Success, sending ${result.aggregatedData.articles.length} articles`);
       self.postMessage({
         type: 'complete',
         success: true,
@@ -555,6 +583,7 @@ self.onmessage = function(e) {
         metrics: result.metrics,
       });
     } else {
+      console.log(`[Worker] Failed: ${result.error}`);
       self.postMessage({
         type: 'complete',
         success: false,
@@ -563,6 +592,7 @@ self.onmessage = function(e) {
       });
     }
   } catch (error) {
+    console.error('[Worker] Unhandled error:', error);
     self.postMessage({
       type: 'complete',
       success: false,

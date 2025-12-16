@@ -37,6 +37,9 @@ export interface WorkerResult {
     lastPeriod: string | null;
     periodStart?: string;
     periodEnd?: string;
+    aggregatedByBase?: boolean;
+    originalArticleCount?: number;
+    finalArticleCount?: number;
   };
 }
 

@@ -49,9 +49,12 @@ export default function NewRun() {
       const result = await processRunServer(runId, mode, file);
 
       if (result.success) {
+        const desc = result.aggregatedByBase 
+          ? `Обработано ${result.rowsProcessed || 0} строк. Данные агрегированы по базовым артикулам (${result.finalArticleCount} из ${result.originalArticleCount})`
+          : `Обработано ${result.rowsProcessed || 0} строк`;
         toast({
           title: 'Обработка завершена!',
-          description: `Обработано ${result.rowsProcessed || 0} строк`,
+          description: desc,
         });
         navigate(`/runs/${runId}`);
       } else {
