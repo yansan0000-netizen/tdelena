@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { ProcessingResult, ProcessingMetrics, RowData, ABCItem, ArticleMetrics, XYZData, processExcelFile } from './clientProcessor';
+import { ProcessingResult, ProcessingMetrics, RowData, ABCItem, ArticleMetrics, XYZData } from './clientProcessor';
 
 // Russian month names
 const MONTH_NAMES_RU: Record<string, number> = {
@@ -167,22 +167,18 @@ export async function processExcelFileStream(
     log('Инициализация ExcelJS...', 15);
     const workbook = new ExcelJS.Workbook();
     
-    // Use buffer-based loading which is more memory efficient than full parse
-    try {
-      await workbook.xlsx.load(arrayBuffer);
-    } catch (excelJsError) {
-      // ExcelJS has a known bug with files containing images/drawings
-      if (String(excelJsError).includes('anchors') || String(excelJsError).includes('drawings')) {
-        log('ExcelJS ошибка с рисунками, переключение на XLSX парсер...', 18);
-        arrayBuffer = null;
-        // Fallback to regular XLSX parser which handles images better
-        return processExcelFile(file, onProgress, signal);
-      }
-      throw excelJsError;
-    }
+    // Load with ignoreNodes to skip images/drawings which cause memory issues
+    await workbook.xlsx.load(arrayBuffer, {
+      ignoreNodes: [
+        'xl/drawings',
+        'xl/drawings/drawing1.xml',
+        'xl/drawings/drawing2.xml',
+        'xl/media',
+      ] as any // ExcelJS types don't include this option but it works
+    });
     checkAbort();
 
-    // Free the array buffer
+    // Free the array buffer immediately
     arrayBuffer = null;
 
     log(`Файл загружен, листов: ${workbook.worksheets.length}`, 20);
@@ -397,11 +393,11 @@ export async function processExcelFileStream(
       rows.push(row);
       processedCount++;
 
-      // Progress update every 1000 rows
-      if (processedCount % 1000 === 0) {
+      // Progress update and memory relief every 500 rows
+      if (processedCount % 500 === 0) {
         const percent = Math.round(45 + (processedCount / totalRows) * 25);
         log(`Обработано строк: ${processedCount}`, percent, true);
-        await yieldToMain();
+        await yieldToMain(); // Allow GC to run
       }
     }
 
