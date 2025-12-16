@@ -311,32 +311,33 @@ function getABCXYZRecommendation(abc: string, xyz: string): string {
   return matrix[abc]?.[xyz] || 'Нет рекомендации';
 }
 
-// Main processor
+// Main processor with progress callback
 export async function processExcelFile(
   file: File, 
-  onProgress?: (msg: string) => void
+  onProgress?: (msg: string, percent?: number) => void
 ): Promise<ProcessingResult> {
   const logs: string[] = [];
-  const log = (msg: string) => {
+  const log = (msg: string, percent?: number) => {
     console.log(msg);
     logs.push(`[${new Date().toISOString()}] ${msg}`);
-    onProgress?.(msg);
+    onProgress?.(msg, percent);
   };
 
   try {
-    log('Чтение файла...');
+    log('Чтение файла...', 5);
     
     const arrayBuffer = await file.arrayBuffer();
-    log(`Размер файла: ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)}MB`);
+    const fileSizeMB = (arrayBuffer.byteLength / 1024 / 1024).toFixed(2);
+    log(`Размер файла: ${fileSizeMB}MB`, 10);
     
-    log('Парсинг Excel...');
+    log('Парсинг Excel...', 15);
     const workbook = XLSX.read(arrayBuffer, {
       type: 'array',
       cellDates: true,
       cellNF: false,
       cellStyles: false,
     });
-    log(`Файл прочитан, листов: ${workbook.SheetNames.length}`);
+    log(`Файл прочитан, листов: ${workbook.SheetNames.length}`, 25);
     
     // Select data sheet
     let sheetName = workbook.SheetNames[0];
@@ -349,15 +350,15 @@ export async function processExcelFile(
       throw new Error('В файле нет листа с данными');
     }
     
-    log(`Выбран лист: ${sheetName}`);
+    log(`Выбран лист: ${sheetName}`, 30);
     
-    log('Извлечение данных...');
+    log('Извлечение данных...', 35);
     let data = XLSX.utils.sheet_to_json<(string | number | null)[]>(sheet, {
       header: 1,
       raw: true,
       defval: null,
     });
-    log(`Загружено строк: ${data.length}, колонок: ${data[0]?.length || 0}`);
+    log(`Загружено строк: ${data.length}, колонок: ${data[0]?.length || 0}`, 40);
     
     // Parse period from first rows
     let periodStart: string | null = null;
@@ -374,7 +375,7 @@ export async function processExcelFile(
             if (parsed.start && parsed.end) {
               periodStart = parsed.start.toISOString().split('T')[0];
               periodEnd = parsed.end.toISOString().split('T')[0];
-              log(`Найден период: ${periodStart} - ${periodEnd}`);
+              log(`Найден период: ${periodStart} - ${periodEnd}`, 42);
               break;
             }
           }
@@ -384,7 +385,7 @@ export async function processExcelFile(
     }
     
     // Find header row
-    log('Поиск заголовков...');
+    log('Поиск заголовков...', 45);
     let headerRowIdx = 0;
     for (let i = 0; i < Math.min(15, data.length); i++) {
       const row = data[i];
@@ -408,7 +409,7 @@ export async function processExcelFile(
     }
     
     if (headerRowIdx === 0) headerRowIdx = Math.min(5, data.length);
-    log(`Строка заголовков: ${headerRowIdx}`);
+    log(`Строка заголовков: ${headerRowIdx}`, 48);
     
     if (headerRowIdx > 0) {
       data = data.slice(headerRowIdx);
@@ -429,7 +430,7 @@ export async function processExcelFile(
       }
       headers.push(parts.join(' ').trim() || `Колонка ${col + 1}`);
     }
-    log(`Заголовков: ${headers.length}`);
+    log(`Заголовков: ${headers.length}`, 50);
     
     const dataStartRow = headerRows;
     
@@ -447,7 +448,7 @@ export async function processExcelFile(
     if (articleColIdx < 0) {
       throw new Error('Не найдена колонка с артикулом');
     }
-    log(`Колонка артикула: ${articleColIdx} (${headers[articleColIdx]})`);
+    log(`Колонка артикула: ${articleColIdx} (${headers[articleColIdx]})`, 52);
     
     // Find "Итого" column
     let itogoColIdx = -1;
@@ -481,7 +482,7 @@ export async function processExcelFile(
     const categoryHeaders = ['номенклатура.группа', 'группа номенклатуры', 'группа', 'категория'];
     const categoryColIdx = findColIndexFlexible(headers, categoryHeaders);
     
-    log('Обработка строк данных...');
+    log('Обработка строк данных...', 55);
     
     // Build processed data
     const baseHeaders = ['Группа товаров', 'Артикул', 'ABC Группа', 'ABC Артикул', 'Категория', 'XYZ-Группа', 'Рекомендация'];
@@ -489,6 +490,7 @@ export async function processExcelFile(
     const rows: RowData[] = [];
     
     const rawRows = data.slice(dataStartRow);
+    const totalRawRows = rawRows.length;
     let processedCount = 0;
     
     for (const rawRow of rawRows) {
@@ -557,16 +559,17 @@ export async function processExcelFile(
       rows.push(row);
       processedCount++;
       
-      // Progress update every 1000 rows
-      if (processedCount % 1000 === 0) {
-        log(`Обработано строк: ${processedCount}`);
+      // Progress update every 500 rows
+      if (processedCount % 500 === 0) {
+        const percent = Math.round(55 + (processedCount / totalRawRows) * 15);
+        log(`Обработано строк: ${processedCount}`, percent);
       }
     }
     
-    log(`Всего обработано строк: ${rows.length}`);
+    log(`Всего обработано строк: ${rows.length}`, 72);
     
     // Calculate ABC
-    log('Расчёт ABC анализа...');
+    log('Расчёт ABC анализа...', 75);
     const abcByGroups = calculateABCByGroups(rows, 'Группа товаров', 'Категория', 'Выручка');
     const abcByArticles = calculateABCByArticles(rows, 'Артикул', 'Выручка');
     
@@ -580,7 +583,7 @@ export async function processExcelFile(
     }
     
     // Calculate XYZ
-    log('Расчёт XYZ анализа...');
+    log('Расчёт XYZ анализа...', 80);
     const xyzResults = calculateXYZByArticles(rows, newHeaders);
     
     for (const row of rows) {
@@ -604,7 +607,7 @@ export async function processExcelFile(
     }
     
     const lastPeriod = periods.length > 0 ? periods[periods.length - 1] : null;
-    log(`Обработка завершена. Периодов: ${periods.length}, Последний: ${lastPeriod}`);
+    log(`Обработка завершена. Периодов: ${periods.length}, Последний: ${lastPeriod}`, 85);
     
     return {
       success: true,
@@ -627,7 +630,7 @@ export async function processExcelFile(
     
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    log(`Ошибка обработки: ${message}`);
+    log(`Ошибка обработки: ${message}`, 0);
     
     return {
       success: false,

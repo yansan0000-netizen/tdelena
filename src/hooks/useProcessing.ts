@@ -8,6 +8,7 @@ import { generateProcessedReport, generateProductionPlan } from '@/lib/excel/cli
 interface ProcessingState {
   isProcessing: boolean;
   progress: string;
+  progressPercent: number;
   error: string | null;
   result: ProcessingResult | null;
 }
@@ -17,6 +18,7 @@ export function useProcessing() {
   const [state, setState] = useState<ProcessingState>({
     isProcessing: false,
     progress: '',
+    progressPercent: 0,
     error: null,
     result: null,
   });
@@ -28,25 +30,25 @@ export function useProcessing() {
   ): Promise<ProcessingResult | null> => {
     if (!user) return null;
 
-    setState({ isProcessing: true, progress: 'Начало обработки...', error: null, result: null });
+    setState({ isProcessing: true, progress: 'Начало обработки...', progressPercent: 0, error: null, result: null });
 
     try {
       // Process file locally in browser
-      const result = await processExcelFile(file, (msg) => {
-        setState(s => ({ ...s, progress: msg }));
+      const result = await processExcelFile(file, (msg, percent) => {
+        setState(s => ({ ...s, progress: msg, progressPercent: percent ?? s.progressPercent }));
       });
 
       if (!result.success || !result.processedData) {
         throw new Error(result.error || 'Ошибка обработки файла');
       }
 
-      setState(s => ({ ...s, progress: 'Генерация отчётов...' }));
+      setState(s => ({ ...s, progress: 'Генерация отчётов...', progressPercent: 85 }));
 
       // Generate Excel files locally
       const processedBlob = generateProcessedReport(result.processedData);
       const planBlob = generateProductionPlan(result.processedData);
 
-      setState(s => ({ ...s, progress: 'Загрузка результатов...' }));
+      setState(s => ({ ...s, progress: 'Загрузка результатов...', progressPercent: 95 }));
 
       // Upload generated files to storage
       const processedPath = `${user.id}/${runId}/report_processed.xlsx`;
@@ -81,7 +83,7 @@ export function useProcessing() {
         log: result.logs,
       }).eq('id', runId);
 
-      setState({ isProcessing: false, progress: '', error: null, result });
+      setState({ isProcessing: false, progress: '', progressPercent: 100, error: null, result });
       return result;
 
     } catch (error) {
@@ -96,7 +98,7 @@ export function useProcessing() {
         })
         .eq('id', runId);
 
-      setState({ isProcessing: false, progress: '', error: message, result: null });
+      setState({ isProcessing: false, progress: '', progressPercent: 0, error: message, result: null });
       return null;
     }
   }, [user]);
@@ -104,6 +106,7 @@ export function useProcessing() {
   return {
     isProcessing: state.isProcessing,
     progress: state.progress,
+    progressPercent: state.progressPercent,
     error: state.error,
     result: state.result,
     processRunClient,

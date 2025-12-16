@@ -6,6 +6,7 @@ import { ModeSelector, RunMode } from '@/components/ModeSelector';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { useRuns } from '@/hooks/useRuns';
 import { useProcessing } from '@/hooks/useProcessing';
 import { useToast } from '@/hooks/use-toast';
@@ -18,7 +19,7 @@ export default function NewRun() {
   const [mode, setMode] = useState<RunMode>('1C_RAW');
   const [currentRun, setCurrentRun] = useState<Run | null>(null);
   const { createRun, getRun, updateRunStatus, getDownloadUrl } = useRuns();
-  const { isProcessing, progress, result, processRunClient } = useProcessing();
+  const { isProcessing, progress, progressPercent, result, processRunClient } = useProcessing();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -201,7 +202,7 @@ export default function NewRun() {
             {isProcessing ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
-                {progress || 'Обработка...'}
+                Обработка...
               </>
             ) : (
               <>
@@ -212,8 +213,24 @@ export default function NewRun() {
           </Button>
         )}
 
+        {/* Progress Bar during processing */}
+        {isProcessing && (
+          <Card className="animate-fade-in">
+            <CardContent className="pt-6 space-y-4">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">{progress || 'Обработка...'}</span>
+                <span className="text-muted-foreground">{progressPercent}%</span>
+              </div>
+              <Progress value={progressPercent} className="h-3" />
+              <p className="text-xs text-muted-foreground text-center">
+                Обработка выполняется локально в вашем браузере
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Status & Results */}
-        {currentRun && (
+        {currentRun && !isProcessing && (
           <Card className="animate-fade-in">
             <CardHeader>
               <div className="flex items-center justify-between">
