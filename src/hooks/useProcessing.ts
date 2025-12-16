@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
-import { useStreamingWorker } from './useStreamingWorker';
+import { useRawStreamingWorker } from './useRawStreamingWorker';
 import { RunMode } from '@/lib/types';
 
 interface ProcessingState {
@@ -14,10 +14,10 @@ interface ProcessingState {
 export function useProcessing() {
   const { user } = useAuth();
   const { 
-    processFile: processWithStreamingWorker, 
-    cancelProcessing: cancelStreamingWorker, 
-    progress: streamingProgress 
-  } = useStreamingWorker();
+    processFile: processWithRawWorker, 
+    cancelProcessing: cancelRawWorker, 
+    progress: rawProgress 
+  } = useRawStreamingWorker();
   
   const [state, setState] = useState<ProcessingState>({
     isProcessing: false,
@@ -30,17 +30,17 @@ export function useProcessing() {
 
   // Sync worker progress to state
   useEffect(() => {
-    if (streamingProgress.message) {
+    if (rawProgress.message) {
       setState(s => ({
         ...s,
-        progress: streamingProgress.message,
-        progressPercent: streamingProgress.percent,
+        progress: rawProgress.message,
+        progressPercent: rawProgress.percent,
       }));
     }
-  }, [streamingProgress]);
+  }, [rawProgress]);
 
   const cancelProcessing = useCallback(async (runId?: string) => {
-    cancelStreamingWorker();
+    cancelRawWorker();
     
     const id = runId || currentRunIdRef.current;
     if (id) {
@@ -60,7 +60,7 @@ export function useProcessing() {
       progressPercent: 0,
       error: 'Обработка отменена',
     });
-  }, [cancelStreamingWorker]);
+  }, [cancelRawWorker]);
 
   // Generate safe filename for storage
   const generateSafeFileName = (originalName: string): string => {
@@ -68,45 +68,6 @@ export function useProcessing() {
     const timestamp = Date.now();
     const randomStr = Math.random().toString(36).substring(2, 8);
     return `file_${timestamp}_${randomStr}.${ext}`;
-  };
-
-  // Call Edge Function to run analytics
-  const runAnalyticsOnServer = async (
-    runId: string, 
-    userId: string, 
-    periods: string[],
-    metrics: {
-      periodsFound: number;
-      rowsProcessed: number;
-      lastPeriod: string | null;
-      periodStart?: string;
-      periodEnd?: string;
-    }
-  ): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const { data, error } = await supabase.functions.invoke('run-analytics', {
-        body: {
-          runId,
-          userId,
-          periods,
-          metrics,
-        },
-      });
-      
-      if (error) {
-        console.error('Edge function error:', error);
-        return { success: false, error: error.message };
-      }
-      
-      if (!data?.success) {
-        return { success: false, error: data?.error || 'Unknown server error' };
-      }
-      
-      return { success: true };
-    } catch (err) {
-      console.error('Error calling run-analytics:', err);
-      return { success: false, error: err instanceof Error ? err.message : 'Network error' };
-    }
   };
 
   const processRunServer = useCallback(async (
@@ -141,27 +102,19 @@ export function useProcessing() {
         status: 'PROCESSING',
       }).eq('id', runId);
       
-      // 2. Process file using Streaming Worker (parses Excel and uploads to DB in batches)
-      setState(s => ({ ...s, progress: categoryFilter ? `Обработка категории "${categoryFilter}"...` : 'Обработка файла...', progressPercent: 10 }));
+      // 2. Process file using Raw Streaming Worker
+      // This parses Excel, uploads raw data to sales_data_raw in chunks,
+      // then calls run-analytics-sql which aggregates and calculates ABC/XYZ
+      setState(s => ({ 
+        ...s, 
+        progress: categoryFilter ? `Обработка категории "${categoryFilter}"...` : 'Обработка файла...', 
+        progressPercent: 10 
+      }));
       
-      const result = await processWithStreamingWorker(file, runId, user.id, categoryFilter);
+      const result = await processWithRawWorker(file, runId, user.id, categoryFilter);
       
       if (!result.success) {
         throw new Error(result.error || 'Ошибка обработки файла');
-      }
-      
-      // 3. Run analytics on server (calculates ABC/XYZ and generates reports)
-      setState(s => ({ ...s, progress: 'Запуск аналитики на сервере...', progressPercent: 95 }));
-      
-      const analyticsResult = await runAnalyticsOnServer(
-        runId,
-        user.id,
-        result.periods || [],
-        result.metrics || { periodsFound: 0, rowsProcessed: 0, lastPeriod: null }
-      );
-      
-      if (!analyticsResult.success) {
-        throw new Error(analyticsResult.error || 'Ошибка аналитики');
       }
       
       setState({ 
@@ -174,7 +127,7 @@ export function useProcessing() {
       currentRunIdRef.current = null;
       return { 
         success: true, 
-        rowsProcessed: result.totalRows,
+        rowsProcessed: result.metrics?.totalRows,
       };
 
     } catch (error) {
@@ -193,7 +146,7 @@ export function useProcessing() {
       currentRunIdRef.current = null;
       return { success: false };
     }
-  }, [user, processWithStreamingWorker]);
+  }, [user, processWithRawWorker]);
 
   return {
     isProcessing: state.isProcessing,
