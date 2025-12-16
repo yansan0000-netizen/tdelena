@@ -96,16 +96,17 @@ export default function NewRun() {
         description: 'Проверьте формат файла и попробуйте снова',
         variant: 'destructive',
       });
+      // Fetch final state for error display
+      const finalRun = await getRun(runId);
+      setCurrentRun(finalRun);
     } else {
       toast({
         title: 'Обработка завершена!',
         description: `Обработано ${processingResult.metrics.rowsProcessed} строк`,
       });
+      // Auto-redirect to run details page
+      navigate(`/runs/${runId}`);
     }
-
-    // Fetch final state
-    const finalRun = await getRun(runId);
-    setCurrentRun(finalRun);
   };
 
   const handleDownload = async (bucket: string, path: string | null, filename: string) => {
