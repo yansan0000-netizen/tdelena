@@ -106,10 +106,9 @@ function waitForAck() {
 async function processExcelStreaming(arrayBuffer) {
   sendProgress('Чтение файла...', 5);
   
-  // Parse Excel with memory optimization
+  // Parse Excel - use standard mode (not dense) for compatibility
   const workbook = XLSX.read(arrayBuffer, { 
     type: 'array',
-    dense: true,
     cellFormula: false,
     cellHTML: false,
     cellStyles: false,
@@ -117,7 +116,11 @@ async function processExcelStreaming(arrayBuffer) {
   
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
-  const data = sheet['!data'] || [];
+  
+  // Use sheet_to_json with header:1 to get array of arrays
+  const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  
+  console.log(`[Worker] Parsed ${data.length} rows from sheet "${sheetName}"`);
   
   if (data.length < 2) {
     throw new Error('Файл пустой или содержит только заголовки');
@@ -130,7 +133,7 @@ async function processExcelStreaming(arrayBuffer) {
   for (let i = 0; i < Math.min(10, data.length); i++) {
     const row = data[i];
     if (!row) continue;
-    const rowText = row.map(c => c?.v || '').join(' ').toLowerCase();
+    const rowText = row.map(c => c || '').join(' ').toLowerCase();
     if (rowText.includes('артикул') || rowText.includes('номенклатура')) {
       headerRowIndex = i;
       break;
@@ -138,13 +141,17 @@ async function processExcelStreaming(arrayBuffer) {
   }
   
   const headerRow = data[headerRowIndex] || [];
-  const headers = headerRow.map(c => c?.v || '');
+  const headers = headerRow.map(c => String(c || ''));
+  
+  console.log(`[Worker] Header row ${headerRowIndex}:`, headers.slice(0, 10));
   
   // Find key columns
   const articleCol = findColIndexFlexible(headers, ['артикул', 'номенклатура', 'код товара', 'sku']);
   const categoryCol = findColIndexFlexible(headers, ['категория', 'группа товар', 'вид обуви', 'тип']);
   const stockCol = findColIndexFlexible(headers, ['остаток', 'склад', 'наличие', 'stock']);
   const priceCol = findColIndexFlexible(headers, ['цена', 'price', 'розн']);
+  
+  console.log(`[Worker] Columns found - article: ${articleCol}, category: ${categoryCol}, stock: ${stockCol}, price: ${priceCol}`);
   
   if (articleCol < 0) {
     throw new Error('Не найден столбец с артикулами');
@@ -192,18 +199,14 @@ async function processExcelStreaming(arrayBuffer) {
   
   sendProgress(`Обработка ${totalRows} строк...`, 15);
   
-  let batch = [];
-  let totalSent = 0;
-  let batchIndex = 0;
-  
   // Aggregate by article (in case of duplicates)
   const articleMap = new Map();
   
   for (let i = dataStartRow; i < data.length; i++) {
     const row = data[i];
-    if (!row) continue;
+    if (!row || !Array.isArray(row)) continue;
     
-    const article = row[articleCol]?.v;
+    const article = row[articleCol];
     if (!article) continue;
     
     const articleStr = String(article).trim();
@@ -214,14 +217,14 @@ async function processExcelStreaming(arrayBuffer) {
     if (!entry) {
       entry = {
         article: articleStr,
-        category: normalizeCategory(row[categoryCol]?.v),
+        category: normalizeCategory(categoryCol >= 0 ? row[categoryCol] : null),
         groupCode: extractGroupCode(articleStr),
         periodQuantities: {},
         periodRevenues: {},
         totalRevenue: 0,
         totalQuantity: 0,
-        stock: categoryCol >= 0 ? parseNumber(row[stockCol]?.v) : 0,
-        price: priceCol >= 0 ? parseNumber(row[priceCol]?.v) : 0,
+        stock: stockCol >= 0 ? parseNumber(row[stockCol]) : 0,
+        price: priceCol >= 0 ? parseNumber(row[priceCol]) : 0,
       };
       articleMap.set(articleStr, entry);
     }
@@ -229,12 +232,12 @@ async function processExcelStreaming(arrayBuffer) {
     // Accumulate period data
     for (const pc of periodColumns) {
       if (pc.qtyCol >= 0) {
-        const qty = parseNumber(row[pc.qtyCol]?.v);
+        const qty = parseNumber(row[pc.qtyCol]);
         entry.periodQuantities[pc.period] = (entry.periodQuantities[pc.period] || 0) + qty;
         entry.totalQuantity += qty;
       }
       if (pc.revCol >= 0) {
-        const rev = parseNumber(row[pc.revCol]?.v);
+        const rev = parseNumber(row[pc.revCol]);
         entry.periodRevenues[pc.period] = (entry.periodRevenues[pc.period] || 0) + rev;
         entry.totalRevenue += rev;
       }
@@ -242,11 +245,11 @@ async function processExcelStreaming(arrayBuffer) {
     
     // Update stock and price (take last non-zero value)
     if (stockCol >= 0) {
-      const stock = parseNumber(row[stockCol]?.v);
+      const stock = parseNumber(row[stockCol]);
       if (stock > 0) entry.stock = stock;
     }
     if (priceCol >= 0) {
-      const price = parseNumber(row[priceCol]?.v);
+      const price = parseNumber(row[priceCol]);
       if (price > 0) entry.price = price;
     }
     
@@ -262,6 +265,8 @@ async function processExcelStreaming(arrayBuffer) {
   
   // Convert map to array and send in batches
   const articles = Array.from(articleMap.values());
+  let totalSent = 0;
+  let batchIndex = 0;
   
   for (let i = 0; i < articles.length; i += BATCH_SIZE) {
     const batchData = articles.slice(i, i + BATCH_SIZE);
