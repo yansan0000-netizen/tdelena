@@ -47,32 +47,44 @@ function normalizeSpaces(str: string): string {
 }
 
 function parseNumber(value: unknown): number {
+  // If already a number - return immediately
   if (typeof value === 'number') return isNaN(value) ? 0 : value;
-  if (!value) return 0;
+  if (value === null || value === undefined || value === '') return 0;
   
-  // Convert to string and normalize
   let str = String(value);
   
-  // Remove all types of spaces (regular, non-breaking, thin, etc.)
-  str = str.replace(/[\s\u00A0\u202F\u2007\u200B\u2009\u200A\u200C\u200D\uFEFF]/g, '');
+  // STEP 1: Remove EVERYTHING except digits, comma, period, and minus
+  // This guarantees removal of all spaces, letters, currency symbols
+  str = str.replace(/[^0-9,.\-]/g, '');
   
-  // Remove currency symbols
-  str = str.replace(/[₽руб\.р]/gi, '');
-  
-  // Keep only digits, minus, comma, period
-  str = str.replace(/[^\d.,\-]/g, '');
-  
-  // If empty after cleanup, return 0
   if (!str || str === '-' || str === '.' || str === ',') return 0;
   
-  // Handle Russian format: replace comma with period if it's the decimal separator
-  // If there's both comma and period, comma is thousands separator
-  if (str.includes(',') && str.includes('.')) {
-    // 1.000,50 -> 1000.50 (European format)
-    str = str.replace(/\./g, '').replace(',', '.');
-  } else {
-    // 1000,50 -> 1000.50
+  // STEP 2: Determine number format and convert
+  const commaCount = (str.match(/,/g) || []).length;
+  const dotCount = (str.match(/\./g) || []).length;
+  
+  if (commaCount === 1 && dotCount === 0) {
+    // "15514,00" -> comma is decimal separator
     str = str.replace(',', '.');
+  } else if (dotCount === 1 && commaCount === 0) {
+    // "15514.00" -> already correct format
+  } else if (commaCount >= 1 && dotCount >= 1) {
+    // "15.514,00" or "15,514.00" - check which is last
+    const lastComma = str.lastIndexOf(',');
+    const lastDot = str.lastIndexOf('.');
+    if (lastComma > lastDot) {
+      // European: 15.514,00 -> 15514.00
+      str = str.replace(/\./g, '').replace(',', '.');
+    } else {
+      // American: 15,514.00 -> 15514.00
+      str = str.replace(/,/g, '');
+    }
+  } else if (commaCount > 1) {
+    // "15,514,000" -> commas are thousands separators
+    str = str.replace(/,/g, '');
+  } else if (dotCount > 1) {
+    // "15.514.000" -> dots are thousands separators
+    str = str.replace(/\./g, '');
   }
   
   const num = parseFloat(str);
@@ -515,6 +527,12 @@ export async function processExcelFileStream(
           }
         }
         row['Выручка'] = totalRevenue;
+
+        // Debug: log first 3 revenue values
+        if (processedCount < 3) {
+          const rawVal = itogoSummaIdx >= 0 ? rawRow[itogoSummaIdx] : (revenueColIndices.length > 0 ? rawRow[revenueColIndices[0]] : 'N/A');
+          log(`Отладка выручки [${processedCount}]: сырое="${rawVal}" (${typeof rawVal}), parsed=${totalRevenue}`, 48);
+        }
 
         rows.push(row);
         processedCount++;
