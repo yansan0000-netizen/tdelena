@@ -161,7 +161,7 @@ export async function processExcelFileStream(
     checkAbort();
 
     log('Чтение файла в поток...', 10);
-    const arrayBuffer = await file.arrayBuffer();
+    let arrayBuffer: ArrayBuffer | null = await file.arrayBuffer();
     checkAbort();
 
     log('Инициализация ExcelJS...', 15);
@@ -172,7 +172,7 @@ export async function processExcelFileStream(
     checkAbort();
 
     // Free the array buffer
-    (arrayBuffer as unknown) = null;
+    arrayBuffer = null;
 
     log(`Файл загружен, листов: ${workbook.worksheets.length}`, 20);
 
