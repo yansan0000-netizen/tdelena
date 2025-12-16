@@ -62,17 +62,39 @@ serve(async (req) => {
     
     console.log(`[run-analytics-sql] Aggregating raw data...`);
     
-    // Step 1: Aggregate raw data and get unique articles with their metrics
-    const { data: aggregatedData, error: aggError } = await supabase
-      .from('sales_data_raw')
-      .select('article, category, product_group, stock, price, period, quantity, revenue')
-      .eq('run_id', runId);
+    // Step 1: Fetch ALL raw data using pagination (Supabase limits to 1000 per query)
+    const PAGE_SIZE = 10000;
+    let aggregatedData: any[] = [];
+    let offset = 0;
+    let hasMore = true;
     
-    if (aggError) {
-      throw new Error(`Failed to fetch raw data: ${aggError.message}`);
+    while (hasMore) {
+      const { data: pageData, error: pageError } = await supabase
+        .from('sales_data_raw')
+        .select('article, category, product_group, stock, price, period, quantity, revenue')
+        .eq('run_id', runId)
+        .order('id')
+        .range(offset, offset + PAGE_SIZE - 1);
+      
+      if (pageError) {
+        throw new Error(`Failed to fetch raw data at offset ${offset}: ${pageError.message}`);
+      }
+      
+      if (pageData && pageData.length > 0) {
+        aggregatedData = aggregatedData.concat(pageData);
+        console.log(`[run-analytics-sql] Fetched ${aggregatedData.length} records...`);
+        
+        if (pageData.length < PAGE_SIZE) {
+          hasMore = false;
+        } else {
+          offset += pageData.length;
+        }
+      } else {
+        hasMore = false;
+      }
     }
     
-    if (!aggregatedData || aggregatedData.length === 0) {
+    if (aggregatedData.length === 0) {
       throw new Error('No data found for this run');
     }
     
