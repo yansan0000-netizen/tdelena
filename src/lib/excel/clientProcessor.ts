@@ -51,6 +51,36 @@ export interface ABCItem {
   abc: string;
 }
 
+export interface XYZData {
+  xyz: string;
+  cv: number;
+  mean: number;
+  stdDev: number;
+  periodCount: number;
+}
+
+export interface ArticleMetrics {
+  article: string;
+  category: string;
+  groupCode: string;
+  abcGroup: string;
+  abcArticle: string;
+  xyzGroup: string;
+  recommendation: string;
+  totalRevenue: number;
+  totalQuantity: number;
+  currentStock: number;
+  avgPrice: number;
+  avgMonthlySales: number;
+  dailySalesVelocity: number;
+  daysToStockout: number;
+  plan1M: number;
+  plan3M: number;
+  plan6M: number;
+  capitalizationByPrice: number;
+  cv: number;
+}
+
 export interface ProcessingMetrics {
   periodsFound: number;
   rowsProcessed: number;
@@ -65,6 +95,7 @@ export interface ProcessingResult {
     dataSheet: RowData[];
     abcByGroups: ABCItem[];
     abcByArticles: ABCItem[];
+    articleMetrics: ArticleMetrics[];
     headers: string[];
   } | null;
   error: string | null;
@@ -234,8 +265,8 @@ function calculateABCByArticles(rows: RowData[], articleKey: string, revenueKey:
 }
 
 // XYZ calculation
-function calculateXYZByArticles(rows: RowData[], headers: string[]): Map<string, { xyz: string; cv: number }> {
-  const result = new Map<string, { xyz: string; cv: number }>();
+function calculateXYZByArticles(rows: RowData[], headers: string[]): Map<string, XYZData> {
+  const result = new Map<string, XYZData>();
   
   const qtyColIndices: number[] = [];
   for (let i = 0; i < headers.length; i++) {
@@ -278,13 +309,13 @@ function calculateXYZByArticles(rows: RowData[], headers: string[]): Map<string,
   for (const [article, values] of articleData) {
     const nonZero = values.filter(v => v > 0);
     if (nonZero.length < 3) {
-      result.set(article, { xyz: 'Z', cv: 999 });
+      result.set(article, { xyz: 'Z', cv: 999, mean: 0, stdDev: 0, periodCount: nonZero.length });
       continue;
     }
     
     const mean = nonZero.reduce((s, v) => s + v, 0) / nonZero.length;
     if (mean === 0) {
-      result.set(article, { xyz: 'Z', cv: 999 });
+      result.set(article, { xyz: 'Z', cv: 999, mean: 0, stdDev: 0, periodCount: nonZero.length });
       continue;
     }
     
@@ -296,10 +327,144 @@ function calculateXYZByArticles(rows: RowData[], headers: string[]): Map<string,
     if (cv <= 10) xyz = 'X';
     else if (cv <= 25) xyz = 'Y';
     
-    result.set(article, { xyz, cv });
+    result.set(article, { xyz, cv, mean, stdDev, periodCount: nonZero.length });
   }
   
   return result;
+}
+
+// Calculate production metrics
+function calculateArticleMetrics(
+  rows: RowData[],
+  headers: string[],
+  abcByGroups: ABCItem[],
+  abcByArticles: ABCItem[],
+  xyzResults: Map<string, XYZData>
+): ArticleMetrics[] {
+  const groupLookup = new Map(abcByGroups.map(g => [`${g.name}|||${g.category}`, g.abc]));
+  const articleLookup = new Map(abcByArticles.map(a => [a.name, a.abc]));
+  
+  // Find quantity columns for sales calculation
+  const qtyColIndices: number[] = [];
+  for (let i = 0; i < headers.length; i++) {
+    const h = headers[i];
+    const monthParsed = parseMonthYear(h);
+    if (monthParsed && (isQuantityColumn(h) || h.toLowerCase().includes('кол'))) {
+      qtyColIndices.push(i);
+    }
+  }
+  
+  // Find stock column
+  const stockColIdx = headers.findIndex(h => h.toLowerCase().includes('остаток'));
+  
+  // Find price column
+  const priceColIdx = headers.findIndex(h => {
+    const hl = h.toLowerCase();
+    return hl.includes('цена') || hl.includes('price');
+  });
+  
+  // Group by article
+  const articleGroups = new Map<string, RowData[]>();
+  for (const row of rows) {
+    const article = String(row['Артикул'] || '');
+    if (!article) continue;
+    const existing = articleGroups.get(article) || [];
+    existing.push(row);
+    articleGroups.set(article, existing);
+  }
+  
+  const metrics: ArticleMetrics[] = [];
+  
+  for (const [article, articleRows] of articleGroups) {
+    const firstRow = articleRows[0];
+    const category = String(firstRow['Категория'] || '');
+    const groupCode = String(firstRow['Группа товаров'] || '');
+    
+    // Aggregate values
+    let totalRevenue = 0;
+    let totalQuantity = 0;
+    let currentStock = 0;
+    let totalPrice = 0;
+    let priceCount = 0;
+    
+    for (const row of articleRows) {
+      totalRevenue += parseNumber(row['Выручка']);
+      
+      // Sum quantities across months
+      for (const idx of qtyColIndices) {
+        totalQuantity += parseNumber(row[headers[idx]]);
+      }
+      
+      // Stock
+      if (stockColIdx >= 0) {
+        currentStock += parseNumber(row[headers[stockColIdx]]);
+      }
+      
+      // Price
+      if (priceColIdx >= 0) {
+        const price = parseNumber(row[headers[priceColIdx]]);
+        if (price > 0) {
+          totalPrice += price;
+          priceCount++;
+        }
+      }
+    }
+    
+    // Calculate average price
+    const avgPrice = priceCount > 0 ? totalPrice / priceCount : (totalQuantity > 0 ? totalRevenue / totalQuantity : 0);
+    
+    // XYZ data
+    const xyzData = xyzResults.get(article) || { xyz: 'Z', cv: 999, mean: 0, stdDev: 0, periodCount: 0 };
+    
+    // Calculate monthly sales velocity
+    const periodsWithSales = xyzData.periodCount || (qtyColIndices.length > 0 ? qtyColIndices.length : 1);
+    const avgMonthlySales = periodsWithSales > 0 ? totalQuantity / periodsWithSales : 0;
+    const dailySalesVelocity = avgMonthlySales / 30;
+    
+    // Days to stockout
+    const daysToStockout = dailySalesVelocity > 0 ? Math.round(currentStock / dailySalesVelocity) : 9999;
+    
+    // XYZ coefficient for safety stock
+    const safetyMultiplier = xyzData.xyz === 'X' ? 1.0 : xyzData.xyz === 'Y' ? 1.2 : 1.5;
+    
+    // Production plans
+    const plan1M = Math.ceil(avgMonthlySales * 1 * safetyMultiplier);
+    const plan3M = Math.ceil(avgMonthlySales * 3 * safetyMultiplier);
+    const plan6M = Math.ceil(avgMonthlySales * 6 * safetyMultiplier);
+    
+    // Capitalization
+    const capitalizationByPrice = currentStock * avgPrice;
+    
+    // ABC
+    const groupKey = `${groupCode}|||${category}`;
+    const abcGroup = groupLookup.get(groupKey) || 'C';
+    const abcArticle = articleLookup.get(article) || 'C';
+    
+    metrics.push({
+      article,
+      category,
+      groupCode,
+      abcGroup,
+      abcArticle,
+      xyzGroup: xyzData.xyz,
+      recommendation: getABCXYZRecommendation(abcArticle, xyzData.xyz),
+      totalRevenue,
+      totalQuantity,
+      currentStock,
+      avgPrice,
+      avgMonthlySales,
+      dailySalesVelocity,
+      daysToStockout,
+      plan1M,
+      plan3M,
+      plan6M,
+      capitalizationByPrice,
+      cv: xyzData.cv,
+    });
+  }
+  
+  // Sort by revenue descending
+  return metrics.sort((a, b) => b.totalRevenue - a.totalRevenue);
 }
 
 function getABCXYZRecommendation(abc: string, xyz: string): string {
@@ -595,6 +760,11 @@ export async function processExcelFile(
       }
     }
     
+    // Calculate article metrics for production plan
+    log('Расчёт метрик производства...', 82);
+    const articleMetrics = calculateArticleMetrics(rows, newHeaders, abcByGroups, abcByArticles, xyzResults);
+    log(`Метрики рассчитаны для ${articleMetrics.length} артикулов`, 84);
+    
     // Detect periods
     const periods: string[] = [];
     const maxCol = itogoColIdx >= 0 ? itogoColIdx : newHeaders.length;
@@ -615,6 +785,7 @@ export async function processExcelFile(
         dataSheet: rows,
         abcByGroups,
         abcByArticles,
+        articleMetrics,
         headers: newHeaders,
       },
       error: null,
