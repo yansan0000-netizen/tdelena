@@ -65,7 +65,7 @@ serve(async (req) => {
     // Step 1: Aggregate raw data and get unique articles with their metrics
     const { data: aggregatedData, error: aggError } = await supabase
       .from('sales_data_raw')
-      .select('article, category, stock, price, period, quantity, revenue')
+      .select('article, category, product_group, stock, price, period, quantity, revenue')
       .eq('run_id', runId);
     
     if (aggError) {
@@ -82,6 +82,7 @@ serve(async (req) => {
     const articleMap = new Map<string, {
       article: string;
       category: string;
+      product_group: string;
       stock: number;
       price: number;
       periodQuantities: Record<string, number>;
@@ -98,7 +99,8 @@ serve(async (req) => {
       if (!articleMap.has(row.article)) {
         articleMap.set(row.article, {
           article: row.article,
-          category: row.category || 'ДРУГОЕ',
+          category: row.category || 'Без категории',
+          product_group: row.product_group || 'другая',
           stock: row.stock || 0,
           price: row.price || 0,
           periodQuantities: {},
@@ -108,7 +110,7 @@ serve(async (req) => {
         });
       }
       
-      const item = articleMap.get(row.article)!;
+      const item = articleMap.get(row.article)!
       
       // Update stock and price (take max)
       if (row.stock > item.stock) item.stock = row.stock;
@@ -192,6 +194,7 @@ serve(async (req) => {
         run_id: runId,
         article: item.article,
         category: item.category,
+        product_group: item.product_group,
         group_code: groupCode,
         total_revenue: item.totalRevenue,
         total_quantity: item.totalQuantity,
@@ -236,7 +239,8 @@ serve(async (req) => {
     const reportData = analyticsData.map(row => ({
       'Артикул': row.article,
       'Категория': row.category,
-      'Группа': row.group_code,
+      'Группа товаров': row.product_group,
+      'Код группы': row.group_code,
       'ABC': row.abc_group,
       'XYZ': row.xyz_group,
       'Рекомендация': row.recommendation,
@@ -263,7 +267,8 @@ serve(async (req) => {
     reportWs['!cols'] = [
       { wch: 25 }, // Артикул
       { wch: 20 }, // Категория
-      { wch: 10 }, // Группа
+      { wch: 12 }, // Группа товаров
+      { wch: 10 }, // Код группы
       { wch: 5 },  // ABC
       { wch: 5 },  // XYZ
       { wch: 45 }, // Рекомендация
@@ -309,6 +314,7 @@ serve(async (req) => {
     const planData = needsProduction.map(row => ({
       'Артикул': row.article,
       'Категория': row.category,
+      'Группа товаров': row.product_group,
       'ABC': row.abc_group,
       'XYZ': row.xyz_group,
       'Текущий остаток': row.current_stock,
@@ -326,6 +332,7 @@ serve(async (req) => {
     planWs['!cols'] = [
       { wch: 25 }, // Артикул
       { wch: 20 }, // Категория
+      { wch: 12 }, // Группа товаров
       { wch: 5 },  // ABC
       { wch: 5 },  // XYZ
       { wch: 15 }, // Остаток

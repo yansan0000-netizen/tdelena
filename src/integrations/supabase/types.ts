@@ -115,6 +115,7 @@ export type Database = {
           plan_1m: number | null
           plan_3m: number | null
           plan_6m: number | null
+          product_group: string | null
           recommendation: string | null
           revenue_share: number | null
           run_id: string
@@ -139,6 +140,7 @@ export type Database = {
           plan_1m?: number | null
           plan_3m?: number | null
           plan_6m?: number | null
+          product_group?: string | null
           recommendation?: string | null
           revenue_share?: number | null
           run_id: string
@@ -163,6 +165,7 @@ export type Database = {
           plan_1m?: number | null
           plan_3m?: number | null
           plan_6m?: number | null
+          product_group?: string | null
           recommendation?: string | null
           revenue_share?: number | null
           run_id?: string
@@ -246,6 +249,7 @@ export type Database = {
           id: string
           period: string
           price: number | null
+          product_group: string | null
           quantity: number | null
           revenue: number | null
           run_id: string
@@ -259,6 +263,7 @@ export type Database = {
           id?: string
           period: string
           price?: number | null
+          product_group?: string | null
           quantity?: number | null
           revenue?: number | null
           run_id: string
@@ -272,6 +277,7 @@ export type Database = {
           id?: string
           period?: string
           price?: number | null
+          product_group?: string | null
           quantity?: number | null
           revenue?: number | null
           run_id?: string
