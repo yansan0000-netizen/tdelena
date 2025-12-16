@@ -1,21 +1,17 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { RunMode } from '@/lib/types';
-import { processExcelFile, ProcessingResult } from '@/lib/excel/clientProcessor';
-import { processExcelFileStream } from '@/lib/excel/streamProcessor';
-import { generateProcessedReport, generateProductionPlan } from '@/lib/excel/clientExport';
 
 interface ProcessingState {
   isProcessing: boolean;
   progress: string;
   progressPercent: number;
   error: string | null;
-  result: ProcessingResult | null;
 }
 
-// Threshold for switching to streaming mode (15MB)
-const STREAMING_THRESHOLD_MB = 15;
+// Polling interval for status checks
+const POLL_INTERVAL_MS = 2000;
 
 export function useProcessing() {
   const { user } = useAuth();
@@ -24,136 +20,111 @@ export function useProcessing() {
     progress: '',
     progressPercent: 0,
     error: null,
-    result: null,
   });
   
-  // AbortController for cancellation
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const pollingRef = useRef<number | null>(null);
+  const currentRunIdRef = useRef<string | null>(null);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
+  }, []);
+
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  }, []);
 
   const cancelProcessing = useCallback(async (runId?: string) => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
+    stopPolling();
     
     // Update run status to ERROR if runId provided
-    if (runId) {
+    const id = runId || currentRunIdRef.current;
+    if (id) {
       await supabase
         .from('runs')
         .update({
           status: 'ERROR',
           error_message: 'Обработка отменена пользователем',
         })
-        .eq('id', runId);
+        .eq('id', id);
     }
     
+    currentRunIdRef.current = null;
     setState({
       isProcessing: false,
       progress: '',
       progressPercent: 0,
       error: 'Обработка отменена',
-      result: null,
     });
-  }, []);
+  }, [stopPolling]);
 
-  const processRunClient = useCallback(async (
+  const processRunServer = useCallback(async (
     runId: string, 
     mode: RunMode, 
     file: File
-  ): Promise<ProcessingResult | null> => {
-    if (!user) return null;
+  ): Promise<{ success: boolean; rowsProcessed?: number }> => {
+    if (!user) return { success: false };
 
-    // Create new AbortController for this run
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
-
-    setState({ isProcessing: true, progress: 'Начало обработки...', progressPercent: 0, error: null, result: null });
+    currentRunIdRef.current = runId;
+    setState({ isProcessing: true, progress: 'Загрузка файла...', progressPercent: 5, error: null });
 
     try {
-      const fileSizeMB = file.size / 1024 / 1024;
-      const useStreaming = fileSizeMB >= STREAMING_THRESHOLD_MB;
+      // 1. Upload file to storage first
+      const inputPath = `${user.id}/${runId}/${file.name}`;
       
-      // Choose processor based on file size
-      let result: ProcessingResult;
+      const { error: uploadError } = await supabase.storage
+        .from('sales-input')
+        .upload(inputPath, file, {
+          contentType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
       
-      if (useStreaming) {
-        setState(s => ({ ...s, progress: `Streaming режим для файла ${fileSizeMB.toFixed(1)}MB...`, progressPercent: 2 }));
-        result = await processExcelFileStream(file, (msg, percent) => {
-          if (signal.aborted) return;
-          setState(s => ({ ...s, progress: msg, progressPercent: percent ?? s.progressPercent }));
-        }, signal);
-      } else {
-        result = await processExcelFile(file, (msg, percent) => {
-          if (signal.aborted) return;
-          setState(s => ({ ...s, progress: msg, progressPercent: percent ?? s.progressPercent }));
-        }, signal);
+      if (uploadError) {
+        throw new Error(`Ошибка загрузки файла: ${uploadError.message}`);
       }
-
-      // Check if aborted
-      if (signal.aborted) {
-        return null;
-      }
-
-      if (!result.success || !result.processedData) {
-        throw new Error(result.error || 'Ошибка обработки файла');
-      }
-
-      setState(s => ({ ...s, progress: 'Генерация отчётов...', progressPercent: 85 }));
-
-      // Generate Excel files locally
-      const processedBlob = generateProcessedReport(result.processedData);
-      const planBlob = generateProductionPlan(result.processedData);
-
-      if (signal.aborted) return null;
-
-      setState(s => ({ ...s, progress: 'Загрузка результатов...', progressPercent: 95 }));
-
-      // Upload generated files to storage
-      const processedPath = `${user.id}/${runId}/report_processed.xlsx`;
-      const planPath = `${user.id}/${runId}/Production_Plan_Result.xlsx`;
-
-      const [processedUpload, planUpload] = await Promise.all([
-        supabase.storage
-          .from('sales-processed')
-          .upload(processedPath, processedBlob, {
-            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          }),
-        supabase.storage
-          .from('sales-results')
-          .upload(planPath, planBlob, {
-            contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          }),
-      ]);
-
-      if (signal.aborted) return null;
-
-      const processedFilePath = processedUpload.error ? null : processedPath;
-      const resultFilePath = planUpload.error ? null : planPath;
-
-      // Update run record with results
+      
+      // Update run with input file path
       await supabase.from('runs').update({
-        status: 'DONE',
-        processed_file_path: processedFilePath,
-        result_file_path: resultFilePath,
-        periods_found: result.metrics.periodsFound,
-        rows_processed: result.metrics.rowsProcessed,
-        last_period: result.metrics.lastPeriod,
-        period_start: result.metrics.periodStart,
-        period_end: result.metrics.periodEnd,
-        processing_time_ms: result.metrics.processingTimeMs || null,
-        log: result.logs,
+        input_file_path: inputPath,
       }).eq('id', runId);
-
-      setState({ isProcessing: false, progress: '', progressPercent: 100, error: null, result });
-      abortControllerRef.current = null;
-      return result;
+      
+      setState(s => ({ ...s, progress: 'Отправка на обработку...', progressPercent: 15 }));
+      
+      // 2. Call edge function
+      const { data, error } = await supabase.functions.invoke('process-excel-stream', {
+        body: {
+          runId,
+          inputFilePath: inputPath,
+          userId: user.id,
+          mode,
+        },
+      });
+      
+      if (error) {
+        throw new Error(`Ошибка вызова функции: ${error.message}`);
+      }
+      
+      if (!data?.success) {
+        throw new Error(data?.error || 'Ошибка обработки на сервере');
+      }
+      
+      setState({ 
+        isProcessing: false, 
+        progress: '', 
+        progressPercent: 100, 
+        error: null 
+      });
+      
+      currentRunIdRef.current = null;
+      return { success: true, rowsProcessed: data.metrics?.rowsProcessed };
 
     } catch (error) {
-      // Check if it was an abort
-      if (signal.aborted) {
-        return null;
-      }
-      
       const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
       
       // Update run with error
@@ -165,9 +136,9 @@ export function useProcessing() {
         })
         .eq('id', runId);
 
-      setState({ isProcessing: false, progress: '', progressPercent: 0, error: message, result: null });
-      abortControllerRef.current = null;
-      return null;
+      setState({ isProcessing: false, progress: '', progressPercent: 0, error: message });
+      currentRunIdRef.current = null;
+      return { success: false };
     }
   }, [user]);
 
@@ -176,8 +147,7 @@ export function useProcessing() {
     progress: state.progress,
     progressPercent: state.progressPercent,
     error: state.error,
-    result: state.result,
-    processRunClient,
+    processRunServer,
     cancelProcessing,
   };
 }

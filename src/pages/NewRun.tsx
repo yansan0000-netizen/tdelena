@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { FileDropzone } from '@/components/FileDropzone';
@@ -9,39 +9,16 @@ import { Progress } from '@/components/ui/progress';
 import { useRuns } from '@/hooks/useRuns';
 import { useProcessing } from '@/hooks/useProcessing';
 import { useToast } from '@/hooks/use-toast';
-import { Play, Loader2, AlertCircle, AlertTriangle, X } from 'lucide-react';
-import { toast as sonnerToast } from 'sonner';
+import { Play, Loader2, AlertCircle, X, Cloud } from 'lucide-react';
 
 export default function NewRun() {
   const [file, setFile] = useState<File | null>(null);
   const [mode, setMode] = useState<RunMode>('1C_RAW');
-  const [tabWarningShown, setTabWarningShown] = useState(false);
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
   const { createRun } = useRuns();
-  const { isProcessing, progress, progressPercent, error, processRunClient, cancelProcessing } = useProcessing();
+  const { isProcessing, progress, progressPercent, error, processRunServer, cancelProcessing } = useProcessing();
   const { toast } = useToast();
   const navigate = useNavigate();
-
-  // Warn user if they switch tabs during processing
-  useEffect(() => {
-    if (!isProcessing) {
-      setTabWarningShown(false);
-      return;
-    }
-
-    const handleVisibilityChange = () => {
-      if (document.hidden && isProcessing && !tabWarningShown) {
-        setTabWarningShown(true);
-        sonnerToast.warning('Вернитесь на вкладку!', {
-          description: 'Обработка замедляется когда вкладка в фоне',
-          duration: 10000,
-        });
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isProcessing, tabWarningShown]);
 
   const handleStartRun = async () => {
     if (!file) {
@@ -54,7 +31,7 @@ export default function NewRun() {
     }
 
     try {
-      // Create run record with PROCESSING status
+      // Create run record with QUEUED status
       const runId = await createRun(file, mode);
 
       if (!runId) {
@@ -68,23 +45,21 @@ export default function NewRun() {
 
       setCurrentRunId(runId);
 
-      // Process file directly here
-      const result = await processRunClient(runId, mode, file);
+      // Process file on server
+      const result = await processRunServer(runId, mode, file);
 
-      if (result) {
+      if (result.success) {
         toast({
           title: 'Обработка завершена!',
-          description: `Обработано ${result.metrics.rowsProcessed} строк`,
+          description: `Обработано ${result.rowsProcessed || 0} строк`,
         });
-        // Redirect to run details after success
         navigate(`/runs/${runId}`);
       } else {
         toast({
           title: 'Ошибка обработки',
-          description: 'Проверьте формат файла или уменьшите его размер',
+          description: 'Проверьте формат файла',
           variant: 'destructive',
         });
-        // Still redirect to see error details
         navigate(`/runs/${runId}`);
       }
     } catch (error) {
@@ -120,12 +95,12 @@ export default function NewRun() {
                   <Progress value={progressPercent} className="h-3" />
                 </div>
               </div>
-              <div className="flex items-center justify-center gap-2 text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-md p-2">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                <span className="font-medium">Не закрывайте и не сворачивайте вкладку!</span>
+              <div className="flex items-center justify-center gap-2 text-sm text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 rounded-md p-2">
+                <Cloud className="h-4 w-4 shrink-0" />
+                <span className="font-medium">Обработка на сервере — можно переключать вкладки</span>
               </div>
               <p className="text-xs text-muted-foreground text-center">
-                Обработка выполняется в браузере. Переключение на другие вкладки замедляет процесс.
+                Файл обрабатывается на сервере. Это надёжнее и не зависит от памяти браузера.
               </p>
               <Button
                 variant="outline"
