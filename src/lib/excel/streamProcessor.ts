@@ -335,48 +335,55 @@ export async function processExcelFileStream(
     log(`Строка заголовков: ${headerRowIdx + 1}`, 35);
     checkAbort();
 
-    // Extract headers with multi-row merge support and FORWARD FILL for months
-    const maxCols = Math.max(...rawData.slice(headerRowIdx, headerRowIdx + 3).map(r => r?.length || 0));
+    // Extract headers with multi-row merge support - search months in ALL header rows
+    const maxCols = Math.max(...rawData.slice(headerRowIdx, headerRowIdx + 5).map(r => r?.length || 0));
     const headers: string[] = [];
 
-    // Step 1: Extract top row (contains month names in merged cells)
-    const topRow: string[] = [];
-    for (let col = 0; col < maxCols; col++) {
-      const val = rawData[headerRowIdx]?.[col];
-      topRow.push(val ? normalizeSpaces(String(val)) : '');
+    // Step 1: Search for months across MULTIPLE rows (months may be in row different from "Артикул")
+    const monthRow: string[] = new Array(maxCols).fill('');
+    
+    for (let rowOffset = 0; rowOffset <= 4 && headerRowIdx + rowOffset < rawData.length; rowOffset++) {
+      const checkRow = rawData[headerRowIdx + rowOffset];
+      if (!checkRow) continue;
+      
+      for (let col = 0; col < maxCols; col++) {
+        const val = checkRow[col];
+        if (val && parseMonthYear(String(val))) {
+          monthRow[col] = normalizeSpaces(String(val));
+        }
+      }
     }
 
-    // Step 2: Forward fill - propagate month names to empty cells (handles merged cells)
+    // Step 2: Forward fill months (handles merged cells that span multiple columns)
     let lastMonth = '';
-    for (let col = 0; col < topRow.length; col++) {
-      const cellValue = topRow[col];
-      if (cellValue && parseMonthYear(cellValue)) {
-        lastMonth = cellValue;
-      } else if (!cellValue && lastMonth) {
-        // Fill empty cell with last known month (this handles merged cell spans)
-        topRow[col] = lastMonth;
-      } else if (cellValue && !parseMonthYear(cellValue)) {
-        // Non-month value found, reset lastMonth
-        lastMonth = '';
+    for (let col = 0; col < monthRow.length; col++) {
+      if (monthRow[col] && parseMonthYear(monthRow[col])) {
+        lastMonth = monthRow[col];
+      } else if (!monthRow[col] && lastMonth) {
+        monthRow[col] = lastMonth;
       }
     }
     
-    log(`Top row after forward fill (first 10): ${topRow.slice(0, 10).join(' | ')}`, 36, true);
+    log(`Month row (cols 15-35): ${monthRow.slice(15, 35).join(' | ')}`, 36, true);
 
-    // Step 3: Combine top row with sub-headers (Кол-во, Сумма, Остаток)
+    // Step 3: Combine month names with sub-headers (Кол-во, Сумма, Остаток)
     for (let col = 0; col < maxCols; col++) {
       const parts: string[] = [];
       
-      // Add month from top row (now properly forward-filled)
-      if (topRow[col]) {
-        parts.push(topRow[col]);
+      // Add month from monthRow (found across all header rows)
+      if (monthRow[col]) {
+        parts.push(monthRow[col]);
       }
       
-      // Add sub-headers from rows below (e.g., "Кол-во", "Сумма", "Остаток")
-      for (let row = headerRowIdx + 1; row <= headerRowIdx + 2 && row < rawData.length; row++) {
+      // Add sub-headers from all header rows (but skip month names to avoid duplication)
+      for (let row = headerRowIdx; row <= headerRowIdx + 4 && row < rawData.length; row++) {
         const val = rawData[row]?.[col];
         if (val !== null && val !== undefined && val !== '') {
-          parts.push(normalizeSpaces(String(val)));
+          const str = normalizeSpaces(String(val));
+          // Don't duplicate month names and don't duplicate existing parts
+          if (!parseMonthYear(str) && !parts.includes(str)) {
+            parts.push(str);
+          }
         }
       }
       
@@ -384,8 +391,7 @@ export async function processExcelFileStream(
     }
 
     log(`Заголовков: ${headers.length}`, 38);
-    // Log first 20 headers for debugging - should now show "Месяц YYYY Сумма" format
-    log(`Первые 20 заголовков: ${headers.slice(0, 20).map((h, i) => `[${i}]${h}`).join(' | ')}`, 38, true);
+    log(`Заголовки 15-35: ${headers.slice(15, 35).map((h, i) => `[${i+15}]${h}`).join(' | ')}`, 38, true);
     checkAbort();
 
     // Find key columns
