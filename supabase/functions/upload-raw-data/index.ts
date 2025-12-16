@@ -49,15 +49,16 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
     
     // Prepare rows for insertion into sales_data_raw
+    // Round stock and quantity to integers (DB columns are integer type)
     const insertData = rows.map(r => ({
       run_id: runId,
       chunk_index: chunkIndex,
       article: r.article,
       category: r.category || '',
-      stock: r.stock || 0,
+      stock: Math.round(r.stock || 0),
       price: r.price || 0,
       period: r.period,
-      quantity: r.quantity || 0,
+      quantity: Math.round(r.quantity || 0),
       revenue: r.revenue || 0,
     }));
     
