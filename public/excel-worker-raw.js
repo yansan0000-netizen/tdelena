@@ -200,9 +200,45 @@ async function processExcelRaw(arrayBuffer, categoryFilter) {
     headerRowIndex = 0;
     headers = (data[0] || []).map(c => String(c || '').trim());
   }
-  
-  console.log('Found headers at row:', headerRowIndex, headers.slice(0, 10));
-  
+
+  // Build combined headers for 2-row headers (very common in 1C):
+  // Row N: month (or date) / Row N+1: metric (Кол-во/Сумма)
+  const fillForward = (arr) => {
+    const out = [...arr];
+    let last = '';
+    for (let i = 0; i < out.length; i++) {
+      const v = String(out[i] || '').trim();
+      if (v) last = v;
+      else if (last) out[i] = last;
+    }
+    return out;
+  };
+
+  const baseHeaders = headers;
+  const prevRow = headerRowIndex > 0 ? (data[headerRowIndex - 1] || []) : [];
+  const prevHeaders = fillForward(prevRow.map(c => String(c || '').trim()));
+
+  const combinedHeaders = baseHeaders.map((h, idx) => {
+    const top = String(prevHeaders[idx] || '').trim();
+    const bottom = String(h || '').trim();
+    const topParsed = parseMonthYear(top);
+
+    // if top looks like a period and bottom looks like a metric, combine them
+    if (top && topParsed && (isQuantityColumn(bottom) || isRevenueColumn(bottom))) {
+      return `${top} ${bottom}`.trim();
+    }
+
+    // If header itself already contains a period, keep it
+    if (parseMonthYear(bottom)) return bottom;
+
+    // Otherwise prefer bottom, fallback to top
+    return bottom || top;
+  });
+
+  headers = combinedHeaders;
+
+  console.log('Found headers at row:', headerRowIndex, headers.slice(0, 20));
+
   sendProgress('Определение колонок...', 15);
   
   // Find key columns - expanded for 1C exports (with dot notation like "Номенклатура.Артикул")
