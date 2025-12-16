@@ -335,26 +335,57 @@ export async function processExcelFileStream(
     log(`Строка заголовков: ${headerRowIdx + 1}`, 35);
     checkAbort();
 
-    // Extract headers with multi-row merge support
+    // Extract headers with multi-row merge support and FORWARD FILL for months
     const maxCols = Math.max(...rawData.slice(headerRowIdx, headerRowIdx + 3).map(r => r?.length || 0));
     const headers: string[] = [];
 
+    // Step 1: Extract top row (contains month names in merged cells)
+    const topRow: string[] = [];
+    for (let col = 0; col < maxCols; col++) {
+      const val = rawData[headerRowIdx]?.[col];
+      topRow.push(val ? normalizeSpaces(String(val)) : '');
+    }
+
+    // Step 2: Forward fill - propagate month names to empty cells (handles merged cells)
+    let lastMonth = '';
+    for (let col = 0; col < topRow.length; col++) {
+      const cellValue = topRow[col];
+      if (cellValue && parseMonthYear(cellValue)) {
+        lastMonth = cellValue;
+      } else if (!cellValue && lastMonth) {
+        // Fill empty cell with last known month (this handles merged cell spans)
+        topRow[col] = lastMonth;
+      } else if (cellValue && !parseMonthYear(cellValue)) {
+        // Non-month value found, reset lastMonth
+        lastMonth = '';
+      }
+    }
+    
+    log(`Top row after forward fill (first 10): ${topRow.slice(0, 10).join(' | ')}`, 36, true);
+
+    // Step 3: Combine top row with sub-headers (Кол-во, Сумма, Остаток)
     for (let col = 0; col < maxCols; col++) {
       const parts: string[] = [];
-      for (let row = headerRowIdx; row <= headerRowIdx + 2 && row < rawData.length; row++) {
+      
+      // Add month from top row (now properly forward-filled)
+      if (topRow[col]) {
+        parts.push(topRow[col]);
+      }
+      
+      // Add sub-headers from rows below (e.g., "Кол-во", "Сумма", "Остаток")
+      for (let row = headerRowIdx + 1; row <= headerRowIdx + 2 && row < rawData.length; row++) {
         const val = rawData[row]?.[col];
         if (val !== null && val !== undefined && val !== '') {
-          // Normalize spaces when extracting header parts
           parts.push(normalizeSpaces(String(val)));
         }
       }
-      // Normalize the final header
+      
       headers.push(normalizeSpaces(parts.join(' ')) || `Колонка ${col + 1}`);
     }
 
     log(`Заголовков: ${headers.length}`, 38);
-    // Log first 20 headers for debugging
-    log(`Первые 20 заголовков: ${headers.slice(0, 20).map((h, i) => `[${i}]${h}`).join(' | ')}`, 38);
+    // Log first 20 headers for debugging - should now show "Месяц YYYY Сумма" format
+    log(`Первые 20 заголовков: ${headers.slice(0, 20).map((h, i) => `[${i}]${h}`).join(' | ')}`, 38, true);
     checkAbort();
 
     // Find key columns
