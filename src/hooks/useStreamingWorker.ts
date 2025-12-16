@@ -69,7 +69,8 @@ export function useStreamingWorker() {
   const processFile = useCallback(async (
     file: File,
     runId: string,
-    userId: string
+    userId: string,
+    categoryFilter?: string
   ): Promise<StreamingResult> => {
     return new Promise((resolve) => {
       setIsProcessing(true);
@@ -166,6 +167,7 @@ export function useStreamingWorker() {
         worker.postMessage({
           type: 'process_streaming',
           arrayBuffer,
+          categoryFilter, // Pass category filter to worker
         });
       };
       reader.onerror = () => {

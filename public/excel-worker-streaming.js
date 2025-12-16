@@ -103,7 +103,7 @@ function waitForAck() {
 }
 
 // Main processing function
-async function processExcelStreaming(arrayBuffer) {
+async function processExcelStreaming(arrayBuffer, categoryFilter) {
   sendProgress('Чтение файла...', 5);
   
   // Parse Excel - use standard mode (not dense) for compatibility
@@ -121,6 +121,9 @@ async function processExcelStreaming(arrayBuffer) {
   const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
   
   console.log(`[Worker] Parsed ${data.length} rows from sheet "${sheetName}"`);
+  if (categoryFilter) {
+    console.log(`[Worker] Filtering by category: "${categoryFilter}"`);
+  }
   
   if (data.length < 2) {
     throw new Error('Файл пустой или содержит только заголовки');
@@ -190,7 +193,7 @@ async function processExcelStreaming(arrayBuffer) {
   console.log(`[Worker] Period columns:`, periodColumns);
   
   if (periods.length === 0) {
-    throw new Error('Не найдены столбцы с периодами продаж');
+    throw new Error('Не найдены столбцы с периодами продаж. Проверьте, что в файле есть столбцы вида "Продажи Янв 2024" или "Сумма Янв 2024"');
   }
   
   // Process data rows
@@ -201,6 +204,7 @@ async function processExcelStreaming(arrayBuffer) {
   
   // Aggregate by article (in case of duplicates)
   const articleMap = new Map();
+  let filteredOutCount = 0;
   
   for (let i = dataStartRow; i < data.length; i++) {
     const row = data[i];
@@ -212,12 +216,22 @@ async function processExcelStreaming(arrayBuffer) {
     const articleStr = String(article).trim();
     if (!articleStr) continue;
     
+    // Get category value
+    const rawCategory = categoryCol >= 0 ? row[categoryCol] : null;
+    const categoryValue = rawCategory ? String(rawCategory).trim() : '';
+    
+    // Apply category filter if specified
+    if (categoryFilter && categoryValue !== categoryFilter) {
+      filteredOutCount++;
+      continue;
+    }
+    
     // Get or create article entry
     let entry = articleMap.get(articleStr);
     if (!entry) {
       entry = {
         article: articleStr,
-        category: normalizeCategory(categoryCol >= 0 ? row[categoryCol] : null),
+        category: normalizeCategory(rawCategory),
         groupCode: extractGroupCode(articleStr),
         periodQuantities: {},
         periodRevenues: {},
@@ -260,6 +274,9 @@ async function processExcelStreaming(arrayBuffer) {
     }
   }
   
+  if (categoryFilter) {
+    console.log(`[Worker] Filtered: ${filteredOutCount} rows excluded, ${articleMap.size} articles included`);
+  }
   console.log(`[Worker] Aggregated ${articleMap.size} unique articles from ${totalRows} rows`);
   sendProgress(`Найдено ${articleMap.size} артикулов. Загрузка в базу...`, 65);
   
@@ -306,7 +323,7 @@ async function processExcelStreaming(arrayBuffer) {
 
 // Message handler
 self.onmessage = async function(e) {
-  const { type, arrayBuffer } = e.data;
+  const { type, arrayBuffer, categoryFilter } = e.data;
   
   if (type === 'ack') {
     // Acknowledge received
@@ -319,7 +336,7 @@ self.onmessage = async function(e) {
   
   if (type === 'process_streaming') {
     try {
-      await processExcelStreaming(arrayBuffer);
+      await processExcelStreaming(arrayBuffer, categoryFilter);
     } catch (error) {
       console.error('[Worker] Error:', error);
       self.postMessage({
