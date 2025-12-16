@@ -391,32 +391,23 @@ export async function processExcelFileStream(
       }
     }
 
-    // Find revenue column - check for "Итого сумма", "Итого выручка"
+    // Find revenue column - check for "Итого сумма", "Итого выручка", "Итого руб"
     let itogoSummaIdx = headers.findIndex(h => {
       const hl = h.toLowerCase();
-      return hl.includes('итого') && (hl.includes('сумма') || hl.includes('выручка'));
+      return hl.includes('итого') && (hl.includes('сумма') || hl.includes('выручка') || hl.includes('руб'));
     });
     
-    // Fallback 1: look for any "Итого" column that's not quantity
-    if (itogoSummaIdx < 0) {
-      for (let i = 0; i < headers.length; i++) {
-        const hl = headers[i].toLowerCase();
-        if (hl.includes('итого') && !hl.includes('кол')) {
-          itogoSummaIdx = i;
-          break;
-        }
-      }
-    }
-    
-    // Fallback 2: look for standalone "Сумма" column (without "Итого")
+    // Fallback: look for exact match columns that are clearly revenue totals
     if (itogoSummaIdx < 0) {
       for (let i = 0; i < headers.length; i++) {
         const hl = headers[i].toLowerCase().trim();
-        // Look for column that is exactly "сумма" or starts/ends with it
-        if (hl === 'сумма' || hl === 'сумма, руб' || hl === 'сумма руб' || 
-            hl === 'выручка' || hl === 'revenue' || hl === 'total') {
+        // Only match columns that explicitly indicate revenue, NOT just "итого"
+        if (hl === 'итого сумма' || hl === 'итого выручка' || hl === 'итого, сумма' ||
+            hl === 'сумма итого' || hl === 'выручка итого' || hl === 'всего сумма' ||
+            hl === 'сумма' || hl === 'сумма, руб' || hl === 'сумма руб' || 
+            hl === 'выручка' || hl === 'revenue' || hl === 'total revenue') {
           itogoSummaIdx = i;
-          log(`Найдена standalone колонка суммы: "${headers[i]}" (индекс ${i})`, 44, true);
+          log(`Найдена итоговая колонка суммы: "${headers[i]}" (индекс ${i})`, 44, true);
           break;
         }
       }
@@ -426,6 +417,17 @@ export async function processExcelFileStream(
     const summaColumns = headers.map((h, i) => ({ header: h, idx: i }))
       .filter(({ header }) => header.toLowerCase().includes('сумма'));
     log(`Все колонки с "сумма": ${JSON.stringify(summaColumns.slice(0, 10))}`, 44, true);
+    
+    // CRITICAL: Verify that itogoSummaIdx actually points to a revenue column, not quantity
+    if (itogoSummaIdx >= 0) {
+      const itogoHeader = headers[itogoSummaIdx].toLowerCase();
+      const looksLikeRevenue = itogoHeader.includes('сумма') || itogoHeader.includes('выручка') || itogoHeader.includes('руб');
+      log(`Проверка Итого колонки: "${headers[itogoSummaIdx]}" (индекс ${itogoSummaIdx}), выглядит как выручка: ${looksLikeRevenue}`, 45, true);
+      if (!looksLikeRevenue) {
+        log(`СБРОС itogoSummaIdx: колонка "${headers[itogoSummaIdx]}" не является выручкой, будем суммировать revenueColIndices`, 45, true);
+        itogoSummaIdx = -1;
+      }
+    }
 
     // Find category column
     const categoryHeaders = ['номенклатура.группа', 'группа номенклатуры', 'группа', 'категория'];
