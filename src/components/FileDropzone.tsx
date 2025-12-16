@@ -9,8 +9,8 @@ interface FileDropzoneProps {
   disabled?: boolean;
 }
 
-const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
-const WARN_FILE_SIZE = 50 * 1024 * 1024; // 50MB - warning threshold
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB - Edge Function limit
+const WARN_FILE_SIZE = 30 * 1024 * 1024; // 30MB - warning threshold
 const ALLOWED_EXTENSIONS = ['.xlsx', '.xls', '.csv'];
 
 export function FileDropzone({ onFileSelect, selectedFile, onClear, disabled }: FileDropzoneProps) {
@@ -28,14 +28,14 @@ export function FileDropzone({ onFileSelect, selectedFile, onClear, disabled }: 
     }
     if (file.size > MAX_FILE_SIZE) {
       return { 
-        error: `Файл слишком большой. Максимальный размер: ${MAX_FILE_SIZE / 1024 / 1024}MB`,
+        error: `Файл слишком большой (${(file.size / 1024 / 1024).toFixed(1)}MB). Максимум: 50MB. Рекомендации: удалите размерные разбивки или разбейте файл на части.`,
         warning: null 
       };
     }
     if (file.size > WARN_FILE_SIZE) {
       return { 
         error: null, 
-        warning: `Большой файл (${(file.size / 1024 / 1024).toFixed(1)}MB). Обработка может занять несколько минут.` 
+        warning: `Большой файл (${(file.size / 1024 / 1024).toFixed(1)}MB). Если возникнут проблемы, попробуйте убрать размерные разбивки из отчёта.` 
       };
     }
     return { error: null, warning: null };
@@ -154,7 +154,7 @@ export function FileDropzone({ onFileSelect, selectedFile, onClear, disabled }: 
               Перетащите файл сюда или <span className="text-primary">выберите</span>
             </p>
             <p className="text-sm text-muted-foreground mt-1">
-              Поддерживаются: XLSX, XLS, CSV (до 200MB)
+              Поддерживаются: XLSX, XLS, CSV (до 50MB)
             </p>
           </div>
           <input

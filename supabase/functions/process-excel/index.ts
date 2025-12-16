@@ -10,6 +10,7 @@ const corsHeaders = {
 // Safety limits
 const MAX_ROWS = 100000;
 const MAX_COLS = 500;
+const MAX_FILE_SIZE_MB = 30; // Max file size in MB for Edge Function
 
 // Russian month names
 const MONTH_NAMES_RU: Record<string, number> = {
@@ -328,6 +329,7 @@ function readExcelFile(data: ArrayBuffer) {
     cellDates: true,
     cellNF: false,
     cellStyles: false,
+    dense: true, // Memory optimization: use dense array format
     sheetRows: MAX_ROWS + 10,
   });
 }
@@ -765,6 +767,37 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
+    // Check file size BEFORE downloading content
+    console.log("Checking file size...");
+    const { data: fileInfo } = await supabase.storage
+      .from("sales-input")
+      .list(inputFilePath.substring(0, inputFilePath.lastIndexOf('/')), {
+        search: inputFilePath.substring(inputFilePath.lastIndexOf('/') + 1)
+      });
+    
+    const fileMeta = fileInfo?.find(f => inputFilePath.endsWith(f.name));
+    const fileSizeMB = fileMeta?.metadata?.size ? fileMeta.metadata.size / (1024 * 1024) : 0;
+    
+    if (fileSizeMB > MAX_FILE_SIZE_MB) {
+      console.error(`File too large: ${fileSizeMB.toFixed(1)}MB (max: ${MAX_FILE_SIZE_MB}MB)`);
+      await supabase.from("runs").update({
+        status: "ERROR",
+        error_message: `Файл слишком большой (${fileSizeMB.toFixed(1)}MB). Максимум: ${MAX_FILE_SIZE_MB}MB. Рекомендации: 1) Удалите размерные разбивки, 2) Разбейте файл на части по периодам, 3) Оставьте только нужные колонки.`,
+      }).eq("id", runId);
+      
+      return new Response(
+        JSON.stringify({ 
+          error: `Файл слишком большой (${fileSizeMB.toFixed(1)}MB). Максимум: ${MAX_FILE_SIZE_MB}MB.`,
+          recommendations: [
+            "Удалите размерные разбивки из отчёта",
+            "Разбейте файл на части (например, по 12 месяцев)",
+            "Оставьте только нужные колонки"
+          ]
+        }),
+        { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Download input file
     console.log("Downloading input file...");
     const { data: fileData, error: downloadError } = await supabase.storage
@@ -786,7 +819,28 @@ serve(async (req) => {
 
     // Process file
     console.log("Processing file...");
-    const arrayBuffer = await fileData.arrayBuffer();
+    let arrayBuffer: ArrayBuffer;
+    try {
+      arrayBuffer = await fileData.arrayBuffer();
+    } catch (memError) {
+      console.error("Memory error loading file:", memError);
+      await supabase.from("runs").update({
+        status: "ERROR",
+        error_message: `Недостаточно памяти для обработки файла. Попробуйте уменьшить файл: удалите размерные разбивки или разбейте на части.`,
+      }).eq("id", runId);
+      
+      return new Response(
+        JSON.stringify({ 
+          error: "Недостаточно памяти для обработки файла",
+          recommendations: [
+            "Удалите размерные разбивки из отчёта",
+            "Разбейте файл на части (например, по 12 месяцев)",
+            "Оставьте только нужные колонки"
+          ]
+        }),
+        { status: 507, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     const result = await processExcelFile(arrayBuffer);
 
     if (!result.success || !result.processedData) {
