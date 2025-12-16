@@ -402,16 +402,19 @@ export async function processExcelFileStream(
       for (let i = 0; i < headers.length; i++) {
         const hl = headers[i].toLowerCase().trim();
         // Only match columns that explicitly indicate revenue, NOT just "итого"
+        // REMOVED: 'сумма', 'сумма, руб', 'сумма руб', 'выручка', 'revenue' - these catch monthly columns!
         if (hl === 'итого сумма' || hl === 'итого выручка' || hl === 'итого, сумма' ||
             hl === 'сумма итого' || hl === 'выручка итого' || hl === 'всего сумма' ||
-            hl === 'сумма' || hl === 'сумма, руб' || hl === 'сумма руб' || 
-            hl === 'выручка' || hl === 'revenue' || hl === 'total revenue') {
+            hl === 'total revenue' || hl === 'grand total revenue' || hl === 'итого, руб') {
           itogoSummaIdx = i;
           log(`Найдена итоговая колонка суммы: "${headers[i]}" (индекс ${i})`, 44, true);
           break;
         }
       }
     }
+    
+    // Log the revenue calculation method
+    log(`Метод расчёта выручки: itogoSummaIdx=${itogoSummaIdx}, будет использоваться ${itogoSummaIdx >= 0 ? 'одна колонка итого' : 'сумма месячных revenueColIndices'}`, 46, true);
     
     // Log all columns containing "сумма" for debugging (FORCE log to bypass throttle)
     const summaColumns = headers.map((h, i) => ({ header: h, idx: i }))
