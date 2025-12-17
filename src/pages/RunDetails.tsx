@@ -8,11 +8,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useRuns } from '@/hooks/useRuns';
+import { useAnalyticsExport } from '@/hooks/useAnalyticsExport';
 import { toast } from 'sonner';
 import { Run, LogEntry } from '@/lib/types';
-import { supabase } from '@/integrations/supabase/client';
-import * as XLSX from 'xlsx';
-import { 
+import {
   ArrowLeft, 
   Download, 
   Loader2, 
@@ -22,6 +21,7 @@ import {
   FileInput,
   FileOutput,
   FileStack,
+  FileSpreadsheet,
   Clock,
   AlertCircle,
   CheckCircle,
@@ -47,6 +47,7 @@ const logLevelConfig: Record<string, { icon: React.ElementType; className: strin
 export default function RunDetails() {
   const { id } = useParams<{ id: string }>();
   const { getRun, getDownloadUrl } = useRuns();
+  const { loading: exportLoading, downloadReport, downloadProductionPlan } = useAnalyticsExport(id);
   const [run, setRun] = useState<Run | null>(null);
   const [loading, setLoading] = useState(true);
   const [logFilter, setLogFilter] = useState<string | null>(null);
@@ -96,75 +97,6 @@ export default function RunDetails() {
     }
   };
 
-  const [downloadingFull, setDownloadingFull] = useState(false);
-
-  const handleDownloadFullReport = async () => {
-    if (!run?.processed_file_path || !run?.result_file_path) {
-      toast.error('Оба файла должны быть готовы для создания полного отчёта');
-      return;
-    }
-
-    setDownloadingFull(true);
-    try {
-      // Get both files
-      const [processedUrl, resultUrl] = await Promise.all([
-        getDownloadUrl('sales-processed', run.processed_file_path),
-        getDownloadUrl('sales-results', run.result_file_path)
-      ]);
-
-      if (!processedUrl || !resultUrl) {
-        throw new Error('Не удалось получить ссылки на файлы');
-      }
-
-      // Fetch both files
-      const [processedRes, resultRes] = await Promise.all([
-        fetch(processedUrl),
-        fetch(resultUrl)
-      ]);
-
-      const [processedBuffer, resultBuffer] = await Promise.all([
-        processedRes.arrayBuffer(),
-        resultRes.arrayBuffer()
-      ]);
-
-      // Parse both workbooks
-      const processedWb = XLSX.read(processedBuffer, { type: 'array' });
-      const resultWb = XLSX.read(resultBuffer, { type: 'array' });
-
-      // Create new combined workbook
-      const combinedWb = XLSX.utils.book_new();
-
-      // Add all sheets from result workbook first (Production Plan)
-      resultWb.SheetNames.forEach(name => {
-        const newName = name === 'Sheet1' || name === 'Лист1' ? 'План производства' : name;
-        XLSX.utils.book_append_sheet(combinedWb, resultWb.Sheets[name], newName);
-      });
-
-      // Add all sheets from processed workbook
-      processedWb.SheetNames.forEach(name => {
-        const newName = name === 'Sheet1' || name === 'Лист1' ? 'Обработанные данные' : `Отчёт - ${name}`;
-        XLSX.utils.book_append_sheet(combinedWb, processedWb.Sheets[name], newName);
-      });
-
-      // Generate and download
-      const combinedBuffer = XLSX.write(combinedWb, { bookType: 'xlsx', type: 'array' });
-      const blob = new Blob([combinedBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = URL.createObjectURL(blob);
-      
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Full_Report_${run.input_filename.replace(/\.[^/.]+$/, '')}.xlsx`;
-      a.click();
-      
-      URL.revokeObjectURL(url);
-      toast.success('Полный отчёт скачан');
-    } catch (err) {
-      console.error('Error creating full report:', err);
-      toast.error('Ошибка создания полного отчёта');
-    } finally {
-      setDownloadingFull(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -322,6 +254,39 @@ export default function RunDetails() {
                   <span className="text-sm">Входной файл</span>
                 </Button>
               )}
+              
+              {/* Client-side generated reports from analytics data */}
+              {run.status === 'DONE' && (
+                <>
+                  <Button
+                    variant="outline"
+                    className="h-auto py-4 flex-col gap-2"
+                    onClick={downloadReport}
+                    disabled={exportLoading}
+                  >
+                    {exportLoading ? (
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                      <FileSpreadsheet className="h-6 w-6" />
+                    )}
+                    <span className="text-sm">Отчёт ABC/XYZ</span>
+                  </Button>
+                  <Button
+                    className="h-auto py-4 flex-col gap-2 gradient-primary"
+                    onClick={downloadProductionPlan}
+                    disabled={exportLoading}
+                  >
+                    {exportLoading ? (
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                      <Download className="h-6 w-6" />
+                    )}
+                    <span className="text-sm">План производства</span>
+                  </Button>
+                </>
+              )}
+
+              {/* Legacy file downloads (for old runs with storage files) */}
               {run.processed_file_path && (
                 <Button
                   variant="outline"
@@ -329,7 +294,7 @@ export default function RunDetails() {
                   onClick={() => handleDownload('sales-processed', run.processed_file_path, 'report_processed.xlsx')}
                 >
                   <FileOutput className="h-6 w-6" />
-                  <span className="text-sm">Обработанный отчёт</span>
+                  <span className="text-sm">Старый отчёт</span>
                 </Button>
               )}
               {run.result_file_path && (
@@ -338,22 +303,8 @@ export default function RunDetails() {
                   className="h-auto py-4 flex-col gap-2"
                   onClick={() => handleDownload('sales-results', run.result_file_path, 'Production_Plan_Result.xlsx')}
                 >
-                  <Download className="h-6 w-6" />
-                  <span className="text-sm">План производства</span>
-                </Button>
-              )}
-              {run.processed_file_path && run.result_file_path && (
-                <Button
-                  className="h-auto py-4 flex-col gap-2 gradient-primary"
-                  onClick={handleDownloadFullReport}
-                  disabled={downloadingFull}
-                >
-                  {downloadingFull ? (
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                  ) : (
-                    <FileStack className="h-6 w-6" />
-                  )}
-                  <span className="text-sm">Полный отчёт</span>
+                  <FileStack className="h-6 w-6" />
+                  <span className="text-sm">Старый план</span>
                 </Button>
               )}
             </div>
