@@ -304,7 +304,32 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      aggregate_sales_data: {
+        Args: { p_run_id: string }
+        Returns: {
+          abc_group: string
+          article: string
+          avg_monthly_qty: number
+          avg_price: number
+          category: string
+          coefficient_of_variation: number
+          cumulative_share: number
+          current_stock: number
+          days_until_stockout: number
+          group_code: string
+          plan_1m: number
+          plan_3m: number
+          plan_6m: number
+          product_group: string
+          recommendation: string
+          revenue_share: number
+          sales_velocity_day: number
+          size: string
+          total_quantity: number
+          total_revenue: number
+          xyz_group: string
+        }[]
+      }
     }
     Enums: {
       run_mode: "1C_RAW" | "RAW" | "PROCESSED"
