@@ -126,6 +126,9 @@ export function useProcessing() {
         processing_time_ms: totalTimeMs,
       }).eq('id', runId);
       
+      // Force refetch of run data by invalidating cache
+      window.dispatchEvent(new CustomEvent('run-processing-complete', { detail: { runId } }));
+      
       setState({ 
         isProcessing: false, 
         progress: '', 
