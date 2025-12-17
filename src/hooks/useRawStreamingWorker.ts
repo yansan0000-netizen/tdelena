@@ -18,6 +18,7 @@ interface StreamingResult {
 
 interface RawRow {
   article: string;
+  size?: string;
   category: string;
   groupCode: string;
   stock: number;
@@ -37,41 +38,49 @@ export function useRawStreamingWorker() {
     userId: string,
     batch: RawRow[],
     chunkIndex: number
-  ): Promise<boolean> => {
+  ): Promise<string | null> => {
     try {
       const { data, error } = await supabase.functions.invoke('upload-raw-data', {
-        body: { runId, userId, rows: batch, chunkIndex }
+        body: { runId, userId, rows: batch, chunkIndex },
       });
 
       if (error) {
         console.error(`Batch ${chunkIndex} upload error:`, error);
-        return false;
+        return error.message || `Ошибка загрузки чанка ${chunkIndex}`;
       }
 
-      return data?.success === true;
+      if (data?.success !== true) {
+        return data?.error || `Ошибка загрузки чанка ${chunkIndex}`;
+      }
+
+      return null;
     } catch (err) {
       console.error(`Batch ${chunkIndex} upload exception:`, err);
-      return false;
+      return err instanceof Error ? err.message : `Ошибка загрузки чанка ${chunkIndex}`;
     }
   }, []);
 
-  const runAnalytics = useCallback(async (runId: string, userId: string): Promise<boolean> => {
+  const runAnalytics = useCallback(async (runId: string, userId: string): Promise<string | null> => {
     try {
       setProgress({ message: 'Запуск SQL-аналитики...', percent: 95 });
-      
+
       const { data, error } = await supabase.functions.invoke('run-analytics-sql', {
-        body: { runId, userId }
+        body: { runId, userId },
       });
 
       if (error) {
         console.error('Analytics error:', error);
-        return false;
+        return error.message || 'Ошибка аналитики';
       }
 
-      return data?.success === true;
+      if (data?.success !== true) {
+        return data?.error || 'Analytics processing failed';
+      }
+
+      return null;
     } catch (err) {
       console.error('Analytics exception:', err);
-      return false;
+      return err instanceof Error ? err.message : 'Ошибка аналитики';
     }
   }, []);
 
@@ -106,11 +115,10 @@ export function useRawStreamingWorker() {
             setProgress({ message, percent: percent || 0 });
             break;
 
-          case 'chunk':
-            // Upload chunk to server
-            const success = await uploadBatch(runId, userId, data, chunkIndex);
+          case 'chunk': {
+            const uploadError = await uploadBatch(runId, userId, data, chunkIndex);
 
-            if (success) {
+            if (!uploadError) {
               uploadedChunks++;
               worker.postMessage({ type: 'ack' });
             } else {
@@ -118,36 +126,37 @@ export function useRawStreamingWorker() {
               setIsProcessing(false);
               resolve({
                 success: false,
-                error: `Failed to upload chunk ${chunkIndex}`
+                error: uploadError,
               });
             }
             break;
+          }
 
-          case 'complete':
+          case 'complete': {
             metrics = e.data.metrics;
             totalChunks = metrics?.totalChunks || 0;
 
             setProgress({ message: 'Загрузка завершена. Запуск аналитики...', percent: 93 });
 
-            // Run SQL analytics
-            const analyticsSuccess = await runAnalytics(runId, userId);
+            const analyticsError = await runAnalytics(runId, userId);
 
             worker.terminate();
             setIsProcessing(false);
 
-            if (analyticsSuccess) {
+            if (!analyticsError) {
               setProgress({ message: 'Готово!', percent: 100 });
               resolve({
                 success: true,
-                metrics
+                metrics,
               });
             } else {
               resolve({
                 success: false,
-                error: 'Analytics processing failed'
+                error: analyticsError,
               });
             }
             break;
+          }
 
           case 'error':
             worker.terminate();

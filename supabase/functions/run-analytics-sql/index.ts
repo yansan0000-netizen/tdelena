@@ -35,131 +35,148 @@ serve(async (req) => {
 
   const startTime = Date.now();
 
-  try {
-    const { runId, userId }: RequestBody = await req.json();
-    
-    console.log(`[run-analytics-sql] Starting analytics for run ${runId}`);
-    
-    if (!runId || !userId) {
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: 'Missing required fields' 
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    
-    // Update run status to PROCESSING
-    await supabase
-      .from('runs')
-      .update({ status: 'PROCESSING' })
-      .eq('id', runId);
-    
-    console.log(`[run-analytics-sql] Aggregating raw data...`);
-    
-    // Step 1: Fetch ALL raw data using cursor-based pagination
-    const PAGE_SIZE = 10000;
-    let aggregatedData: any[] = [];
-    let lastId = '00000000-0000-0000-0000-000000000000';
-    let hasMore = true;
-    
-    while (hasMore) {
-      const { data: pageData, error: pageError } = await supabase
-        .from('sales_data_raw')
-        .select('id, article, size, category, product_group, stock, price, period, quantity, revenue')
-        .eq('run_id', runId)
-        .gt('id', lastId)
-        .order('id')
-        .limit(PAGE_SIZE);
-      
-      if (pageError) {
-        throw new Error(`Failed to fetch raw data: ${pageError.message}`);
+    let runId: string | null = null;
+    let userId: string | null = null;
+
+    try {
+      const body = (await req.json()) as RequestBody;
+      runId = body.runId;
+      userId = body.userId;
+
+      console.log(`[run-analytics-sql] Starting analytics for run ${runId}`);
+
+      if (!runId || !userId) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Missing required fields',
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
       }
-      
-      if (pageData && pageData.length > 0) {
-        aggregatedData = aggregatedData.concat(pageData);
+
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      // Update run status to PROCESSING
+      await supabase.from('runs').update({ status: 'PROCESSING' }).eq('id', runId);
+
+      console.log(`[run-analytics-sql] Aggregating raw data (streaming)...`);
+
+      // Step 1: Fetch ALL raw data using cursor-based pagination, but aggregate on the fly
+      const PAGE_SIZE = 10000;
+      let lastId = '00000000-0000-0000-0000-000000000000';
+      let hasMore = true;
+      let totalRawRows = 0;
+
+      // Aggregate by article + size (unique key)
+      const articleMap = new Map<
+        string,
+        {
+          article: string;
+          size: string;
+          category: string;
+          product_group: string;
+          stock: number;
+          price: number;
+          periodQuantities: Record<string, number>;
+          periodRevenues: Record<string, number>;
+          totalQuantity: number;
+          totalRevenue: number;
+        }
+      >();
+
+      const allPeriods = new Set<string>();
+
+      while (hasMore) {
+        const { data: pageData, error: pageError } = await supabase
+          .from('sales_data_raw')
+          .select('id, article, size, category, product_group, stock, price, period, quantity, revenue')
+          .eq('run_id', runId)
+          .gt('id', lastId)
+          .order('id')
+          .limit(PAGE_SIZE);
+
+        if (pageError) {
+          throw new Error(`Failed to fetch raw data: ${pageError.message}`);
+        }
+
+        if (!pageData || pageData.length === 0) {
+          break;
+        }
+
+        totalRawRows += pageData.length;
+
+        for (const row of pageData) {
+          const period = String(row.period ?? '');
+          if (!period) continue;
+          allPeriods.add(period);
+
+          const article = String(row.article ?? '').trim();
+          if (!article) continue;
+
+          const size = String(row.size ?? '').trim();
+          const uniqueKey = `${article}|||${size}`;
+
+          if (!articleMap.has(uniqueKey)) {
+            articleMap.set(uniqueKey, {
+              article,
+              size,
+              category: String(row.category ?? 'Без категории'),
+              product_group: String(row.product_group ?? 'другая'),
+              stock: Number(row.stock ?? 0),
+              price: Number(row.price ?? 0),
+              periodQuantities: {},
+              periodRevenues: {},
+              totalQuantity: 0,
+              totalRevenue: 0,
+            });
+          }
+
+          const item = articleMap.get(uniqueKey)!;
+
+          const stock = Number(row.stock ?? 0);
+          const price = Number(row.price ?? 0);
+          if (stock > item.stock) item.stock = stock;
+          if (price > item.price) item.price = price;
+
+          if (!item.periodQuantities[period]) {
+            item.periodQuantities[period] = 0;
+            item.periodRevenues[period] = 0;
+          }
+
+          const qty = Number(row.quantity ?? 0);
+          const rev = Number(row.revenue ?? 0);
+          item.periodQuantities[period] += qty;
+          item.periodRevenues[period] += rev;
+          item.totalQuantity += qty;
+          item.totalRevenue += rev;
+        }
+
         lastId = pageData[pageData.length - 1].id;
-        console.log(`[run-analytics-sql] Fetched ${aggregatedData.length} records...`);
-        
+        console.log(`[run-analytics-sql] Fetched ${totalRawRows} records...`);
+
         if (pageData.length < PAGE_SIZE) {
           hasMore = false;
         }
-      } else {
-        hasMore = false;
       }
-    }
-    
-    if (aggregatedData.length === 0) {
-      throw new Error('No data found for this run');
-    }
-    
-    console.log(`[run-analytics-sql] Processing ${aggregatedData.length} raw records...`);
-    
-    // Aggregate by article + size (unique key)
-    const articleMap = new Map<string, {
-      article: string;
-      size: string;
-      category: string;
-      product_group: string;
-      stock: number;
-      price: number;
-      periodQuantities: Record<string, number>;
-      periodRevenues: Record<string, number>;
-      totalQuantity: number;
-      totalRevenue: number;
-    }>();
-    
-    const allPeriods = new Set<string>();
-    
-    for (const row of aggregatedData) {
-      allPeriods.add(row.period);
-      
-      // Create unique key from article + size
-      const uniqueKey = `${row.article}|||${row.size || ''}`;
-      
-      if (!articleMap.has(uniqueKey)) {
-        articleMap.set(uniqueKey, {
-          article: row.article,
-          size: row.size || '',
-          category: row.category || 'Без категории',
-          product_group: row.product_group || 'другая',
-          stock: row.stock || 0,
-          price: row.price || 0,
-          periodQuantities: {},
-          periodRevenues: {},
-          totalQuantity: 0,
-          totalRevenue: 0,
-        });
+
+      if (totalRawRows === 0 || articleMap.size === 0) {
+        throw new Error('No data found for this run');
       }
-      
-      const item = articleMap.get(uniqueKey)!;
-      
-      // Update stock and price (take max)
-      if (row.stock > item.stock) item.stock = row.stock;
-      if (row.price > item.price) item.price = row.price;
-      
-      // Aggregate period data
-      if (!item.periodQuantities[row.period]) {
-        item.periodQuantities[row.period] = 0;
-        item.periodRevenues[row.period] = 0;
-      }
-      item.periodQuantities[row.period] += row.quantity || 0;
-      item.periodRevenues[row.period] += row.revenue || 0;
-      item.totalQuantity += row.quantity || 0;
-      item.totalRevenue += row.revenue || 0;
-    }
-    
-    const articles = Array.from(articleMap.values());
-    const periods = Array.from(allPeriods).sort();
-    const periodCount = periods.length;
-    
-    console.log(`[run-analytics-sql] ${articles.length} unique articles, ${periodCount} periods`);
-    
+
+      const articles = Array.from(articleMap.values());
+      const periods = Array.from(allPeriods).sort();
+      const periodCount = periods.length;
+
+      console.log(
+        `[run-analytics-sql] ${articles.length} unique article+size, ${periodCount} periods (raw rows: ${totalRawRows})`
+      );
+
     // Step 2: Calculate total revenue for ABC classification
     const totalRevenue = articles.reduce((sum, a) => sum + a.totalRevenue, 0);
     
@@ -244,22 +261,33 @@ serve(async (req) => {
       };
     });
     
+    console.log(`[run-analytics-sql] Preparing analytics table...`);
+
+    // Make the function idempotent: clear previous analytics for this run
+    const { error: clearError } = await supabase.from('sales_analytics').delete().eq('run_id', runId);
+    if (clearError) {
+      throw new Error(`Failed to clear previous analytics: ${clearError.message}`);
+    }
+
     console.log(`[run-analytics-sql] Inserting ${analyticsData.length} analytics records...`);
-    
-    // Insert analytics in batches (without periodQuantities)
+
+    // Upsert analytics in batches (without periodQuantities)
     const BATCH_SIZE = 500;
     for (let i = 0; i < analyticsData.length; i += BATCH_SIZE) {
-      const batch = analyticsData.slice(i, i + BATCH_SIZE).map(({ periodQuantities, ...rest }) => rest);
-      const { error: insertError } = await supabase
+      const batch = analyticsData
+        .slice(i, i + BATCH_SIZE)
+        .map(({ periodQuantities, ...rest }) => rest);
+
+      const { error: upsertError } = await supabase
         .from('sales_analytics')
-        .insert(batch);
-      
-      if (insertError) {
-        console.error(`[run-analytics-sql] Insert error at batch ${i}:`, insertError);
-        throw new Error(`Failed to insert analytics: ${insertError.message}`);
+        .upsert(batch, { onConflict: 'run_id,article,size' });
+
+      if (upsertError) {
+        console.error(`[run-analytics-sql] Upsert error at batch ${i}:`, upsertError);
+        throw new Error(`Failed to insert analytics: ${upsertError.message}`);
       }
     }
-    
+
     console.log(`[run-analytics-sql] Generating XLSX reports...`);
     
     // Step 4: Generate XLSX reports
@@ -453,27 +481,26 @@ serve(async (req) => {
     
   } catch (error) {
     console.error('[run-analytics-sql] Error:', error);
-    
-    // Try to update run status to ERROR
+
+    // Try to update run status to ERROR with the real reason
     try {
-      const { runId } = await (await fetch(req.clone())).json();
       if (runId) {
         const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
         const supabase = createClient(supabaseUrl, supabaseKey);
-        
+
         await supabase
           .from('runs')
-          .update({ 
-            status: 'ERROR', 
-            error_message: error instanceof Error ? error.message : 'Unknown error' 
+          .update({
+            status: 'ERROR',
+            error_message: error instanceof Error ? error.message : 'Unknown error',
           })
           .eq('id', runId);
       }
     } catch (e) {
       console.error('[run-analytics-sql] Failed to update error status:', e);
     }
-    
+
     return new Response(JSON.stringify({ 
       success: false, 
       error: error instanceof Error ? error.message : 'Unknown error' 
