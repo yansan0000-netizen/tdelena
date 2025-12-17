@@ -91,6 +91,22 @@ export default function RunDetails() {
     return () => clearInterval(interval);
   }, [run?.status, id, getRun]);
 
+  // Listen for processing complete event (immediate refresh)
+  useEffect(() => {
+    const handleProcessingComplete = async (e: CustomEvent<{ runId: string }>) => {
+      if (e.detail.runId === id) {
+        const data = await getRun(id);
+        if (data) {
+          setRun(data);
+          toast.success('Обработка завершена!');
+        }
+      }
+    };
+
+    window.addEventListener('run-processing-complete', handleProcessingComplete as EventListener);
+    return () => window.removeEventListener('run-processing-complete', handleProcessingComplete as EventListener);
+  }, [id, getRun]);
+
   const handleDownload = async (bucket: string, path: string | null, filename: string) => {
     if (!path) return;
     
