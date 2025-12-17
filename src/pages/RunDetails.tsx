@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useRuns } from '@/hooks/useRuns';
 import { useAnalyticsExport } from '@/hooks/useAnalyticsExport';
+import { useDataQuality } from '@/hooks/useDataQuality';
 import { toast } from 'sonner';
 import { Run, LogEntry } from '@/lib/types';
 import {
@@ -25,7 +26,11 @@ import {
   Clock,
   AlertCircle,
   CheckCircle,
-  Info
+  Info,
+  Database,
+  Layers,
+  Hash,
+  Package
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -47,7 +52,8 @@ const logLevelConfig: Record<string, { icon: React.ElementType; className: strin
 export default function RunDetails() {
   const { id } = useParams<{ id: string }>();
   const { getRun, getDownloadUrl } = useRuns();
-  const { loading: exportLoading, downloadReport, downloadProductionPlan } = useAnalyticsExport(id);
+  const { loading: exportLoading, progress, downloadReport, downloadProductionPlan } = useAnalyticsExport(id);
+  const { stats: qualityStats } = useDataQuality(id);
   const [run, setRun] = useState<Run | null>(null);
   const [loading, setLoading] = useState(true);
   const [logFilter, setLogFilter] = useState<string | null>(null);
@@ -236,13 +242,79 @@ export default function RunDetails() {
           </Card>
         </div>
 
+        {/* Data Quality - контроль качества */}
+        {run.status === 'DONE' && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Database className="h-4 w-4" />
+                Контроль качества данных
+              </CardTitle>
+              <CardDescription>Статистика по загруженным и обработанным данным</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {qualityStats.loading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="text-center p-3 bg-muted rounded-lg">
+                    <Layers className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+                    <p className="text-2xl font-bold">{qualityStats.rawRows.toLocaleString('ru-RU')}</p>
+                    <p className="text-xs text-muted-foreground">Сырых строк</p>
+                  </div>
+                  <div className="text-center p-3 bg-muted rounded-lg">
+                    <Hash className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+                    <p className="text-2xl font-bold">{qualityStats.uniqueArticles.toLocaleString('ru-RU')}</p>
+                    <p className="text-xs text-muted-foreground">Уник. артикулов</p>
+                  </div>
+                  <div className="text-center p-3 bg-muted rounded-lg">
+                    <Package className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+                    <p className="text-2xl font-bold">{qualityStats.analyticsRows.toLocaleString('ru-RU')}</p>
+                    <p className="text-xs text-muted-foreground">Артикул+размер</p>
+                  </div>
+                  <div className="text-center p-3 bg-muted rounded-lg">
+                    <Calendar className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+                    <p className="text-2xl font-bold">{qualityStats.periodsCount}</p>
+                    <p className="text-xs text-muted-foreground">Периодов</p>
+                  </div>
+                  <div className="text-center p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                    <CheckCircle className="h-5 w-5 mx-auto mb-1 text-primary" />
+                    <p className="text-2xl font-bold text-primary">
+                      {qualityStats.rawRows > 0 
+                        ? Math.round((qualityStats.analyticsRows / qualityStats.rawRows) * 100) 
+                        : 0}%
+                    </p>
+                    <p className="text-xs text-muted-foreground">Сжатие данных</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Files */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Файлы</CardTitle>
             <CardDescription>Скачайте входные и выходные файлы</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {/* Export progress indicator */}
+            {exportLoading && progress.total !== null && (
+              <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Загрузка данных для экспорта...</span>
+                  <span className="font-medium">
+                    {progress.loaded.toLocaleString('ru-RU')} / {progress.total.toLocaleString('ru-RU')} строк
+                  </span>
+                </div>
+                <Progress value={progress.percent} className="h-2" />
+                <p className="text-xs text-muted-foreground text-center">{progress.percent}%</p>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {run.input_file_path && (
                 <Button
@@ -260,16 +332,23 @@ export default function RunDetails() {
                 <>
                   <Button
                     variant="outline"
-                    className="h-auto py-4 flex-col gap-2"
+                    className="h-auto py-4 flex-col gap-2 relative overflow-hidden"
                     onClick={downloadReport}
                     disabled={exportLoading}
                   >
                     {exportLoading ? (
-                      <Loader2 className="h-6 w-6 animate-spin" />
+                      <>
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                        <span className="text-sm">
+                          {progress.percent > 0 ? `${progress.percent}%` : 'Загрузка...'}
+                        </span>
+                      </>
                     ) : (
-                      <FileSpreadsheet className="h-6 w-6" />
+                      <>
+                        <FileSpreadsheet className="h-6 w-6" />
+                        <span className="text-sm">Отчёт ABC/XYZ</span>
+                      </>
                     )}
-                    <span className="text-sm">Отчёт ABC/XYZ</span>
                   </Button>
                   <Button
                     className="h-auto py-4 flex-col gap-2 gradient-primary"
@@ -277,11 +356,18 @@ export default function RunDetails() {
                     disabled={exportLoading}
                   >
                     {exportLoading ? (
-                      <Loader2 className="h-6 w-6 animate-spin" />
+                      <>
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                        <span className="text-sm">
+                          {progress.percent > 0 ? `${progress.percent}%` : 'Загрузка...'}
+                        </span>
+                      </>
                     ) : (
-                      <Download className="h-6 w-6" />
+                      <>
+                        <Download className="h-6 w-6" />
+                        <span className="text-sm">План производства</span>
+                      </>
                     )}
-                    <span className="text-sm">План производства</span>
                   </Button>
                 </>
               )}

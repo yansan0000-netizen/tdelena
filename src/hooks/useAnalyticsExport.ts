@@ -10,8 +10,15 @@ import {
 
 const PAGE_SIZE = 1000;
 
+export interface ExportProgress {
+  loaded: number;
+  total: number | null;
+  percent: number;
+}
+
 export function useAnalyticsExport(runId: string | undefined) {
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<ExportProgress>({ loaded: 0, total: null, percent: 0 });
   const [analyticsData, setAnalyticsData] = useState<AnalyticsRow[] | null>(null);
 
   const fetchAnalyticsData = useCallback(async (): Promise<AnalyticsRow[] | null> => {
@@ -23,6 +30,8 @@ export function useAnalyticsExport(runId: string | undefined) {
     const all: AnalyticsRow[] = [];
     let from = 0;
     let totalCount: number | null = null;
+
+    setProgress({ loaded: 0, total: null, percent: 0 });
 
     while (true) {
       const { data, error, count } = await supabase
@@ -46,6 +55,10 @@ export function useAnalyticsExport(runId: string | undefined) {
       const page = (data ?? []) as AnalyticsRow[];
       all.push(...page);
 
+      // Update progress
+      const percent = totalCount ? Math.min(100, Math.round((all.length / totalCount) * 100)) : 0;
+      setProgress({ loaded: all.length, total: totalCount, percent });
+
       // End conditions
       if (page.length < PAGE_SIZE) break;
       if (totalCount !== null && all.length >= totalCount) break;
@@ -54,11 +67,11 @@ export function useAnalyticsExport(runId: string | undefined) {
     }
 
     if (totalCount !== null && all.length !== totalCount) {
-      // Helps diagnose unexpected truncation / mid-fetch issues
       console.warn(`Analytics rows fetched mismatch: got ${all.length}, expected ${totalCount}`);
     }
 
     setAnalyticsData(all);
+    setProgress({ loaded: all.length, total: totalCount, percent: 100 });
     return all;
   }, [runId, analyticsData]);
 
@@ -104,9 +117,9 @@ export function useAnalyticsExport(runId: string | undefined) {
 
   return {
     loading,
+    progress,
     downloadReport,
     downloadProductionPlan,
     hasData: !!analyticsData && analyticsData.length > 0,
   };
 }
-
