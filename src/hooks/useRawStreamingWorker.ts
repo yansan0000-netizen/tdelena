@@ -1,6 +1,9 @@
 import { useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
+const MAX_CONCURRENT_UPLOADS = 4;
+const RETRY_ATTEMPTS = 2;
+
 interface StreamingProgress {
   message: string;
   percent: number;
@@ -28,36 +31,53 @@ interface RawRow {
   revenue: number;
 }
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export function useRawStreamingWorker() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState<StreamingProgress>({ message: '', percent: 0 });
   const workerRef = useRef<Worker | null>(null);
 
-  const uploadBatch = useCallback(async (
+  const uploadBatchWithRetry = useCallback(async (
     runId: string,
     userId: string,
     batch: RawRow[],
     chunkIndex: number
   ): Promise<string | null> => {
-    try {
-      const { data, error } = await supabase.functions.invoke('upload-raw-data', {
-        body: { runId, userId, rows: batch, chunkIndex },
-      });
+    for (let attempt = 0; attempt <= RETRY_ATTEMPTS; attempt++) {
+      try {
+        const { data, error } = await supabase.functions.invoke('upload-raw-data', {
+          body: { runId, userId, rows: batch, chunkIndex },
+        });
 
-      if (error) {
-        console.error(`Batch ${chunkIndex} upload error:`, error);
-        return error.message || `Ошибка загрузки чанка ${chunkIndex}`;
+        if (error) {
+          console.error(`Batch ${chunkIndex} upload error (attempt ${attempt + 1}):`, error);
+          if (attempt < RETRY_ATTEMPTS) {
+            await sleep(500 * (attempt + 1));
+            continue;
+          }
+          return error.message || `Ошибка загрузки чанка ${chunkIndex}`;
+        }
+
+        if (data?.success !== true) {
+          if (attempt < RETRY_ATTEMPTS) {
+            await sleep(500 * (attempt + 1));
+            continue;
+          }
+          return data?.error || `Ошибка загрузки чанка ${chunkIndex}`;
+        }
+
+        return null; // Success
+      } catch (err) {
+        console.error(`Batch ${chunkIndex} upload exception (attempt ${attempt + 1}):`, err);
+        if (attempt < RETRY_ATTEMPTS) {
+          await sleep(500 * (attempt + 1));
+          continue;
+        }
+        return err instanceof Error ? err.message : `Ошибка загрузки чанка ${chunkIndex}`;
       }
-
-      if (data?.success !== true) {
-        return data?.error || `Ошибка загрузки чанка ${chunkIndex}`;
-      }
-
-      return null;
-    } catch (err) {
-      console.error(`Batch ${chunkIndex} upload exception:`, err);
-      return err instanceof Error ? err.message : `Ошибка загрузки чанка ${chunkIndex}`;
     }
+    return `Ошибка загрузки чанка ${chunkIndex} после ${RETRY_ATTEMPTS + 1} попыток`;
   }, []);
 
   const runAnalytics = useCallback(async (runId: string, userId: string): Promise<string | null> => {
@@ -103,62 +123,111 @@ export function useRawStreamingWorker() {
       const worker = new Worker(`/excel-worker-raw.js?v=${Date.now()}`);
       workerRef.current = worker;
 
-      let totalChunks = 0;
-      let uploadedChunks = 0;
       let metrics: StreamingResult['metrics'];
+      let hasError = false;
+      
+      // Parallel upload queue management
+      const uploadQueue: Promise<{ chunkIndex: number; error: string | null }>[] = [];
+      let completedChunks = 0;
+      let totalExpectedChunks = 0;
+      let workerComplete = false;
+
+      const checkAllComplete = async () => {
+        if (workerComplete && uploadQueue.length === 0 && !hasError) {
+          setProgress({ message: 'Загрузка завершена. Запуск аналитики...', percent: 93 });
+
+          const analyticsError = await runAnalytics(runId, userId);
+
+          worker.terminate();
+          setIsProcessing(false);
+
+          if (!analyticsError) {
+            setProgress({ message: 'Готово!', percent: 100 });
+            resolve({
+              success: true,
+              metrics,
+            });
+          } else {
+            resolve({
+              success: false,
+              error: analyticsError,
+            });
+          }
+        }
+      };
+
+      const processUploadResult = async (result: { chunkIndex: number; error: string | null }) => {
+        if (result.error) {
+          hasError = true;
+          worker.terminate();
+          setIsProcessing(false);
+          resolve({
+            success: false,
+            error: result.error,
+          });
+          return;
+        }
+        
+        completedChunks++;
+        await checkAllComplete();
+      };
 
       worker.onmessage = async (e) => {
         const { type, data, message, percent, chunkIndex, error: workerError } = e.data;
 
         switch (type) {
           case 'progress':
-            setProgress({ message, percent: percent || 0 });
+            if (!hasError) {
+              setProgress({ message, percent: percent || 0 });
+            }
             break;
 
           case 'chunk': {
-            const uploadError = await uploadBatch(runId, userId, data, chunkIndex);
-
-            if (!uploadError) {
-              uploadedChunks++;
-              worker.postMessage({ type: 'ack' });
-            } else {
-              worker.terminate();
-              setIsProcessing(false);
-              resolve({
-                success: false,
-                error: uploadError,
-              });
+            if (hasError) break;
+            
+            totalExpectedChunks = chunkIndex + 1;
+            
+            // Create upload promise
+            const uploadPromise = uploadBatchWithRetry(runId, userId, data, chunkIndex)
+              .then(error => ({ chunkIndex, error }));
+            
+            uploadQueue.push(uploadPromise);
+            
+            // Process completed uploads while limiting concurrency
+            if (uploadQueue.length >= MAX_CONCURRENT_UPLOADS) {
+              const result = await Promise.race(uploadQueue);
+              const index = uploadQueue.findIndex(p => p === uploadPromise);
+              if (index === -1) {
+                // Remove the completed promise from queue
+                uploadQueue.splice(0, 1);
+              }
+              await processUploadResult(result);
             }
             break;
           }
 
           case 'complete': {
             metrics = e.data.metrics;
-            totalChunks = metrics?.totalChunks || 0;
-
-            setProgress({ message: 'Загрузка завершена. Запуск аналитики...', percent: 93 });
-
-            const analyticsError = await runAnalytics(runId, userId);
-
-            worker.terminate();
-            setIsProcessing(false);
-
-            if (!analyticsError) {
-              setProgress({ message: 'Готово!', percent: 100 });
-              resolve({
-                success: true,
-                metrics,
-              });
+            workerComplete = true;
+            
+            // Wait for all pending uploads to complete
+            if (uploadQueue.length > 0) {
+              setProgress({ message: `Завершение загрузки (${uploadQueue.length} чанков)...`, percent: 90 });
+              const results = await Promise.all(uploadQueue);
+              uploadQueue.length = 0;
+              
+              for (const result of results) {
+                if (hasError) break;
+                await processUploadResult(result);
+              }
             } else {
-              resolve({
-                success: false,
-                error: analyticsError,
-              });
+              await checkAllComplete();
             }
             break;
           }
 
           case 'error':
+            hasError = true;
             worker.terminate();
             setIsProcessing(false);
             resolve({
@@ -171,6 +240,7 @@ export function useRawStreamingWorker() {
 
       worker.onerror = (error) => {
         console.error('Worker error:', error);
+        hasError = true;
         worker.terminate();
         setIsProcessing(false);
         resolve({
@@ -202,7 +272,7 @@ export function useRawStreamingWorker() {
       };
       reader.readAsArrayBuffer(file);
     });
-  }, [uploadBatch, runAnalytics]);
+  }, [uploadBatchWithRetry, runAnalytics]);
 
   const cancelProcessing = useCallback(() => {
     if (workerRef.current) {

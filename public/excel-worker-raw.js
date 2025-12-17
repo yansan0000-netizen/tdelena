@@ -8,7 +8,7 @@
  * Row 3: Technical field names
  */
 
-const CHUNK_SIZE = 3000; // Rows per chunk to send to server
+const CHUNK_SIZE = 5000; // Rows per chunk to send to server (increased for faster uploads)
 
 const RUSSIAN_MONTHS = {
   'январь': 1, 'февраль': 2, 'март': 3, 'апрель': 4,
@@ -736,7 +736,7 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
 
     processedRows++;
 
-    // Send chunk when full
+    // Send chunk when full (non-blocking - main thread handles parallelism)
     if (chunk.length >= CHUNK_SIZE) {
       const percent = 20 + Math.round((processedRows / totalRows) * 70);
       sendProgress(`Отправка данных... (${processedRows}/${totalRows} строк)`, percent);
@@ -749,7 +749,7 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
         processedRows
       });
 
-      await waitForAck();
+      // Don't wait for ACK - continue immediately for parallel uploads
       chunk = [];
       chunkIndex++;
     }
@@ -761,7 +761,7 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
     }
   }
 
-  // Send remaining chunk
+  // Send remaining chunk (non-blocking)
   if (chunk.length > 0) {
     sendProgress('Отправка последнего чанка...', 92);
     self.postMessage({
@@ -772,7 +772,6 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
       processedRows,
       isLast: true
     });
-    await waitForAck();
     chunkIndex++;
   }
 
