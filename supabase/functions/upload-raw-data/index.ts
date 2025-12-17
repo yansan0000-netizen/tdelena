@@ -66,23 +66,32 @@ serve(async (req) => {
       revenue: r.revenue || 0,
     }));
     
-    // Batch insert
-    const { error } = await supabase
-      .from('sales_data_raw')
-      .insert(insertData);
+    // Micro-batch insert to avoid statement timeouts
+    // Split large chunks into smaller 1000-row batches
+    const MICRO_BATCH_SIZE = 1000;
+    let insertedCount = 0;
     
-    if (error) {
-      console.error(`[upload-raw-data] Chunk ${chunkIndex}: Insert error:`, error);
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: error.message 
-      }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    for (let i = 0; i < insertData.length; i += MICRO_BATCH_SIZE) {
+      const batch = insertData.slice(i, i + MICRO_BATCH_SIZE);
+      const { error } = await supabase
+        .from('sales_data_raw')
+        .insert(batch);
+      
+      if (error) {
+        console.error(`[upload-raw-data] Chunk ${chunkIndex}, micro-batch ${Math.floor(i / MICRO_BATCH_SIZE)}: Insert error:`, error);
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: error.message,
+          insertedBeforeError: insertedCount
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      insertedCount += batch.length;
     }
     
-    console.log(`[upload-raw-data] Chunk ${chunkIndex}: Successfully inserted ${rows.length} rows`);
+    console.log(`[upload-raw-data] Chunk ${chunkIndex}: Successfully inserted ${insertedCount} rows in ${Math.ceil(rows.length / MICRO_BATCH_SIZE)} micro-batches`);
     
     return new Response(JSON.stringify({ 
       success: true, 
