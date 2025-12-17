@@ -67,10 +67,28 @@ serve(async (req) => {
 
       console.log(`[run-analytics-sql] Aggregating raw data (streaming)...`);
 
-      // Step 1: Fetch ALL raw data using cursor-based pagination, but aggregate on the fly
-      const PAGE_SIZE = 10000;
-      let lastId = '00000000-0000-0000-0000-000000000000';
-      let hasMore = true;
+      // Step 1: Fetch ALL raw data, but aggregate on the fly.
+      // IMPORTANT: We page by chunk_index (which is sequential) to avoid heavy ORDER BY scans on 800k+ rows.
+      const totalStart = Date.now();
+      const SELECT_FIELDS =
+        'article, size, category, product_group, stock, price, period, quantity, revenue';
+
+      const { data: maxChunkData, error: maxChunkError } = await supabase
+        .from('sales_data_raw')
+        .select('chunk_index')
+        .eq('run_id', runId)
+        .order('chunk_index', { ascending: false })
+        .limit(1);
+
+      if (maxChunkError) {
+        throw new Error(`Failed to fetch max chunk index: ${maxChunkError.message}`);
+      }
+
+      const maxChunkIndex = Number(maxChunkData?.[0]?.chunk_index ?? -1);
+      if (!Number.isFinite(maxChunkIndex) || maxChunkIndex < 0) {
+        throw new Error('No raw data found for this run');
+      }
+
       let totalRawRows = 0;
 
       // Aggregate by article + size (unique key)
@@ -92,44 +110,42 @@ serve(async (req) => {
 
       const allPeriods = new Set<string>();
 
-      while (hasMore) {
-        const { data: pageData, error: pageError } = await supabase
+      for (let chunkIndex = 0; chunkIndex <= maxChunkIndex; chunkIndex++) {
+        const { data: chunkRows, error: chunkError } = await supabase
           .from('sales_data_raw')
-          .select('id, article, size, category, product_group, stock, price, period, quantity, revenue')
+          .select(SELECT_FIELDS)
           .eq('run_id', runId)
-          .gt('id', lastId)
-          .order('id')
-          .limit(PAGE_SIZE);
+          .eq('chunk_index', chunkIndex);
 
-        if (pageError) {
-          throw new Error(`Failed to fetch raw data: ${pageError.message}`);
+        if (chunkError) {
+          throw new Error(`Failed to fetch raw data chunk ${chunkIndex}: ${chunkError.message}`);
         }
 
-        if (!pageData || pageData.length === 0) {
-          break;
+        if (!chunkRows || chunkRows.length === 0) {
+          continue;
         }
 
-        totalRawRows += pageData.length;
+        totalRawRows += chunkRows.length;
 
-        for (const row of pageData) {
-          const period = String(row.period ?? '');
+        for (const row of chunkRows) {
+          const period = String((row as any).period ?? '');
           if (!period) continue;
           allPeriods.add(period);
 
-          const article = String(row.article ?? '').trim();
+          const article = String((row as any).article ?? '').trim();
           if (!article) continue;
 
-          const size = String(row.size ?? '').trim();
+          const size = String((row as any).size ?? '').trim();
           const uniqueKey = `${article}|||${size}`;
 
           if (!articleMap.has(uniqueKey)) {
             articleMap.set(uniqueKey, {
               article,
               size,
-              category: String(row.category ?? 'Без категории'),
-              product_group: String(row.product_group ?? 'другая'),
-              stock: Number(row.stock ?? 0),
-              price: Number(row.price ?? 0),
+              category: String((row as any).category ?? 'Без категории'),
+              product_group: String((row as any).product_group ?? 'другая'),
+              stock: Number((row as any).stock ?? 0),
+              price: Number((row as any).price ?? 0),
               periodQuantities: {},
               periodRevenues: {},
               totalQuantity: 0,
@@ -139,8 +155,8 @@ serve(async (req) => {
 
           const item = articleMap.get(uniqueKey)!;
 
-          const stock = Number(row.stock ?? 0);
-          const price = Number(row.price ?? 0);
+          const stock = Number((row as any).stock ?? 0);
+          const price = Number((row as any).price ?? 0);
           if (stock > item.stock) item.stock = stock;
           if (price > item.price) item.price = price;
 
@@ -149,21 +165,25 @@ serve(async (req) => {
             item.periodRevenues[period] = 0;
           }
 
-          const qty = Number(row.quantity ?? 0);
-          const rev = Number(row.revenue ?? 0);
+          const qty = Number((row as any).quantity ?? 0);
+          const rev = Number((row as any).revenue ?? 0);
           item.periodQuantities[period] += qty;
           item.periodRevenues[period] += rev;
           item.totalQuantity += qty;
           item.totalRevenue += rev;
         }
 
-        lastId = pageData[pageData.length - 1].id;
-        console.log(`[run-analytics-sql] Fetched ${totalRawRows} records...`);
-
-        if (pageData.length < PAGE_SIZE) {
-          hasMore = false;
+        if (chunkIndex % 10 === 0) {
+          console.log(
+            `[run-analytics-sql] Aggregated chunk ${chunkIndex}/${maxChunkIndex} (rows so far: ${totalRawRows})`
+          );
         }
       }
+
+      const totalMs = Date.now() - totalStart;
+      console.log(
+        `[run-analytics-sql] Aggregation done: ${totalRawRows} raw rows in ${totalMs}ms (unique article+size: ${articleMap.size})`
+      );
 
       if (totalRawRows === 0 || articleMap.size === 0) {
         throw new Error('No data found for this run');
