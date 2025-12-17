@@ -22,7 +22,8 @@ export function useAnalyticsExport(runId: string | undefined) {
       .from('sales_analytics')
       .select('*')
       .eq('run_id', runId)
-      .order('total_revenue', { ascending: false });
+      .order('total_revenue', { ascending: false })
+      .limit(100000); // Override default 1000 row limit
 
     if (error) {
       console.error('Error fetching analytics:', error);
