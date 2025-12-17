@@ -75,7 +75,7 @@ export function useProcessing() {
     mode: RunMode, 
     file: File,
     categoryFilter?: string
-  ): Promise<{ success: boolean; rowsProcessed?: number }> => {
+  ): Promise<{ success: boolean; rowsProcessed?: number; uniqueArticles?: number; periodsFound?: number }> => {
     if (!user) return { success: false };
 
     // Track total processing time from start
@@ -126,6 +126,13 @@ export function useProcessing() {
         processing_time_ms: totalTimeMs,
       }).eq('id', runId);
       
+      // Fetch actual metrics from runs table (set by run-analytics-sql)
+      const { data: runData } = await supabase
+        .from('runs')
+        .select('rows_processed, periods_found')
+        .eq('id', runId)
+        .single();
+      
       // Force refetch of run data by invalidating cache
       window.dispatchEvent(new CustomEvent('run-processing-complete', { detail: { runId } }));
       
@@ -139,7 +146,9 @@ export function useProcessing() {
       currentRunIdRef.current = null;
       return { 
         success: true, 
-        rowsProcessed: result.metrics?.totalRows,
+        rowsProcessed: runData?.rows_processed || result.metrics?.totalRows,
+        uniqueArticles: runData?.rows_processed,
+        periodsFound: runData?.periods_found || result.metrics?.periods?.length,
       };
 
     } catch (error) {

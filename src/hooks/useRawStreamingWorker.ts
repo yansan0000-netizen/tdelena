@@ -14,9 +14,17 @@ interface StreamingResult {
   success: boolean;
   error?: string;
   metrics?: {
+    totalExcelRows: number;
     totalRows: number;
     totalChunks: number;
     periods: string[];
+    skipped?: {
+      total: number;
+      emptyRow: number;
+      emptyArticle: number;
+      itogo: number;
+      byCategory: number;
+    };
   };
 }
 

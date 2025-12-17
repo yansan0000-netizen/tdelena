@@ -675,17 +675,29 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
   let processedRows = 0;
   let chunk = [];
   let chunkIndex = 0;
+  
+  // Detailed skip statistics
   let skippedByCategory = 0;
-
   let skippedItogo = 0;
+  let skippedEmptyArticle = 0;
+  let skippedEmptyRow = 0;
+  
+  // Total rows available for processing (excluding headers)
+  const totalExcelRows = data.length - dataStartRowIndex;
 
   // Process data rows
   for (let rowIdx = dataStartRowIndex; rowIdx < data.length && processedRows < totalRows; rowIdx++) {
     const row = data[rowIdx];
-    if (!row) continue;
+    if (!row || row.length === 0) {
+      skippedEmptyRow++;
+      continue;
+    }
 
     const article = cellToString(row[articleCol]);
-    if (!article) continue;
+    if (!article) {
+      skippedEmptyArticle++;
+      continue;
+    }
 
     // Skip rows containing "Итого" (case insensitive)
     const rowHasItogo = row.some(cell => {
@@ -777,8 +789,14 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
 
   sendProgress('Обработка завершена', 100);
 
+  const totalSkipped = skippedEmptyRow + skippedEmptyArticle + skippedItogo + skippedByCategory;
+  
   console.log('[raw-worker] Processing complete', {
+    totalExcelRows,
     processedRows,
+    totalSkipped,
+    skippedEmptyRow,
+    skippedEmptyArticle,
     skippedItogo,
     skippedByCategory,
     totalChunks: chunkIndex,
@@ -789,11 +807,17 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
   self.postMessage({
     type: 'complete',
     metrics: {
+      totalExcelRows,
       totalRows: processedRows,
       totalChunks: chunkIndex,
       periods,
-      skippedByCategory,
-      skippedItogo,
+      skipped: {
+        total: totalSkipped,
+        emptyRow: skippedEmptyRow,
+        emptyArticle: skippedEmptyArticle,
+        itogo: skippedItogo,
+        byCategory: skippedByCategory
+      },
       truncated: !!maxDataRows && totalRowsAvailable > totalRows
     }
   });
