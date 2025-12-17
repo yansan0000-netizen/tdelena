@@ -304,32 +304,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      aggregate_sales_data: {
+      analytics_phase1_aggregate: {
         Args: { p_run_id: string }
-        Returns: {
-          abc_group: string
-          article: string
-          avg_monthly_qty: number
-          avg_price: number
-          category: string
-          coefficient_of_variation: number
-          cumulative_share: number
-          current_stock: number
-          days_until_stockout: number
-          group_code: string
-          plan_1m: number
-          plan_3m: number
-          plan_6m: number
-          product_group: string
-          recommendation: string
-          revenue_share: number
-          sales_velocity_day: number
-          size: string
-          total_quantity: number
-          total_revenue: number
-          xyz_group: string
-        }[]
+        Returns: number
       }
+      analytics_phase2_xyz: { Args: { p_run_id: string }; Returns: undefined }
+      analytics_phase3_abc: { Args: { p_run_id: string }; Returns: undefined }
+      analytics_phase4_plans: { Args: { p_run_id: string }; Returns: undefined }
     }
     Enums: {
       run_mode: "1C_RAW" | "RAW" | "PROCESSED"
