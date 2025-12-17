@@ -2,7 +2,8 @@ import { useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 const MAX_CONCURRENT_UPLOADS = 2;
-const RETRY_ATTEMPTS = 2;
+const RETRY_ATTEMPTS = 4;
+const BOOT_ERROR_EXTRA_DELAY = 2000;
 
 interface StreamingProgress {
   message: string;
@@ -51,17 +52,28 @@ export function useRawStreamingWorker() {
         });
 
         if (error) {
+          const errorMsg = error.message || '';
           console.error(`Batch ${chunkIndex} upload error (attempt ${attempt + 1}):`, error);
+          
           if (attempt < RETRY_ATTEMPTS) {
-            await sleep(500 * (attempt + 1));
+            // Extra delay for BOOT_ERROR (cold start issues)
+            if (errorMsg.includes('BOOT_ERROR') || errorMsg.includes('503')) {
+              console.log(`BOOT_ERROR detected for chunk ${chunkIndex}, waiting extra ${BOOT_ERROR_EXTRA_DELAY}ms...`);
+              await sleep(BOOT_ERROR_EXTRA_DELAY);
+            }
+            // Exponential backoff: 1s, 2s, 4s, 8s
+            const delay = 1000 * Math.pow(2, attempt);
+            console.log(`Retrying chunk ${chunkIndex} in ${delay}ms...`);
+            await sleep(delay);
             continue;
           }
-          return error.message || `Ошибка загрузки чанка ${chunkIndex}`;
+          return errorMsg || `Ошибка загрузки чанка ${chunkIndex}`;
         }
 
         if (data?.success !== true) {
           if (attempt < RETRY_ATTEMPTS) {
-            await sleep(500 * (attempt + 1));
+            const delay = 1000 * Math.pow(2, attempt);
+            await sleep(delay);
             continue;
           }
           return data?.error || `Ошибка загрузки чанка ${chunkIndex}`;
@@ -69,12 +81,21 @@ export function useRawStreamingWorker() {
 
         return null; // Success
       } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : '';
         console.error(`Batch ${chunkIndex} upload exception (attempt ${attempt + 1}):`, err);
+        
         if (attempt < RETRY_ATTEMPTS) {
-          await sleep(500 * (attempt + 1));
+          // Extra delay for BOOT_ERROR
+          if (errorMsg.includes('BOOT_ERROR') || errorMsg.includes('503')) {
+            console.log(`BOOT_ERROR detected for chunk ${chunkIndex}, waiting extra ${BOOT_ERROR_EXTRA_DELAY}ms...`);
+            await sleep(BOOT_ERROR_EXTRA_DELAY);
+          }
+          const delay = 1000 * Math.pow(2, attempt);
+          console.log(`Retrying chunk ${chunkIndex} in ${delay}ms...`);
+          await sleep(delay);
           continue;
         }
-        return err instanceof Error ? err.message : `Ошибка загрузки чанка ${chunkIndex}`;
+        return errorMsg || `Ошибка загрузки чанка ${chunkIndex}`;
       }
     }
     return `Ошибка загрузки чанка ${chunkIndex} после ${RETRY_ATTEMPTS + 1} попыток`;
