@@ -84,30 +84,25 @@ serve(async (req) => {
     }
     console.log(`[run-analytics-sql] Phase 4 done in ${Date.now() - phase4Start}ms`);
 
-    // Get period info from raw data
-    const { data: periodInfo } = await supabase
+    // Get distinct periods from raw data
+    const { data: distinctPeriods } = await supabase
       .from('sales_data_raw')
       .select('period')
-      .eq('run_id', runId)
-      .order('period', { ascending: true })
-      .limit(1);
+      .eq('run_id', runId);
 
-    const { data: periodInfoLast } = await supabase
-      .from('sales_data_raw')
-      .select('period')
-      .eq('run_id', runId)
-      .order('period', { ascending: false })
-      .limit(1);
+    // Get unique periods
+    const uniquePeriods = [...new Set((distinctPeriods || []).map(r => r.period))].sort();
+    const periodCount = uniquePeriods.length;
+    const firstPeriod = uniquePeriods[0] || null;
+    const lastPeriod = uniquePeriods[uniquePeriods.length - 1] || null;
 
-    const { count: rawRowCount } = await supabase
-      .from('sales_data_raw')
+    // Count articles in analytics (unique article+size combinations processed)
+    const { count: analyticsRowCount } = await supabase
+      .from('sales_analytics')
       .select('*', { count: 'exact', head: true })
       .eq('run_id', runId);
 
-    const { count: periodCount } = await supabase
-      .from('sales_data_raw')
-      .select('period', { count: 'exact', head: true })
-      .eq('run_id', runId);
+    console.log(`[run-analytics-sql] Metrics: ${analyticsRowCount} articles, ${periodCount} periods (${firstPeriod} - ${lastPeriod})`);
 
     const processingTimeMs = Date.now() - startTime;
 
@@ -116,11 +111,11 @@ serve(async (req) => {
       .from('runs')
       .update({
         status: 'DONE',
-        rows_processed: rawRowCount || 0,
-        periods_found: periodCount || 0,
-        period_start: periodInfo?.[0]?.period ? `${periodInfo[0].period}-01` : null,
-        period_end: periodInfoLast?.[0]?.period ? `${periodInfoLast[0].period}-01` : null,
-        last_period: periodInfoLast?.[0]?.period || null,
+        rows_processed: analyticsRowCount || 0,
+        periods_found: periodCount,
+        period_start: firstPeriod ? `${firstPeriod}-01` : null,
+        period_end: lastPeriod ? `${lastPeriod}-01` : null,
+        last_period: lastPeriod || null,
         processing_time_ms: processingTimeMs,
         error_message: null,
       })

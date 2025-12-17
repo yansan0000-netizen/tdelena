@@ -78,6 +78,9 @@ export function useProcessing() {
   ): Promise<{ success: boolean; rowsProcessed?: number }> => {
     if (!user) return { success: false };
 
+    // Track total processing time from start
+    const startTime = Date.now();
+
     currentRunIdRef.current = runId;
     setState({ isProcessing: true, progress: 'Загрузка файла...', progressPercent: 5, error: null });
 
@@ -116,6 +119,12 @@ export function useProcessing() {
       if (!result.success) {
         throw new Error(result.error || 'Ошибка обработки файла');
       }
+      
+      // Update total processing time (from upload start to completion)
+      const totalTimeMs = Date.now() - startTime;
+      await supabase.from('runs').update({
+        processing_time_ms: totalTimeMs,
+      }).eq('id', runId);
       
       setState({ 
         isProcessing: false, 

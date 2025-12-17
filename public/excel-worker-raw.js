@@ -677,6 +677,8 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
   let chunkIndex = 0;
   let skippedByCategory = 0;
 
+  let skippedItogo = 0;
+
   // Process data rows
   for (let rowIdx = dataStartRowIndex; rowIdx < data.length && processedRows < totalRows; rowIdx++) {
     const row = data[rowIdx];
@@ -684,6 +686,16 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
 
     const article = cellToString(row[articleCol]);
     if (!article) continue;
+
+    // Skip rows containing "Итого" (case insensitive)
+    const rowHasItogo = row.some(cell => {
+      const cellStr = cellToString(cell).toLowerCase();
+      return cellStr.includes('итого');
+    });
+    if (rowHasItogo) {
+      skippedItogo++;
+      continue;
+    }
 
     const rawCategory = categoryCol !== -1 ? cellToString(row[categoryCol]) : '';
     const category = normalizeCategorySmart(rawCategory);  // Product category (Футболки, Брюки, etc.)
@@ -766,6 +778,14 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
 
   sendProgress('Обработка завершена', 100);
 
+  console.log('[raw-worker] Processing complete', {
+    processedRows,
+    skippedItogo,
+    skippedByCategory,
+    totalChunks: chunkIndex,
+    periods: periods.length
+  });
+
   // Send completion
   self.postMessage({
     type: 'complete',
@@ -774,6 +794,7 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
       totalChunks: chunkIndex,
       periods,
       skippedByCategory,
+      skippedItogo,
       truncated: !!maxDataRows && totalRowsAvailable > totalRows
     }
   });
