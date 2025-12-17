@@ -81,7 +81,7 @@ export default function NewRun() {
       if (result.success) {
         toast({
           title: 'Обработка завершена!',
-          description: `Обработано ${result.rowsProcessed || 0} артикулов`,
+          description: `${result.uniqueArticles || 0} уникальных артикулов × размеров, ${result.periodsFound || 0} периодов`,
         });
         navigate(`/runs/${runId}`);
       } else {
