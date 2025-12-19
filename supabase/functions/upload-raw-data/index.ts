@@ -71,9 +71,9 @@ serve(async (req) => {
       revenue: r.revenue || 0,
     }));
 
-    // Adaptive micro-batch insert: start small to avoid timeouts under load.
-    let microBatchSize = 200;
-    const MIN_BATCH_SIZE = 50;
+    // Adaptive micro-batch insert: start very small to avoid timeouts under load.
+    let microBatchSize = 100;
+    const MIN_BATCH_SIZE = 25;
 
     let insertedCount = 0;
     let i = 0;
