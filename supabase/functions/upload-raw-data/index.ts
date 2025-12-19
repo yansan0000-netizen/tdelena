@@ -71,9 +71,9 @@ serve(async (req) => {
       revenue: r.revenue || 0,
     }));
 
-    // Adaptive micro-batch insert: start larger, shrink on timeouts/connection issues.
-    let microBatchSize = 750;
-    const MIN_BATCH_SIZE = 75;
+    // Adaptive micro-batch insert: start small to avoid timeouts under load.
+    let microBatchSize = 200;
+    const MIN_BATCH_SIZE = 50;
 
     let insertedCount = 0;
     let i = 0;
@@ -88,19 +88,21 @@ serve(async (req) => {
 
       if (error) {
         const msg = (error as any)?.message ?? String(error);
-        const isTimeouty =
+        const isRetryable =
           msg.includes('statement timeout') ||
           msg.includes('upstream request timeout') ||
           msg.includes('Timed out acquiring connection') ||
-          msg.includes('connection reset');
+          msg.includes('connection reset') ||
+          msg.includes('Network connection lost') ||
+          msg.includes('gateway error');
 
-        if (isTimeouty && microBatchSize > MIN_BATCH_SIZE) {
+        if (isRetryable && microBatchSize > MIN_BATCH_SIZE) {
           const nextSize = Math.max(MIN_BATCH_SIZE, Math.floor(microBatchSize / 2));
           console.warn(
             `[upload-raw-data] Chunk ${chunkIndex}: Micro-batch insert failed (${microBatchSize} rows). Reducing to ${nextSize} and retrying. Error: ${msg}`,
           );
           microBatchSize = nextSize;
-          await sleep(250);
+          await sleep(500); // longer pause to let connection pool recover
           continue; // retry same i with smaller batch
         }
 

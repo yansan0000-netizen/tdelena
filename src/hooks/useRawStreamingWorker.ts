@@ -1,9 +1,10 @@
 import { useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-const MAX_CONCURRENT_UPLOADS = 2;
-const RETRY_ATTEMPTS = 4;
-const BOOT_ERROR_EXTRA_DELAY = 2000;
+// Reduced to 1 to prevent connection pool exhaustion
+const MAX_CONCURRENT_UPLOADS = 1;
+const RETRY_ATTEMPTS = 5;
+const BOOT_ERROR_EXTRA_DELAY = 3000;
 
 interface StreamingProgress {
   message: string;
