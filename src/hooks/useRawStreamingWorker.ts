@@ -24,6 +24,7 @@ interface StreamingResult {
       emptyArticle: number;
       itogo: number;
       byCategory: number;
+      noData?: number;
     };
   };
 }
@@ -154,15 +155,13 @@ export function useRawStreamingWorker() {
 
       let metrics: StreamingResult['metrics'];
       let hasError = false;
-      
-      // Parallel upload queue management
-      const uploadQueue: Promise<{ chunkIndex: number; error: string | null }>[] = [];
-      let completedChunks = 0;
-      let totalExpectedChunks = 0;
+
+      // Concurrency-safe in-flight upload management
+      const inFlight = new Set<Promise<{ chunkIndex: number; error: string | null }>>();
       let workerComplete = false;
 
       const checkAllComplete = async () => {
-        if (workerComplete && uploadQueue.length === 0 && !hasError) {
+        if (workerComplete && inFlight.size === 0 && !hasError) {
           setProgress({ message: 'Загрузка завершена. Запуск аналитики...', percent: 93 });
 
           const analyticsError = await runAnalytics(runId, userId);
@@ -196,8 +195,7 @@ export function useRawStreamingWorker() {
           });
           return;
         }
-        
-        completedChunks++;
+
         await checkAllComplete();
       };
 
@@ -213,45 +211,45 @@ export function useRawStreamingWorker() {
 
           case 'chunk': {
             if (hasError) break;
-            
-            totalExpectedChunks = chunkIndex + 1;
-            
-            // Create upload promise
-            const uploadPromise = uploadBatchWithRetry(runId, userId, data, chunkIndex)
-              .then(error => ({ chunkIndex, error }));
-            
-            uploadQueue.push(uploadPromise);
-            
-            // Process completed uploads while limiting concurrency
-            if (uploadQueue.length >= MAX_CONCURRENT_UPLOADS) {
-              const result = await Promise.race(uploadQueue);
-              const index = uploadQueue.findIndex(p => p === uploadPromise);
-              if (index === -1) {
-                // Remove the completed promise from queue
-                uploadQueue.splice(0, 1);
-              }
+
+            // Create upload task and ensure it removes itself from inFlight when done
+            const basePromise = uploadBatchWithRetry(runId, userId, data, chunkIndex).then((error) => ({
+              chunkIndex,
+              error,
+            }));
+
+            let task: Promise<{ chunkIndex: number; error: string | null }>;
+            task = basePromise.then((res) => {
+              inFlight.delete(task);
+              return res;
+            });
+
+            inFlight.add(task);
+
+            // Enforce concurrency limit
+            if (inFlight.size >= MAX_CONCURRENT_UPLOADS) {
+              const result = await Promise.race(inFlight);
               await processUploadResult(result);
             }
+
             break;
           }
 
           case 'complete': {
             metrics = e.data.metrics;
             workerComplete = true;
-            
-            // Wait for all pending uploads to complete
-            if (uploadQueue.length > 0) {
-              setProgress({ message: `Завершение загрузки (${uploadQueue.length} чанков)...`, percent: 90 });
-              const results = await Promise.all(uploadQueue);
-              uploadQueue.length = 0;
-              
+
+            // Wait for all remaining uploads
+            if (inFlight.size > 0) {
+              setProgress({ message: `Завершение загрузки (${inFlight.size} чанков)...`, percent: 90 });
+              const results = await Promise.all(Array.from(inFlight));
               for (const result of results) {
                 if (hasError) break;
                 await processUploadResult(result);
               }
-            } else {
-              await checkAllComplete();
             }
+
+            await checkAllComplete();
             break;
           }
 
@@ -261,7 +259,7 @@ export function useRawStreamingWorker() {
             setIsProcessing(false);
             resolve({
               success: false,
-              error: workerError || 'Unknown worker error'
+              error: workerError || 'Unknown worker error',
             });
             break;
         }
