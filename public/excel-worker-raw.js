@@ -681,7 +681,8 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
   let skippedItogo = 0;
   let skippedEmptyArticle = 0;
   let skippedEmptyRow = 0;
-  
+  let rowsWithoutAnyPeriodData = 0;
+
   // Total rows available for processing (excluding headers)
   const totalExcelRows = data.length - dataStartRowIndex;
 
@@ -725,12 +726,14 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
     const groupCode = extractGroupCode(article);
 
     // Create raw record for each period
+    let rowHasAnyData = false;
     for (const period of periodColumns) {
       const quantity = parseNumber(row[period.qtyCol]);
       const revenue = period.revCol !== -1 ? parseNumber(row[period.revCol]) : quantity * price;
 
       // Only add if there's any data
       if (quantity > 0 || revenue > 0 || stock > 0) {
+        rowHasAnyData = true;
         chunk.push({
           article,
           size,            // S, M, L, XL, etc.
@@ -744,6 +747,10 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
           revenue
         });
       }
+    }
+
+    if (!rowHasAnyData) {
+      rowsWithoutAnyPeriodData++;
     }
 
     processedRows++;
@@ -790,7 +797,7 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
   sendProgress('Обработка завершена', 100);
 
   const totalSkipped = skippedEmptyRow + skippedEmptyArticle + skippedItogo + skippedByCategory;
-  
+
   console.log('[raw-worker] Processing complete', {
     totalExcelRows,
     processedRows,
@@ -799,6 +806,7 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
     skippedEmptyArticle,
     skippedItogo,
     skippedByCategory,
+    rowsWithoutAnyPeriodData,
     totalChunks: chunkIndex,
     periods: periods.length
   });
@@ -816,7 +824,8 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
         emptyRow: skippedEmptyRow,
         emptyArticle: skippedEmptyArticle,
         itogo: skippedItogo,
-        byCategory: skippedByCategory
+        byCategory: skippedByCategory,
+        noData: rowsWithoutAnyPeriodData
       },
       truncated: !!maxDataRows && totalRowsAvailable > totalRows
     }
