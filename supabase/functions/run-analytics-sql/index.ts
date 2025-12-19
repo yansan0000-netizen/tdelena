@@ -11,6 +11,8 @@ interface RequestBody {
   userId: string;
 }
 
+const BATCH_SIZE = 1500; // Process 1500 articles per batch (~30 sec)
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -77,37 +79,73 @@ serve(async (req) => {
     // Update run status to PROCESSING
     await supabase.from('runs').update({ status: 'PROCESSING' }).eq('id', runId);
 
-    // Phase 1: Basic aggregation
-    console.log(`[run-analytics-sql] Phase 1: Basic aggregation...`);
-    await supabase.from('runs').update({ 
-      progress_percent: 92, 
-      progress_message: 'Агрегация данных...' 
-    }).eq('id', runId);
-    
+    // Phase 1: Basic aggregation (BATCHED to avoid timeout)
+    console.log(`[run-analytics-sql] Phase 1: Basic aggregation (batched)...`);
     const phase1Start = Date.now();
-    const { data: phase1Result, error: phase1Error } = await supabase
-      .rpc('analytics_phase1_aggregate', { p_run_id: runId });
+    let phase1Offset = 0;
+    let phase1Total = 0;
 
-    if (phase1Error) {
-      throw new Error(`Phase 1 failed: ${phase1Error.message}`);
+    while (true) {
+      await supabase.from('runs').update({ 
+        progress_percent: 92, 
+        progress_message: `Агрегация данных: ${phase1Total} артикулов...` 
+      }).eq('id', runId);
+
+      const { data: batchResult, error: batchError } = await supabase
+        .rpc('analytics_phase1_batch', { 
+          p_run_id: runId, 
+          p_offset: phase1Offset, 
+          p_limit: BATCH_SIZE 
+        });
+
+      if (batchError) {
+        throw new Error(`Phase 1 batch failed at offset ${phase1Offset}: ${batchError.message}`);
+      }
+
+      const processedCount = batchResult || 0;
+      console.log(`[run-analytics-sql] Phase 1 batch: offset=${phase1Offset}, processed=${processedCount}`);
+      
+      if (processedCount === 0) break;
+
+      phase1Total += processedCount;
+      phase1Offset += BATCH_SIZE;
     }
-    console.log(`[run-analytics-sql] Phase 1 done in ${Date.now() - phase1Start}ms, rows: ${phase1Result}`);
 
-    // Phase 2: XYZ calculation (batched to avoid timeouts)
+    console.log(`[run-analytics-sql] Phase 1 done in ${Date.now() - phase1Start}ms, total: ${phase1Total}`);
+
+    // Phase 2: XYZ calculation (BATCHED to avoid timeout)
     console.log(`[run-analytics-sql] Phase 2: XYZ calculation (batched)...`);
-    await supabase.from('runs').update({ 
-      progress_percent: 94, 
-      progress_message: 'Расчёт XYZ-классификации...' 
-    }).eq('id', runId);
-    
     const phase2Start = Date.now();
-    const { error: phase2Error } = await supabase
-      .rpc('analytics_phase2_xyz_batched', { p_run_id: runId });
+    let phase2Offset = 0;
+    let phase2Total = 0;
 
-    if (phase2Error) {
-      throw new Error(`Phase 2 failed: ${phase2Error.message}`);
+    while (true) {
+      await supabase.from('runs').update({ 
+        progress_percent: 94, 
+        progress_message: `Расчёт XYZ: ${phase2Total} артикулов...` 
+      }).eq('id', runId);
+
+      const { data: batchResult, error: batchError } = await supabase
+        .rpc('analytics_phase2_xyz_batch', { 
+          p_run_id: runId, 
+          p_offset: phase2Offset, 
+          p_limit: BATCH_SIZE 
+        });
+
+      if (batchError) {
+        throw new Error(`Phase 2 batch failed at offset ${phase2Offset}: ${batchError.message}`);
+      }
+
+      const processedCount = batchResult || 0;
+      console.log(`[run-analytics-sql] Phase 2 batch: offset=${phase2Offset}, processed=${processedCount}`);
+      
+      if (processedCount === 0) break;
+
+      phase2Total += processedCount;
+      phase2Offset += BATCH_SIZE;
     }
-    console.log(`[run-analytics-sql] Phase 2 done in ${Date.now() - phase2Start}ms`);
+
+    console.log(`[run-analytics-sql] Phase 2 done in ${Date.now() - phase2Start}ms, total: ${phase2Total}`);
 
     // Phase 3: ABC calculation
     console.log(`[run-analytics-sql] Phase 3: ABC calculation...`);
@@ -188,7 +226,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        articlesProcessed: phase1Result || 0,
+        articlesProcessed: phase1Total,
         processingTimeMs,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
