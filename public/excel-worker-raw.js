@@ -11,7 +11,7 @@
  * Row 3: Technical field names
  */
 
-const CHUNK_SIZE = 500; // Aggregated rows per chunk (fewer but richer rows)
+const CHUNK_SIZE = 1000; // Aggregated rows per chunk - increased for fewer HTTP requests
 
 const RUSSIAN_MONTHS = {
   'январь': 1, 'февраль': 2, 'март': 3, 'апрель': 4,
@@ -809,6 +809,10 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
       processedRows: i + chunk.length,
       isAggregated: true // Flag to indicate aggregated format
     });
+
+    // CRITICAL: Wait for ACK from main thread before sending next chunk
+    // This implements back-pressure to prevent connection pool overload
+    await waitForAck();
 
     chunkIndex++;
   }
