@@ -19,6 +19,8 @@ export interface Run {
   error_message: string | null;
   log: LogEntry[] | null;
   processing_time_ms: number | null;
+  progress_percent: number | null;
+  progress_message: string | null;
 }
 
 export interface LogEntry {

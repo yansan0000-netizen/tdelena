@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useRuns } from '@/hooks/useRuns';
+import { supabase } from '@/integrations/supabase/client';
 import { useAnalyticsExport } from '@/hooks/useAnalyticsExport';
 import { useDataQuality } from '@/hooks/useDataQuality';
 import { toast } from 'sonner';
@@ -30,7 +31,8 @@ import {
   Database,
   Layers,
   Hash,
-  Package
+  Package,
+  X
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -119,6 +121,33 @@ export default function RunDetails() {
     }
   };
 
+  const handleCancelRun = async () => {
+    if (!id) return;
+    
+    try {
+      // Delete partial data
+      await supabase.from('sales_data_raw').delete().eq('run_id', id);
+      await supabase.from('sales_analytics').delete().eq('run_id', id);
+      
+      // Update status to ERROR
+      await supabase.from('runs').update({
+        status: 'ERROR',
+        error_message: 'Обработка отменена пользователем',
+        progress_percent: 0,
+        progress_message: null
+      }).eq('id', id);
+      
+      // Refresh run data
+      const data = await getRun(id);
+      if (data) setRun(data);
+      
+      toast.success('Обработка отменена');
+    } catch (err) {
+      toast.error('Ошибка при отмене');
+      console.error('Cancel error:', err);
+    }
+  };
+
 
   if (loading) {
     return (
@@ -176,14 +205,28 @@ export default function RunDetails() {
               <div className="flex flex-col items-center gap-4">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <div className="text-center">
-                  <p className="font-medium">Идёт обработка файла...</p>
+                  <p className="font-medium">
+                    {run.progress_message || 'Идёт обработка файла...'}
+                  </p>
                   <p className="text-sm text-muted-foreground">
-                    Это может занять несколько минут
+                    {run.progress_percent ? `${run.progress_percent}%` : 'Это может занять несколько минут'}
                   </p>
                 </div>
                 <div className="w-full max-w-md">
-                  <Progress className="h-2 animate-pulse" />
+                  <Progress 
+                    value={run.progress_percent || 0} 
+                    className={cn("h-2", !run.progress_percent && "animate-pulse")} 
+                  />
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancelRun}
+                  className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10"
+                >
+                  <X className="h-4 w-4" />
+                  Отменить обработку
+                </Button>
               </div>
             </CardContent>
           </Card>
