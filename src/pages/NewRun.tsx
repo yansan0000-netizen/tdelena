@@ -197,9 +197,6 @@ export default function NewRun() {
                 </div>
               </div>
             )}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
             <FileDropzone
               selectedFile={file}
               onFileSelect={setFile}
