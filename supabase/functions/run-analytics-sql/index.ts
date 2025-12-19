@@ -79,6 +79,11 @@ serve(async (req) => {
 
     // Phase 1: Basic aggregation
     console.log(`[run-analytics-sql] Phase 1: Basic aggregation...`);
+    await supabase.from('runs').update({ 
+      progress_percent: 92, 
+      progress_message: 'Агрегация данных...' 
+    }).eq('id', runId);
+    
     const phase1Start = Date.now();
     const { data: phase1Result, error: phase1Error } = await supabase
       .rpc('analytics_phase1_aggregate', { p_run_id: runId });
@@ -88,11 +93,16 @@ serve(async (req) => {
     }
     console.log(`[run-analytics-sql] Phase 1 done in ${Date.now() - phase1Start}ms, rows: ${phase1Result}`);
 
-    // Phase 2: XYZ calculation
-    console.log(`[run-analytics-sql] Phase 2: XYZ calculation...`);
+    // Phase 2: XYZ calculation (batched to avoid timeouts)
+    console.log(`[run-analytics-sql] Phase 2: XYZ calculation (batched)...`);
+    await supabase.from('runs').update({ 
+      progress_percent: 94, 
+      progress_message: 'Расчёт XYZ-классификации...' 
+    }).eq('id', runId);
+    
     const phase2Start = Date.now();
     const { error: phase2Error } = await supabase
-      .rpc('analytics_phase2_xyz', { p_run_id: runId });
+      .rpc('analytics_phase2_xyz_batched', { p_run_id: runId });
 
     if (phase2Error) {
       throw new Error(`Phase 2 failed: ${phase2Error.message}`);
@@ -101,6 +111,11 @@ serve(async (req) => {
 
     // Phase 3: ABC calculation
     console.log(`[run-analytics-sql] Phase 3: ABC calculation...`);
+    await supabase.from('runs').update({ 
+      progress_percent: 96, 
+      progress_message: 'Расчёт ABC-классификации...' 
+    }).eq('id', runId);
+    
     const phase3Start = Date.now();
     const { error: phase3Error } = await supabase
       .rpc('analytics_phase3_abc', { p_run_id: runId });
@@ -112,6 +127,11 @@ serve(async (req) => {
 
     // Phase 4: Plans and recommendations
     console.log(`[run-analytics-sql] Phase 4: Plans and recommendations...`);
+    await supabase.from('runs').update({ 
+      progress_percent: 98, 
+      progress_message: 'Формирование рекомендаций...' 
+    }).eq('id', runId);
+    
     const phase4Start = Date.now();
     const { error: phase4Error } = await supabase
       .rpc('analytics_phase4_plans', { p_run_id: runId });
