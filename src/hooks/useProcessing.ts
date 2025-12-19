@@ -4,6 +4,9 @@ import { useAuth } from './useAuth';
 import { useRawStreamingWorker } from './useRawStreamingWorker';
 import { RunMode } from '@/lib/types';
 
+// 20 minutes timeout
+const PROCESSING_TIMEOUT_MS = 20 * 60 * 1000;
+
 interface ProcessingState {
   isProcessing: boolean;
   progress: string;
@@ -27,6 +30,17 @@ export function useProcessing() {
   });
   
   const currentRunIdRef = useRef<string | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // Sync worker progress to state
   useEffect(() => {
@@ -39,16 +53,36 @@ export function useProcessing() {
     }
   }, [rawProgress]);
 
-  const cancelProcessing = useCallback(async (runId?: string) => {
+  // Clear timeout helper
+  const clearProcessingTimeout = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, []);
+
+  const cancelProcessing = useCallback(async (runId?: string, isTimeout = false) => {
+    clearProcessingTimeout();
     cancelRawWorker();
     
     const id = runId || currentRunIdRef.current;
     if (id) {
+      // Clean up database data for this run
+      console.log(`[cancelProcessing] Cleaning up run ${id}, isTimeout=${isTimeout}`);
+      
+      // Delete raw data
+      await supabase.from('sales_data_raw').delete().eq('run_id', id);
+      // Delete analytics data
+      await supabase.from('sales_analytics').delete().eq('run_id', id);
+      
+      // Update run status
       await supabase
         .from('runs')
         .update({
           status: 'ERROR',
-          error_message: 'Обработка отменена пользователем',
+          error_message: isTimeout 
+            ? 'Таймаут: обработка превысила 20 минут. Данные очищены.' 
+            : 'Обработка отменена пользователем. Данные очищены.',
         })
         .eq('id', id);
     }
@@ -58,9 +92,9 @@ export function useProcessing() {
       isProcessing: false,
       progress: '',
       progressPercent: 0,
-      error: 'Обработка отменена',
+      error: isTimeout ? 'Таймаут: обработка превысила 20 минут' : 'Обработка отменена',
     });
-  }, [cancelRawWorker]);
+  }, [cancelRawWorker, clearProcessingTimeout]);
 
   // Generate safe filename for storage
   const generateSafeFileName = (originalName: string): string => {
@@ -83,6 +117,13 @@ export function useProcessing() {
 
     currentRunIdRef.current = runId;
     setState({ isProcessing: true, progress: 'Загрузка файла...', progressPercent: 5, error: null });
+
+    // Set up 20-minute timeout
+    clearProcessingTimeout();
+    timeoutRef.current = setTimeout(() => {
+      console.error('[TIMEOUT] Processing exceeded 20 minutes, cancelling...');
+      cancelProcessing(runId, true);
+    }, PROCESSING_TIMEOUT_MS);
 
     try {
       // 1. Upload original file to storage
@@ -120,6 +161,9 @@ export function useProcessing() {
         throw new Error(result.error || 'Ошибка обработки файла');
       }
       
+      // Clear timeout on success
+      clearProcessingTimeout();
+
       // Update total processing time (from upload start to completion)
       const totalTimeMs = Date.now() - startTime;
       await supabase.from('runs').update({
@@ -152,7 +196,12 @@ export function useProcessing() {
       };
 
     } catch (error) {
+      clearProcessingTimeout();
       const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
+      
+      // Clean up partial data on error
+      await supabase.from('sales_data_raw').delete().eq('run_id', runId);
+      await supabase.from('sales_analytics').delete().eq('run_id', runId);
       
       // Update run with error
       await supabase
@@ -167,7 +216,7 @@ export function useProcessing() {
       currentRunIdRef.current = null;
       return { success: false };
     }
-  }, [user, processWithRawWorker]);
+  }, [user, processWithRawWorker, clearProcessingTimeout, cancelProcessing]);
 
   return {
     isProcessing: state.isProcessing,

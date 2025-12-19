@@ -226,6 +226,10 @@ export function useRawStreamingWorker() {
                 if (hasError) break;
                 await processUploadResult(result);
               }
+              // THROTTLE: Add 500ms pause after batch completes to reduce DB load
+              if (!hasError) {
+                await sleep(500);
+              }
             }
 
             if (hasError) break;
