@@ -71,8 +71,8 @@ export function useRawStreamingWorker() {
               console.log(`BOOT_ERROR detected for chunk ${chunkIndex}, waiting extra ${BOOT_ERROR_EXTRA_DELAY}ms...`);
               await sleep(BOOT_ERROR_EXTRA_DELAY);
             }
-            // Exponential backoff: 1s, 2s, 4s, 8s
-            const delay = 1000 * Math.pow(2, attempt);
+            // Exponential backoff: 2s, 4s, 8s, 16s (longer delays for stability)
+            const delay = 2000 * Math.pow(2, attempt);
             console.log(`Retrying chunk ${chunkIndex} in ${delay}ms...`);
             await sleep(delay);
             continue;
@@ -100,7 +100,7 @@ export function useRawStreamingWorker() {
             console.log(`BOOT_ERROR detected for chunk ${chunkIndex}, waiting extra ${BOOT_ERROR_EXTRA_DELAY}ms...`);
             await sleep(BOOT_ERROR_EXTRA_DELAY);
           }
-          const delay = 1000 * Math.pow(2, attempt);
+          const delay = 2000 * Math.pow(2, attempt);
           console.log(`Retrying chunk ${chunkIndex} in ${delay}ms...`);
           await sleep(delay);
           continue;
@@ -213,7 +213,19 @@ export function useRawStreamingWorker() {
           case 'chunk': {
             if (hasError) break;
 
-            // Create upload task and ensure it removes itself from inFlight when done
+            // CRITICAL: Enforce strict sequential uploads (MAX_CONCURRENT_UPLOADS = 1)
+            // Wait for ALL in-flight uploads before starting new one
+            if (inFlight.size >= MAX_CONCURRENT_UPLOADS) {
+              const results = await Promise.all(Array.from(inFlight));
+              for (const result of results) {
+                if (hasError) break;
+                await processUploadResult(result);
+              }
+            }
+
+            if (hasError) break;
+
+            // Now start the new upload
             const basePromise = uploadBatchWithRetry(runId, userId, data, chunkIndex).then((error) => ({
               chunkIndex,
               error,
@@ -226,13 +238,6 @@ export function useRawStreamingWorker() {
             });
 
             inFlight.add(task);
-
-            // Enforce concurrency limit
-            if (inFlight.size >= MAX_CONCURRENT_UPLOADS) {
-              const result = await Promise.race(inFlight);
-              await processUploadResult(result);
-            }
-
             break;
           }
 

@@ -16,6 +16,7 @@ export default function NewRun() {
   const [mode, setMode] = useState<RunMode>('1C_RAW');
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
   const [isLoadingTest, setIsLoadingTest] = useState(false);
+  const [isStarting, setIsStarting] = useState(false); // New: immediate feedback on click
   const { createRun } = useRuns();
   const { isProcessing, progress, progressPercent, error, processRunServer, cancelProcessing } = useProcessing();
   const { toast } = useToast();
@@ -60,20 +61,25 @@ export default function NewRun() {
       return;
     }
 
+    // Immediately show loading state
+    setIsStarting(true);
+
     try {
       // Create run record with QUEUED status
       const runId = await createRun(file, mode);
 
       if (!runId) {
+        setIsStarting(false);
         toast({
           title: 'Ошибка',
-          description: 'Не удалось создать запуск',
+          description: 'Не удалось создать запуск. Попробуйте ещё раз.',
           variant: 'destructive',
         });
         return;
       }
 
       setCurrentRunId(runId);
+      setIsStarting(false); // Processing hook will take over
 
       // Process file on server
       const result = await processRunServer(runId, mode, file);
@@ -92,10 +98,11 @@ export default function NewRun() {
         });
         navigate(`/runs/${runId}`);
       }
-    } catch (error) {
+    } catch (err) {
+      setIsStarting(false);
       toast({
         title: 'Ошибка',
-        description: error instanceof Error ? error.message : 'Не удалось создать запуск',
+        description: err instanceof Error ? err.message : 'Не удалось создать запуск',
         variant: 'destructive',
       });
     }
@@ -110,6 +117,18 @@ export default function NewRun() {
             Загрузите файл и запустите обработку
           </p>
         </div>
+
+        {/* Starting indicator (immediate feedback) */}
+        {isStarting && !isProcessing && (
+          <Card className="border-primary/50 bg-primary/5">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <span className="font-medium">Создание запуска и загрузка файла...</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Processing Progress */}
         {isProcessing && (
@@ -219,14 +238,14 @@ export default function NewRun() {
         {/* Action Button */}
         <Button
           onClick={handleStartRun}
-          disabled={!file || isProcessing}
+          disabled={!file || isProcessing || isStarting}
           size="lg"
           className="w-full gap-2"
         >
-          {isProcessing ? (
+          {isProcessing || isStarting ? (
             <>
               <Loader2 className="h-5 w-5 animate-spin" />
-              Обработка...
+              {isStarting ? 'Создание запуска...' : 'Обработка...'}
             </>
           ) : (
             <>

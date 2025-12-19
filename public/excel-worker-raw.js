@@ -8,7 +8,7 @@
  * Row 3: Technical field names
  */
 
-const CHUNK_SIZE = 5000; // Rows per chunk to send to server (increased for faster uploads)
+const CHUNK_SIZE = 1000; // Reduced from 5000 to prevent DB overload
 
 const RUSSIAN_MONTHS = {
   'январь': 1, 'февраль': 2, 'март': 3, 'апрель': 4,
