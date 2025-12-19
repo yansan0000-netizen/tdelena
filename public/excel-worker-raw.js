@@ -1,6 +1,9 @@
 /**
- * Streaming Excel Worker - sends raw rows without aggregation
- * Memory optimized: processes in chunks, doesn't hold all data in memory
+ * Streaming Excel Worker - AGGREGATED mode
+ * Aggregates by article+size in memory, sends one row per unique combination
+ * with periodQuantities and periodRevenues as objects
+ * 
+ * Memory optimized: processes in chunks, aggregates on the fly
  * 
  * Optimized for 1C Excel exports with 3-row header structure:
  * Row 1: Period dates (e.g., "Декабрь 2023")
@@ -8,7 +11,7 @@
  * Row 3: Technical field names
  */
 
-const CHUNK_SIZE = 1000; // Reduced from 5000 to prevent DB overload
+const CHUNK_SIZE = 500; // Aggregated rows per chunk (fewer but richer rows)
 
 const RUSSIAN_MONTHS = {
   'январь': 1, 'февраль': 2, 'март': 3, 'апрель': 4,
@@ -451,7 +454,8 @@ function findPeriodColumnsFromHeaders(headers, startIdx) {
 }
 
 /**
- * Process Excel file and send raw rows in chunks
+ * Process Excel file and send AGGREGATED rows in chunks
+ * Key difference: aggregates by article+size, sends periodQuantities/periodRevenues as objects
  */
 async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
   sendProgress('Загрузка библиотеки XLSX...', 0);
@@ -662,9 +666,9 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
   const totalRowsAvailable = Math.max(0, data.length - dataStartRowIndex);
   const totalRows = maxDataRows ? Math.min(totalRowsAvailable, maxDataRows) : totalRowsAvailable;
 
-  sendProgress(`Найдено ${periods.length} периодов. Обработка строк...`, 20);
+  sendProgress(`Найдено ${periods.length} периодов. Агрегация данных...`, 20);
 
-  console.log('[raw-worker] Starting row processing', {
+  console.log('[raw-worker] Starting AGGREGATED row processing', {
     periodsFound: periods.length,
     firstPeriod: periods[0],
     lastPeriod: periods[periods.length - 1],
@@ -672,9 +676,10 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
     dataStartRowIndex
   });
 
+  // AGGREGATION MAP: key = "article|size" -> aggregated data
+  const aggregationMap = new Map();
+  
   let processedRows = 0;
-  let chunk = [];
-  let chunkIndex = 0;
   
   // Detailed skip statistics
   let skippedByCategory = 0;
@@ -686,7 +691,7 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
   // Total rows available for processing (excluding headers)
   const totalExcelRows = data.length - dataStartRowIndex;
 
-  // Process data rows
+  // Process data rows - AGGREGATE instead of sending raw
   for (let rowIdx = dataStartRowIndex; rowIdx < data.length && processedRows < totalRows; rowIdx++) {
     const row = data[rowIdx];
     if (!row || row.length === 0) {
@@ -711,9 +716,9 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
     }
 
     const rawCategory = categoryCol !== -1 ? cellToString(row[categoryCol]) : '';
-    const category = normalizeCategorySmart(rawCategory);  // Product category (Футболки, Брюки, etc.)
-    const productGroup = extractProductGroup(article);      // Group by article (мужская, детская, etc.)
-    const size = sizeCol !== -1 ? cellToString(row[sizeCol]) : '';  // Size (S, M, L, etc.)
+    const category = normalizeCategorySmart(rawCategory);
+    const productGroup = extractProductGroup(article);
+    const size = sizeCol !== -1 ? cellToString(row[sizeCol]) : '';
 
     // Apply category filter if specified
     if (categoryFilter && category !== categoryFilter) {
@@ -725,27 +730,41 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
     const price = priceCol !== -1 ? parseNumber(row[priceCol]) : 0;
     const groupCode = extractGroupCode(article);
 
-    // Create raw record for each period
+    // Aggregate by article+size
+    const aggKey = `${article}|${size}`;
+    
+    let aggRecord = aggregationMap.get(aggKey);
+    if (!aggRecord) {
+      aggRecord = {
+        article,
+        size,
+        category,
+        productGroup,
+        groupCode,
+        stock: 0,
+        price: 0,
+        periodQuantities: {},
+        periodRevenues: {}
+      };
+      aggregationMap.set(aggKey, aggRecord);
+    }
+
+    // Update stock and price (take max stock, latest non-zero price)
+    if (stock > aggRecord.stock) aggRecord.stock = stock;
+    if (price > 0) aggRecord.price = price;
+
+    // Aggregate period data
     let rowHasAnyData = false;
     for (const period of periodColumns) {
       const quantity = parseNumber(row[period.qtyCol]);
       const revenue = period.revCol !== -1 ? parseNumber(row[period.revCol]) : quantity * price;
 
-      // Only add if there's any data
-      if (quantity > 0 || revenue > 0 || stock > 0) {
+      if (quantity > 0 || revenue > 0) {
         rowHasAnyData = true;
-        chunk.push({
-          article,
-          size,            // S, M, L, XL, etc.
-          category,        // Футболки, Брюки, etc.
-          productGroup,    // мужская, детская, etc.
-          groupCode,       // 1000, 2045, etc.
-          stock,
-          price,
-          period: period.key,
-          quantity,
-          revenue
-        });
+        
+        // Accumulate quantities and revenues per period
+        aggRecord.periodQuantities[period.key] = (aggRecord.periodQuantities[period.key] || 0) + quantity;
+        aggRecord.periodRevenues[period.key] = (aggRecord.periodRevenues[period.key] || 0) + revenue;
       }
     }
 
@@ -755,42 +774,42 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
 
     processedRows++;
 
-    // Send chunk when full (non-blocking - main thread handles parallelism)
-    if (chunk.length >= CHUNK_SIZE) {
-      const percent = 20 + Math.round((processedRows / totalRows) * 70);
-      sendProgress(`Отправка данных... (${processedRows}/${totalRows} строк)`, percent);
-
-      self.postMessage({
-        type: 'chunk',
-        data: chunk,
-        chunkIndex,
-        totalRows,
-        processedRows
-      });
-
-      // Don't wait for ACK - continue immediately for parallel uploads
-      chunk = [];
-      chunkIndex++;
-    }
-
-    // Progress update every 1000 rows
-    if (processedRows % 1000 === 0) {
-      const percent = 20 + Math.round((processedRows / totalRows) * 70);
-      sendProgress(`Обработка строк... (${processedRows}/${totalRows})`, percent);
+    // Progress update every 2000 rows
+    if (processedRows % 2000 === 0) {
+      const percent = 20 + Math.round((processedRows / totalRows) * 50);
+      sendProgress(`Агрегация строк... (${processedRows}/${totalRows})`, percent);
     }
   }
 
-  // Send remaining chunk (non-blocking)
-  if (chunk.length > 0) {
-    sendProgress('Отправка последнего чанка...', 92);
+  sendProgress('Формирование чанков...', 75);
+
+  // Convert aggregation map to array and send in chunks
+  const aggregatedRecords = Array.from(aggregationMap.values());
+  const totalAggregated = aggregatedRecords.length;
+  
+  console.log('[raw-worker] Aggregation complete', {
+    totalExcelRows,
+    processedRows,
+    uniqueArticleSizes: totalAggregated,
+    compressionRatio: processedRows > 0 ? (processedRows / totalAggregated).toFixed(1) : 0
+  });
+
+  let chunkIndex = 0;
+  for (let i = 0; i < aggregatedRecords.length; i += CHUNK_SIZE) {
+    const chunk = aggregatedRecords.slice(i, i + CHUNK_SIZE);
+    
+    const percent = 75 + Math.round((i / totalAggregated) * 15);
+    sendProgress(`Отправка данных... (${i + chunk.length}/${totalAggregated} артикулов)`, percent);
+
     self.postMessage({
       type: 'chunk',
       data: chunk,
       chunkIndex,
-      totalRows,
-      processedRows,
-      isLast: true
+      totalRows: totalAggregated,
+      processedRows: i + chunk.length,
+      isAggregated: true // Flag to indicate aggregated format
     });
+
     chunkIndex++;
   }
 
@@ -801,6 +820,7 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
   console.log('[raw-worker] Processing complete', {
     totalExcelRows,
     processedRows,
+    totalAggregated,
     totalSkipped,
     skippedEmptyRow,
     skippedEmptyArticle,
@@ -817,6 +837,7 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
     metrics: {
       totalExcelRows,
       totalRows: processedRows,
+      totalAggregated,
       totalChunks: chunkIndex,
       periods,
       skipped: {

@@ -184,7 +184,19 @@ export default function NewRun() {
           <CardHeader>
             <CardTitle>1. Загрузка файла</CardTitle>
             <CardDescription>
-              Перетащите файл или выберите из проводника (до 30MB)
+              Перетащите файл или выберите из проводника (до 50MB)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {file && file.size > 50 * 1024 * 1024 && (
+              <div className="flex items-start gap-2 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
+                <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium">Большой файл ({(file.size / 1024 / 1024).toFixed(1)} MB)</p>
+                  <p className="text-amber-700 dark:text-amber-300">Обработка может занять несколько минут. Рекомендуем фильтрацию по категории.</p>
+                </div>
+              </div>
+            )}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">

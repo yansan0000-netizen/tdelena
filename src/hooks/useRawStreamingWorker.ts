@@ -30,16 +30,17 @@ interface StreamingResult {
   };
 }
 
-interface RawRow {
+// Aggregated row format (new) - one row per article+size
+interface AggregatedRow {
   article: string;
   size?: string;
   category: string;
+  productGroup: string;
   groupCode: string;
   stock: number;
   price: number;
-  period: string;
-  quantity: number;
-  revenue: number;
+  periodQuantities: Record<string, number>;
+  periodRevenues: Record<string, number>;
 }
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -52,13 +53,14 @@ export function useRawStreamingWorker() {
   const uploadBatchWithRetry = useCallback(async (
     runId: string,
     userId: string,
-    batch: RawRow[],
-    chunkIndex: number
+    batch: AggregatedRow[],
+    chunkIndex: number,
+    isAggregated: boolean = true
   ): Promise<string | null> => {
     for (let attempt = 0; attempt <= RETRY_ATTEMPTS; attempt++) {
       try {
         const { data, error } = await supabase.functions.invoke('upload-raw-data', {
-          body: { runId, userId, rows: batch, chunkIndex },
+          body: { runId, userId, rows: batch, chunkIndex, isAggregated },
         });
 
         if (error) {
@@ -234,8 +236,9 @@ export function useRawStreamingWorker() {
 
             if (hasError) break;
 
-            // Now start the new upload
-            const basePromise = uploadBatchWithRetry(runId, userId, data, chunkIndex).then((error) => ({
+            // Now start the new upload - check if aggregated format
+            const isAggregated = e.data.isAggregated === true;
+            const basePromise = uploadBatchWithRetry(runId, userId, data, chunkIndex, isAggregated).then((error) => ({
               chunkIndex,
               error,
             }));
