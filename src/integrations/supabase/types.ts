@@ -321,6 +321,12 @@ export type Database = {
       }
       analytics_phase3_abc: { Args: { p_run_id: string }; Returns: undefined }
       analytics_phase4_plans: { Args: { p_run_id: string }; Returns: undefined }
+      get_run_periods: {
+        Args: { p_run_id: string }
+        Returns: {
+          period: string
+        }[]
+      }
     }
     Enums: {
       run_mode: "1C_RAW" | "RAW" | "PROCESSED"

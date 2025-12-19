@@ -141,15 +141,15 @@ serve(async (req) => {
     }
     console.log(`[run-analytics-sql] Phase 4 done in ${Date.now() - phase4Start}ms`);
 
-    // Get distinct periods from raw data (exclude 1970-01 placeholder)
-    const { data: distinctPeriods } = await supabase
-      .from('sales_data_raw')
-      .select('period')
-      .eq('run_id', runId)
-      .neq('period', '1970-01');
+    // Get distinct periods from raw data using RPC (avoids 1000 row limit)
+    const { data: periodData, error: periodError } = await supabase
+      .rpc('get_run_periods', { p_run_id: runId });
 
-    // Get unique periods
-    const uniquePeriods = [...new Set((distinctPeriods || []).map(r => r.period))].sort();
+    if (periodError) {
+      console.warn(`[run-analytics-sql] Period query warning: ${periodError.message}`);
+    }
+
+    const uniquePeriods = (periodData || []).map((r: { period: string }) => r.period);
     const periodCount = uniquePeriods.length;
     const firstPeriod = uniquePeriods[0] || null;
     const lastPeriod = uniquePeriods[uniquePeriods.length - 1] || null;
