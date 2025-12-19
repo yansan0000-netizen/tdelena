@@ -156,32 +156,39 @@ export function useRawStreamingWorker() {
 
       let metrics: StreamingResult['metrics'];
       let hasError = false;
+      let analyticsStarted = false; // CRITICAL: Prevents multiple analytics calls
 
       // Concurrency-safe in-flight upload management
       const inFlight = new Set<Promise<{ chunkIndex: number; error: string | null }>>();
       let workerComplete = false;
 
-      const checkAllComplete = async () => {
-        if (workerComplete && inFlight.size === 0 && !hasError) {
-          setProgress({ message: 'Загрузка завершена. Запуск аналитики...', percent: 93 });
+      const runAnalyticsOnce = async () => {
+        // CRITICAL: Only run analytics ONCE
+        if (analyticsStarted || hasError) {
+          console.log('[useRawStreamingWorker] Analytics already started or has error, skipping');
+          return;
+        }
+        analyticsStarted = true;
 
-          const analyticsError = await runAnalytics(runId, userId);
+        console.log('[useRawStreamingWorker] Starting analytics (single call)');
+        setProgress({ message: 'Загрузка завершена. Запуск аналитики...', percent: 93 });
 
-          worker.terminate();
-          setIsProcessing(false);
+        const analyticsError = await runAnalytics(runId, userId);
 
-          if (!analyticsError) {
-            setProgress({ message: 'Готово!', percent: 100 });
-            resolve({
-              success: true,
-              metrics,
-            });
-          } else {
-            resolve({
-              success: false,
-              error: analyticsError,
-            });
-          }
+        worker.terminate();
+        setIsProcessing(false);
+
+        if (!analyticsError) {
+          setProgress({ message: 'Готово!', percent: 100 });
+          resolve({
+            success: true,
+            metrics,
+          });
+        } else {
+          resolve({
+            success: false,
+            error: analyticsError,
+          });
         }
       };
 
@@ -194,10 +201,8 @@ export function useRawStreamingWorker() {
             success: false,
             error: result.error,
           });
-          return;
         }
-
-        await checkAllComplete();
+        // NOTE: Removed checkAllComplete() call here - analytics runs ONLY from 'complete' handler
       };
 
       worker.onmessage = async (e) => {
@@ -255,7 +260,10 @@ export function useRawStreamingWorker() {
               }
             }
 
-            await checkAllComplete();
+            // CRITICAL: Run analytics ONLY HERE, ONCE
+            if (!hasError) {
+              await runAnalyticsOnce();
+            }
             break;
           }
 

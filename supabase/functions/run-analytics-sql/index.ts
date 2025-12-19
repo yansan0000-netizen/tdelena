@@ -37,6 +37,43 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // CRITICAL: Check if run already processed or analytics already exist
+    const { data: run } = await supabase
+      .from('runs')
+      .select('status')
+      .eq('id', runId)
+      .single();
+
+    if (run?.status === 'DONE') {
+      console.log(`[run-analytics-sql] Run ${runId} already DONE, skipping`);
+      return new Response(
+        JSON.stringify({ success: true, message: 'Already processed' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check if analytics already exist (race condition protection)
+    const { count: existingCount } = await supabase
+      .from('sales_analytics')
+      .select('*', { count: 'exact', head: true })
+      .eq('run_id', runId);
+
+    if (existingCount && existingCount > 0) {
+      console.log(`[run-analytics-sql] Analytics already exist for run ${runId} (${existingCount} rows), skipping`);
+      
+      // Just update status to DONE
+      await supabase.from('runs').update({ 
+        status: 'DONE',
+        rows_processed: existingCount,
+        processing_time_ms: Date.now() - startTime,
+      }).eq('id', runId);
+
+      return new Response(
+        JSON.stringify({ success: true, message: 'Analytics already exist', articlesProcessed: existingCount }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Update run status to PROCESSING
     await supabase.from('runs').update({ status: 'PROCESSING' }).eq('id', runId);
 
