@@ -314,7 +314,15 @@ export type Database = {
         Args: { p_run_id: string }
         Returns: number
       }
+      analytics_phase1_batch: {
+        Args: { p_limit: number; p_offset: number; p_run_id: string }
+        Returns: number
+      }
       analytics_phase2_xyz: { Args: { p_run_id: string }; Returns: undefined }
+      analytics_phase2_xyz_batch: {
+        Args: { p_limit: number; p_offset: number; p_run_id: string }
+        Returns: number
+      }
       analytics_phase2_xyz_batched: {
         Args: { p_run_id: string }
         Returns: undefined
