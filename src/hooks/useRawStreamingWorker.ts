@@ -50,6 +50,18 @@ export function useRawStreamingWorker() {
   const [progress, setProgress] = useState<StreamingProgress>({ message: '', percent: 0 });
   const workerRef = useRef<Worker | null>(null);
 
+  // Update progress in database
+  const updateProgressInDb = useCallback(async (runId: string, percent: number, message: string) => {
+    try {
+      await supabase.from('runs').update({
+        progress_percent: percent,
+        progress_message: message
+      }).eq('id', runId);
+    } catch (err) {
+      console.warn('Failed to update progress in DB:', err);
+    }
+  }, []);
+
   const uploadBatchWithRetry = useCallback(async (
     runId: string,
     userId: string,
@@ -116,6 +128,7 @@ export function useRawStreamingWorker() {
   const runAnalytics = useCallback(async (runId: string, userId: string): Promise<string | null> => {
     try {
       setProgress({ message: 'Запуск SQL-аналитики...', percent: 95 });
+      await updateProgressInDb(runId, 95, 'Запуск SQL-аналитики...');
 
       const { data, error } = await supabase.functions.invoke('run-analytics-sql', {
         body: { runId, userId },
@@ -205,6 +218,7 @@ export function useRawStreamingWorker() {
 
             // Sequential upload with back-pressure: upload chunk, then send ACK to worker
             const isAggregated = e.data.isAggregated === true;
+            const totalChunks = e.data.totalChunks || 1;
             
             try {
               const uploadError = await uploadBatchWithRetry(runId, userId, data, chunkIndex, isAggregated);
@@ -219,6 +233,12 @@ export function useRawStreamingWorker() {
                 });
                 break;
               }
+              
+              // Update progress in DB after successful chunk upload
+              const uploadPercent = Math.round(((chunkIndex + 1) / totalChunks) * 90); // 0-90% for uploads
+              const progressMsg = `Загружено ${chunkIndex + 1}/${totalChunks} чанков`;
+              setProgress({ message: progressMsg, percent: uploadPercent });
+              await updateProgressInDb(runId, uploadPercent, progressMsg);
               
               // SUCCESS: Send ACK to worker to allow next chunk
               worker.postMessage({ type: 'ack' });

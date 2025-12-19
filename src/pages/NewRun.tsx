@@ -142,9 +142,9 @@ export default function NewRun() {
                   <Progress value={progressPercent} className="h-3" />
                 </div>
               </div>
-              <div className="flex items-center justify-center gap-2 text-sm text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 rounded-md p-2">
-                <Cloud className="h-4 w-4 shrink-0" />
-                <span className="font-medium">Обработка на сервере — можно переключать вкладки</span>
+              <div className="flex items-center justify-center gap-2 text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-md p-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span className="font-medium">Не закрывайте страницу до завершения загрузки</span>
               </div>
               <Button
                 variant="outline"
