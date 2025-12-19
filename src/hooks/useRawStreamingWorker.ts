@@ -160,10 +160,6 @@ export function useRawStreamingWorker() {
       let hasError = false;
       let analyticsStarted = false; // CRITICAL: Prevents multiple analytics calls
 
-      // Concurrency-safe in-flight upload management
-      const inFlight = new Set<Promise<{ chunkIndex: number; error: string | null }>>();
-      let workerComplete = false;
-
       const runAnalyticsOnce = async () => {
         // CRITICAL: Only run analytics ONCE
         if (analyticsStarted || hasError) {
@@ -194,19 +190,6 @@ export function useRawStreamingWorker() {
         }
       };
 
-      const processUploadResult = async (result: { chunkIndex: number; error: string | null }) => {
-        if (result.error) {
-          hasError = true;
-          worker.terminate();
-          setIsProcessing(false);
-          resolve({
-            success: false,
-            error: result.error,
-          });
-        }
-        // NOTE: Removed checkAllComplete() call here - analytics runs ONLY from 'complete' handler
-      };
-
       worker.onmessage = async (e) => {
         const { type, data, message, percent, chunkIndex, error: workerError } = e.data;
 
@@ -220,53 +203,42 @@ export function useRawStreamingWorker() {
           case 'chunk': {
             if (hasError) break;
 
-            // CRITICAL: Enforce strict sequential uploads (MAX_CONCURRENT_UPLOADS = 1)
-            // Wait for ALL in-flight uploads before starting new one
-            if (inFlight.size >= MAX_CONCURRENT_UPLOADS) {
-              const results = await Promise.all(Array.from(inFlight));
-              for (const result of results) {
-                if (hasError) break;
-                await processUploadResult(result);
-              }
-              // THROTTLE: Add 500ms pause after batch completes to reduce DB load
-              if (!hasError) {
-                await sleep(500);
-              }
-            }
-
-            if (hasError) break;
-
-            // Now start the new upload - check if aggregated format
+            // Sequential upload with back-pressure: upload chunk, then send ACK to worker
             const isAggregated = e.data.isAggregated === true;
-            const basePromise = uploadBatchWithRetry(runId, userId, data, chunkIndex, isAggregated).then((error) => ({
-              chunkIndex,
-              error,
-            }));
-
-            let task: Promise<{ chunkIndex: number; error: string | null }>;
-            task = basePromise.then((res) => {
-              inFlight.delete(task);
-              return res;
-            });
-
-            inFlight.add(task);
+            
+            try {
+              const uploadError = await uploadBatchWithRetry(runId, userId, data, chunkIndex, isAggregated);
+              
+              if (uploadError) {
+                hasError = true;
+                worker.terminate();
+                setIsProcessing(false);
+                resolve({
+                  success: false,
+                  error: uploadError,
+                });
+                break;
+              }
+              
+              // SUCCESS: Send ACK to worker to allow next chunk
+              worker.postMessage({ type: 'ack' });
+              
+            } catch (err) {
+              hasError = true;
+              worker.terminate();
+              setIsProcessing(false);
+              resolve({
+                success: false,
+                error: err instanceof Error ? err.message : 'Upload error',
+              });
+            }
             break;
           }
 
           case 'complete': {
             metrics = e.data.metrics;
-            workerComplete = true;
 
-            // Wait for all remaining uploads
-            if (inFlight.size > 0) {
-              setProgress({ message: `Завершение загрузки (${inFlight.size} чанков)...`, percent: 90 });
-              const results = await Promise.all(Array.from(inFlight));
-              for (const result of results) {
-                if (hasError) break;
-                await processUploadResult(result);
-              }
-            }
-
+            // With back-pressure, all uploads complete before 'complete' is sent
             // CRITICAL: Run analytics ONLY HERE, ONCE
             if (!hasError) {
               await runAnalyticsOnce();

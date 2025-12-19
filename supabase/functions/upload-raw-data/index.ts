@@ -168,7 +168,14 @@ serve(async (req) => {
 
       if (error) {
         const msg = (error as any)?.message ?? String(error);
+        
+        // Check if this is a Cloudflare 500 HTML response
+        const isCloudflareError = msg.includes('<!DOCTYPE html>') || 
+                                   msg.includes('cloudflare') || 
+                                   msg.includes('Internal server error');
+        
         const isRetryable =
+          isCloudflareError ||
           msg.includes('statement timeout') ||
           msg.includes('upstream request timeout') ||
           msg.includes('Timed out acquiring connection') ||
@@ -179,10 +186,10 @@ serve(async (req) => {
         if (isRetryable && microBatchSize > MIN_BATCH_SIZE) {
           const nextSize = Math.max(MIN_BATCH_SIZE, Math.floor(microBatchSize / 2));
           console.warn(
-            `[upload-raw-data] Chunk ${chunkIndex}: Micro-batch insert failed (${microBatchSize} rows). Reducing to ${nextSize} and retrying. Error: ${msg}`,
+            `[upload-raw-data] Chunk ${chunkIndex}: Micro-batch insert failed (${microBatchSize} rows). Reducing to ${nextSize} and retrying. Error: ${isCloudflareError ? 'Cloudflare 500' : msg.slice(0, 100)}`,
           );
           microBatchSize = nextSize;
-          await sleep(500); // longer pause to let connection pool recover
+          await sleep(1000); // longer pause for Cloudflare/connection recovery
           continue; // retry same i with smaller batch
         }
 
