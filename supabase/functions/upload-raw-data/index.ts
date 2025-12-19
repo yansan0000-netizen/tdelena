@@ -153,11 +153,13 @@ serve(async (req) => {
     console.log(`[upload-raw-data] Chunk ${chunkIndex}: Expanded to ${insertData.length} DB rows`);
 
     // Adaptive micro-batch insert: start with larger batch, reduce on timeout
-    let microBatchSize = 200;
-    const MIN_BATCH_SIZE = 50;
+    let microBatchSize = 150; // Start smaller to avoid initial timeouts
+    const MIN_BATCH_SIZE = 25;
+    const MAX_RETRIES_AT_MIN = 5;
 
     let insertedCount = 0;
     let i = 0;
+    let retriesAtMin = 0;
 
     while (i < insertData.length) {
       const batch = insertData.slice(i, i + microBatchSize);
@@ -169,10 +171,12 @@ serve(async (req) => {
       if (error) {
         const msg = (error as any)?.message ?? String(error);
         
-        // Check if this is a Cloudflare 500 HTML response
+        // Check if this is a Cloudflare/gateway error
         const isCloudflareError = msg.includes('<!DOCTYPE html>') || 
                                    msg.includes('cloudflare') || 
-                                   msg.includes('Internal server error');
+                                   msg.includes('Internal server error') ||
+                                   msg.includes('Bad Gateway') ||
+                                   msg.includes('502');
         
         const isRetryable =
           isCloudflareError ||
@@ -183,18 +187,30 @@ serve(async (req) => {
           msg.includes('Network connection lost') ||
           msg.includes('gateway error');
 
-        if (isRetryable && microBatchSize > MIN_BATCH_SIZE) {
-          const nextSize = Math.max(MIN_BATCH_SIZE, Math.floor(microBatchSize / 2));
-          console.warn(
-            `[upload-raw-data] Chunk ${chunkIndex}: Micro-batch insert failed (${microBatchSize} rows). Reducing to ${nextSize} and retrying. Error: ${isCloudflareError ? 'Cloudflare 500' : msg.slice(0, 100)}`,
-          );
-          microBatchSize = nextSize;
-          await sleep(1000); // longer pause for Cloudflare/connection recovery
-          continue; // retry same i with smaller batch
+        if (isRetryable) {
+          if (microBatchSize > MIN_BATCH_SIZE) {
+            // Reduce batch size
+            const nextSize = Math.max(MIN_BATCH_SIZE, Math.floor(microBatchSize / 2));
+            console.warn(
+              `[upload-raw-data] Chunk ${chunkIndex}: Insert failed (${microBatchSize} rows). Reducing to ${nextSize}. Error: ${isCloudflareError ? 'Cloudflare/Gateway' : msg.slice(0, 80)}`,
+            );
+            microBatchSize = nextSize;
+            await sleep(1500);
+            continue;
+          } else if (retriesAtMin < MAX_RETRIES_AT_MIN) {
+            // Already at min batch size, retry with exponential backoff
+            retriesAtMin++;
+            const backoffMs = 2000 * Math.pow(2, retriesAtMin - 1); // 2s, 4s, 8s, 16s, 32s
+            console.warn(
+              `[upload-raw-data] Chunk ${chunkIndex}: Retry ${retriesAtMin}/${MAX_RETRIES_AT_MIN} at min batch size (${MIN_BATCH_SIZE}). Waiting ${backoffMs}ms...`,
+            );
+            await sleep(backoffMs);
+            continue;
+          }
         }
 
         console.error(
-          `[upload-raw-data] Chunk ${chunkIndex}: Insert error at offset ${i} (batchSize=${microBatchSize}):`,
+          `[upload-raw-data] Chunk ${chunkIndex}: Insert error at offset ${i} (batchSize=${microBatchSize}, retries=${retriesAtMin}):`,
           error,
         );
         return new Response(
@@ -210,12 +226,14 @@ serve(async (req) => {
         );
       }
 
+      // Success - reset retry counter
+      retriesAtMin = 0;
       insertedCount += batch.length;
       i += batch.length;
 
-      // Small yield to reduce connection pool pressure under parallel uploads
-      if (insertedCount % 1500 === 0) {
-        await sleep(25);
+      // Small yield to reduce connection pool pressure
+      if (insertedCount % 1000 === 0) {
+        await sleep(50);
       }
     }
 
