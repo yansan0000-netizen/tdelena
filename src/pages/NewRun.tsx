@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { FileDropzone } from '@/components/FileDropzone';
-import { ModeSelector, RunMode } from '@/components/ModeSelector';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -13,7 +12,6 @@ import { Play, Loader2, AlertCircle, X, Cloud, FileDown } from 'lucide-react';
 
 export default function NewRun() {
   const [file, setFile] = useState<File | null>(null);
-  const [mode, setMode] = useState<RunMode>('1C_RAW');
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
   const [isLoadingTest, setIsLoadingTest] = useState(false);
   const [isStarting, setIsStarting] = useState(false); // New: immediate feedback on click
@@ -66,7 +64,7 @@ export default function NewRun() {
 
     try {
       // Create run record with QUEUED status
-      const runId = await createRun(file, mode);
+      const runId = await createRun(file, '1C_RAW');
 
       if (!runId) {
         setIsStarting(false);
@@ -82,7 +80,7 @@ export default function NewRun() {
       setIsStarting(false); // Processing hook will take over
 
       // Process file on server
-      const result = await processRunServer(runId, mode, file);
+      const result = await processRunServer(runId, '1C_RAW', file);
 
       if (result.success) {
         toast({
@@ -148,9 +146,6 @@ export default function NewRun() {
                 <Cloud className="h-4 w-4 shrink-0" />
                 <span className="font-medium">Обработка на сервере — можно переключать вкладки</span>
               </div>
-              <p className="text-xs text-muted-foreground text-center">
-                Файл обрабатывается на сервере. Это надёжнее и не зависит от памяти браузера.
-              </p>
               <Button
                 variant="outline"
                 size="sm"
@@ -182,7 +177,7 @@ export default function NewRun() {
         {/* Upload Section */}
         <Card>
           <CardHeader>
-            <CardTitle>1. Загрузка файла</CardTitle>
+            <CardTitle>Загрузка файла</CardTitle>
             <CardDescription>
               Перетащите файл или выберите из проводника (до 50MB)
             </CardDescription>
@@ -227,22 +222,6 @@ export default function NewRun() {
           </CardContent>
         </Card>
 
-        {/* Mode Selection */}
-        <Card>
-          <CardHeader>
-            <CardTitle>2. Режим обработки</CardTitle>
-            <CardDescription>
-              Выберите тип входного файла
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ModeSelector
-              value={mode}
-              onChange={setMode}
-              disabled={isProcessing}
-            />
-          </CardContent>
-        </Card>
 
         {/* Action Button */}
         <Button
