@@ -8,6 +8,20 @@ const corsHeaders = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// AGGREGATED ROW format (new) - one row per article+size with period data as objects
+interface AggregatedRow {
+  article: string;
+  size: string;
+  category: string;
+  productGroup: string;
+  groupCode: string;
+  stock: number;
+  price: number;
+  periodQuantities: Record<string, number>;
+  periodRevenues: Record<string, number>;
+}
+
+// Legacy raw row format (for backward compatibility)
 interface RawRow {
   article: string;
   size: string;
@@ -24,8 +38,9 @@ interface RawRow {
 interface RequestBody {
   runId: string;
   userId: string;
-  rows: RawRow[];
+  rows: (AggregatedRow | RawRow)[];
   chunkIndex: number;
+  isAggregated?: boolean;
 }
 
 serve(async (req) => {
@@ -34,9 +49,9 @@ serve(async (req) => {
   }
 
   try {
-    const { runId, userId, rows, chunkIndex }: RequestBody = await req.json();
+    const { runId, userId, rows, chunkIndex, isAggregated }: RequestBody = await req.json();
 
-    console.log(`[upload-raw-data] Chunk ${chunkIndex}: Received ${rows.length} rows for run ${runId}`);
+    console.log(`[upload-raw-data] Chunk ${chunkIndex}: Received ${rows.length} ${isAggregated ? 'aggregated' : 'raw'} rows for run ${runId}`);
 
     if (!runId || !userId || !rows || rows.length === 0) {
       return new Response(
@@ -56,20 +71,86 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Prepare rows for insertion into sales_data_raw
-    // Round stock and quantity to integers (DB columns are integer type)
-    const insertData = rows.map((r) => ({
-      run_id: runId,
-      chunk_index: chunkIndex,
-      article: r.article,
-      size: r.size || '',
-      category: r.category || 'Без категории',
-      product_group: r.productGroup || 'другая',
-      stock: Math.round(r.stock || 0),
-      price: r.price || 0,
-      period: r.period,
-      quantity: Math.round(r.quantity || 0),
-      revenue: r.revenue || 0,
-    }));
+    // If aggregated, expand periodQuantities/periodRevenues into multiple rows
+    const insertData: Array<{
+      run_id: string;
+      chunk_index: number;
+      article: string;
+      size: string;
+      category: string;
+      product_group: string;
+      stock: number;
+      price: number;
+      period: string;
+      quantity: number;
+      revenue: number;
+    }> = [];
+
+    if (isAggregated) {
+      // AGGREGATED FORMAT: expand period data into rows
+      for (const row of rows as AggregatedRow[]) {
+        const periods = Object.keys(row.periodQuantities || {});
+        
+        // If no periods with data, still create at least one row with stock info
+        if (periods.length === 0) {
+          insertData.push({
+            run_id: runId,
+            chunk_index: chunkIndex,
+            article: row.article,
+            size: row.size || '',
+            category: row.category || 'Без категории',
+            product_group: row.productGroup || 'другая',
+            stock: Math.round(row.stock || 0),
+            price: row.price || 0,
+            period: '1970-01', // placeholder period
+            quantity: 0,
+            revenue: 0,
+          });
+          continue;
+        }
+
+        for (const period of periods) {
+          const quantity = row.periodQuantities[period] || 0;
+          const revenue = row.periodRevenues?.[period] || 0;
+
+          // Only insert if there's actual data
+          if (quantity > 0 || revenue > 0 || row.stock > 0) {
+            insertData.push({
+              run_id: runId,
+              chunk_index: chunkIndex,
+              article: row.article,
+              size: row.size || '',
+              category: row.category || 'Без категории',
+              product_group: row.productGroup || 'другая',
+              stock: Math.round(row.stock || 0),
+              price: row.price || 0,
+              period,
+              quantity: Math.round(quantity),
+              revenue: revenue,
+            });
+          }
+        }
+      }
+    } else {
+      // LEGACY RAW FORMAT: direct mapping
+      for (const r of rows as RawRow[]) {
+        insertData.push({
+          run_id: runId,
+          chunk_index: chunkIndex,
+          article: r.article,
+          size: r.size || '',
+          category: r.category || 'Без категории',
+          product_group: r.productGroup || 'другая',
+          stock: Math.round(r.stock || 0),
+          price: r.price || 0,
+          period: r.period,
+          quantity: Math.round(r.quantity || 0),
+          revenue: r.revenue || 0,
+        });
+      }
+    }
+
+    console.log(`[upload-raw-data] Chunk ${chunkIndex}: Expanded to ${insertData.length} DB rows`);
 
     // Adaptive micro-batch insert: start with larger batch, reduce on timeout
     let microBatchSize = 200;
@@ -83,7 +164,6 @@ serve(async (req) => {
 
       const { error } = await supabase
         .from('sales_data_raw')
-        // Note: supabase-js for Deno doesn't support returning option here; we rely on default minimal payload.
         .insert(batch);
 
       if (error) {
@@ -133,13 +213,14 @@ serve(async (req) => {
     }
 
     console.log(
-      `[upload-raw-data] Chunk ${chunkIndex}: Successfully inserted ${insertedCount} rows (final microBatchSize=${microBatchSize})`,
+      `[upload-raw-data] Chunk ${chunkIndex}: Successfully inserted ${insertedCount} rows (from ${rows.length} input rows, final microBatchSize=${microBatchSize})`,
     );
 
     return new Response(
       JSON.stringify({
         success: true,
-        inserted: rows.length,
+        inserted: insertedCount,
+        inputRows: rows.length,
         chunkIndex,
       }),
       {
