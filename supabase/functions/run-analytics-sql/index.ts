@@ -141,11 +141,12 @@ serve(async (req) => {
     }
     console.log(`[run-analytics-sql] Phase 4 done in ${Date.now() - phase4Start}ms`);
 
-    // Get distinct periods from raw data
+    // Get distinct periods from raw data (exclude 1970-01 placeholder)
     const { data: distinctPeriods } = await supabase
       .from('sales_data_raw')
       .select('period')
-      .eq('run_id', runId);
+      .eq('run_id', runId)
+      .neq('period', '1970-01');
 
     // Get unique periods
     const uniquePeriods = [...new Set((distinctPeriods || []).map(r => r.period))].sort();
