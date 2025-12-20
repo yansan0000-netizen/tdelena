@@ -11,6 +11,8 @@ import NewRun from "./pages/NewRun";
 import RunsList from "./pages/RunsList";
 import RunDetails from "./pages/RunDetails";
 import Documentation from "./pages/Documentation";
+import UnitEconomics from "./pages/UnitEconomics";
+import UnitEconomicsDetail from "./pages/UnitEconomicsDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,6 +49,22 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <RunDetails />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/unit-economics"
+              element={
+                <ProtectedRoute>
+                  <UnitEconomics />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/unit-economics/:article"
+              element={
+                <ProtectedRoute>
+                  <UnitEconomicsDetail />
                 </ProtectedRoute>
               }
             />

@@ -305,6 +305,195 @@ export type Database = {
           },
         ]
       }
+      unit_econ_inputs: {
+        Row: {
+          acceptance_rub: number | null
+          accessories_cost: number | null
+          admin_overhead_pct: number | null
+          approved_discount_pct: number | null
+          article: string
+          buyer_price_with_spp: number | null
+          calculation_date: string | null
+          category: string | null
+          competitor_price: number | null
+          competitor_url: string | null
+          created_at: string | null
+          cutting_cost: number | null
+          delivery_rub: number | null
+          fabric_cost_total: number | null
+          fabric1_cost_rub_per_unit: number | null
+          fabric1_kg_per_unit: number | null
+          fabric1_name: string | null
+          fabric1_price_rub_per_kg: number | null
+          fabric1_price_usd: number | null
+          fabric1_weight_cut_kg: number | null
+          fabric2_cost_rub_per_unit: number | null
+          fabric2_kg_per_unit: number | null
+          fabric2_name: string | null
+          fabric2_price_rub_per_kg: number | null
+          fabric2_price_usd: number | null
+          fabric2_weight_cut_kg: number | null
+          fabric3_cost_rub_per_unit: number | null
+          fabric3_kg_per_unit: number | null
+          fabric3_name: string | null
+          fabric3_price_rub_per_kg: number | null
+          fabric3_price_usd: number | null
+          fabric3_weight_cut_kg: number | null
+          fx_rate: number | null
+          id: string
+          investments_rub: number | null
+          is_new: boolean | null
+          name: string | null
+          non_purchase_pct: number | null
+          planned_retail_after_discount: number | null
+          planned_sales_month_qty: number | null
+          print_embroidery_cost: number | null
+          product_url: string | null
+          retail_before_discount: number | null
+          retail_price_rub: number | null
+          scenario_desired_price: number | null
+          scenario_min_price: number | null
+          scenario_min_profit: number | null
+          scenario_plan_price: number | null
+          scenario_plan_profit: number | null
+          scenario_recommended_price: number | null
+          sewing_cost: number | null
+          spp_pct: number | null
+          unit_cost_real_rub: number | null
+          units_in_cut: number | null
+          updated_at: string | null
+          user_id: string
+          usn_tax_pct: number | null
+          wb_commission_pct: number | null
+          wholesale_markup_pct: number | null
+          wholesale_price_rub: number | null
+        }
+        Insert: {
+          acceptance_rub?: number | null
+          accessories_cost?: number | null
+          admin_overhead_pct?: number | null
+          approved_discount_pct?: number | null
+          article: string
+          buyer_price_with_spp?: number | null
+          calculation_date?: string | null
+          category?: string | null
+          competitor_price?: number | null
+          competitor_url?: string | null
+          created_at?: string | null
+          cutting_cost?: number | null
+          delivery_rub?: number | null
+          fabric_cost_total?: number | null
+          fabric1_cost_rub_per_unit?: number | null
+          fabric1_kg_per_unit?: number | null
+          fabric1_name?: string | null
+          fabric1_price_rub_per_kg?: number | null
+          fabric1_price_usd?: number | null
+          fabric1_weight_cut_kg?: number | null
+          fabric2_cost_rub_per_unit?: number | null
+          fabric2_kg_per_unit?: number | null
+          fabric2_name?: string | null
+          fabric2_price_rub_per_kg?: number | null
+          fabric2_price_usd?: number | null
+          fabric2_weight_cut_kg?: number | null
+          fabric3_cost_rub_per_unit?: number | null
+          fabric3_kg_per_unit?: number | null
+          fabric3_name?: string | null
+          fabric3_price_rub_per_kg?: number | null
+          fabric3_price_usd?: number | null
+          fabric3_weight_cut_kg?: number | null
+          fx_rate?: number | null
+          id?: string
+          investments_rub?: number | null
+          is_new?: boolean | null
+          name?: string | null
+          non_purchase_pct?: number | null
+          planned_retail_after_discount?: number | null
+          planned_sales_month_qty?: number | null
+          print_embroidery_cost?: number | null
+          product_url?: string | null
+          retail_before_discount?: number | null
+          retail_price_rub?: number | null
+          scenario_desired_price?: number | null
+          scenario_min_price?: number | null
+          scenario_min_profit?: number | null
+          scenario_plan_price?: number | null
+          scenario_plan_profit?: number | null
+          scenario_recommended_price?: number | null
+          sewing_cost?: number | null
+          spp_pct?: number | null
+          unit_cost_real_rub?: number | null
+          units_in_cut?: number | null
+          updated_at?: string | null
+          user_id: string
+          usn_tax_pct?: number | null
+          wb_commission_pct?: number | null
+          wholesale_markup_pct?: number | null
+          wholesale_price_rub?: number | null
+        }
+        Update: {
+          acceptance_rub?: number | null
+          accessories_cost?: number | null
+          admin_overhead_pct?: number | null
+          approved_discount_pct?: number | null
+          article?: string
+          buyer_price_with_spp?: number | null
+          calculation_date?: string | null
+          category?: string | null
+          competitor_price?: number | null
+          competitor_url?: string | null
+          created_at?: string | null
+          cutting_cost?: number | null
+          delivery_rub?: number | null
+          fabric_cost_total?: number | null
+          fabric1_cost_rub_per_unit?: number | null
+          fabric1_kg_per_unit?: number | null
+          fabric1_name?: string | null
+          fabric1_price_rub_per_kg?: number | null
+          fabric1_price_usd?: number | null
+          fabric1_weight_cut_kg?: number | null
+          fabric2_cost_rub_per_unit?: number | null
+          fabric2_kg_per_unit?: number | null
+          fabric2_name?: string | null
+          fabric2_price_rub_per_kg?: number | null
+          fabric2_price_usd?: number | null
+          fabric2_weight_cut_kg?: number | null
+          fabric3_cost_rub_per_unit?: number | null
+          fabric3_kg_per_unit?: number | null
+          fabric3_name?: string | null
+          fabric3_price_rub_per_kg?: number | null
+          fabric3_price_usd?: number | null
+          fabric3_weight_cut_kg?: number | null
+          fx_rate?: number | null
+          id?: string
+          investments_rub?: number | null
+          is_new?: boolean | null
+          name?: string | null
+          non_purchase_pct?: number | null
+          planned_retail_after_discount?: number | null
+          planned_sales_month_qty?: number | null
+          print_embroidery_cost?: number | null
+          product_url?: string | null
+          retail_before_discount?: number | null
+          retail_price_rub?: number | null
+          scenario_desired_price?: number | null
+          scenario_min_price?: number | null
+          scenario_min_profit?: number | null
+          scenario_plan_price?: number | null
+          scenario_plan_profit?: number | null
+          scenario_recommended_price?: number | null
+          sewing_cost?: number | null
+          spp_pct?: number | null
+          unit_cost_real_rub?: number | null
+          units_in_cut?: number | null
+          updated_at?: string | null
+          user_id?: string
+          usn_tax_pct?: number | null
+          wb_commission_pct?: number | null
+          wholesale_markup_pct?: number | null
+          wholesale_price_rub?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

@@ -3,11 +3,13 @@ import { useParams, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatusBadge } from '@/components/StatusBadge';
 import { RunDataTable } from '@/components/RunDataTable';
+import { EconomicsPanel } from '@/components/costs/EconomicsPanel';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useRuns } from '@/hooks/useRuns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAnalyticsExport } from '@/hooks/useAnalyticsExport';
@@ -500,12 +502,27 @@ export default function RunDetails() {
           </CardContent>
         </Card>
 
-        {/* Data Table - сначала таблица */}
-        {run.status === 'DONE' && (run.processed_file_path || run.result_file_path) && (
-          <RunDataTable 
-            processedFilePath={run.processed_file_path}
-            resultFilePath={run.result_file_path}
-          />
+        {/* Data & Economics Tabs */}
+        {run.status === 'DONE' && (
+          <Tabs defaultValue="economics" className="w-full">
+            <TabsList>
+              <TabsTrigger value="economics">Экономика</TabsTrigger>
+              {(run.processed_file_path || run.result_file_path) && (
+                <TabsTrigger value="data">Данные</TabsTrigger>
+              )}
+            </TabsList>
+            <TabsContent value="economics" className="mt-4">
+              <EconomicsPanel runId={run.id} />
+            </TabsContent>
+            {(run.processed_file_path || run.result_file_path) && (
+              <TabsContent value="data" className="mt-4">
+                <RunDataTable 
+                  processedFilePath={run.processed_file_path}
+                  resultFilePath={run.result_file_path}
+                />
+              </TabsContent>
+            )}
+          </Tabs>
         )}
 
         {/* Logs - потом логи */}
