@@ -322,17 +322,53 @@ export default function RunDetails() {
                   <div className="text-center p-3 bg-muted rounded-lg">
                     <Layers className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
                     <p className="text-2xl font-bold">{qualityStats.rawRows.toLocaleString('ru-RU')}</p>
-                    <p className="text-xs text-muted-foreground">Сырых строк</p>
+                    <div className="flex items-center justify-center gap-1">
+                      <p className="text-xs text-muted-foreground">Сырых строк</p>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p>Общее количество записей в БД: каждая комбинация артикул×размер×период с продажами или остатками.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                   </div>
                   <div className="text-center p-3 bg-muted rounded-lg">
                     <Hash className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
                     <p className="text-2xl font-bold">{qualityStats.uniqueArticles.toLocaleString('ru-RU')}</p>
-                    <p className="text-xs text-muted-foreground">Уник. артикулов</p>
+                    <div className="flex items-center justify-center gap-1">
+                      <p className="text-xs text-muted-foreground">Уник. артикулов</p>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p>Количество уникальных артикулов без учёта размеров.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                   </div>
                   <div className="text-center p-3 bg-muted rounded-lg">
                     <Package className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
                     <p className="text-2xl font-bold">{qualityStats.analyticsRows.toLocaleString('ru-RU')}</p>
-                    <p className="text-xs text-muted-foreground">Артикул+размер</p>
+                    <div className="flex items-center justify-center gap-1">
+                      <p className="text-xs text-muted-foreground">Артикул+размер</p>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p>Количество уникальных комбинаций артикул+размер в итоговой аналитике.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                   </div>
                   <div className="text-center p-3 bg-primary/10 border border-primary/20 rounded-lg">
                     <CheckCircle className="h-5 w-5 mx-auto mb-1 text-primary" />

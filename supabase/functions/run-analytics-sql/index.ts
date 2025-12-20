@@ -13,6 +13,28 @@ interface RequestBody {
 
 const BATCH_SIZE = 1500; // Process 1500 articles per batch (~30 sec)
 
+// Helper to append log entry to the runs table
+async function appendLog(
+  supabase: ReturnType<typeof createClient>,
+  runId: string,
+  level: string,
+  step: string,
+  message: string,
+  context?: Record<string, unknown>
+) {
+  try {
+    await supabase.rpc('append_run_log', {
+      p_run_id: runId,
+      p_level: level,
+      p_step: step,
+      p_message: message,
+      p_context: context || null
+    });
+  } catch (err) {
+    console.warn(`[run-analytics-sql] Failed to append log: ${err}`);
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -20,6 +42,7 @@ serve(async (req) => {
 
   const startTime = Date.now();
   let runId: string | null = null;
+  let supabase: ReturnType<typeof createClient> | null = null;
 
   try {
     const body = (await req.json()) as RequestBody;
@@ -37,7 +60,7 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    supabase = createClient(supabaseUrl, supabaseKey);
 
     // CRITICAL: Check if run already processed or analytics already exist
     const { data: run } = await supabase
@@ -78,6 +101,7 @@ serve(async (req) => {
 
     // Update run status to PROCESSING
     await supabase.from('runs').update({ status: 'PROCESSING' }).eq('id', runId);
+    await appendLog(supabase, runId, 'INFO', 'analytics', 'Запуск SQL-аналитики');
 
     // Phase 1: Basic aggregation (BATCHED to avoid timeout)
     console.log(`[run-analytics-sql] Phase 1: Basic aggregation (batched)...`);
@@ -102,7 +126,7 @@ serve(async (req) => {
         throw new Error(`Phase 1 batch failed at offset ${phase1Offset}: ${batchError.message}`);
       }
 
-      const processedCount = batchResult || 0;
+      const processedCount = typeof batchResult === 'number' ? batchResult : 0;
       console.log(`[run-analytics-sql] Phase 1 batch: offset=${phase1Offset}, processed=${processedCount}`);
       
       if (processedCount === 0) break;
@@ -111,7 +135,12 @@ serve(async (req) => {
       phase1Offset += BATCH_SIZE;
     }
 
-    console.log(`[run-analytics-sql] Phase 1 done in ${Date.now() - phase1Start}ms, total: ${phase1Total}`);
+    const phase1Time = Date.now() - phase1Start;
+    console.log(`[run-analytics-sql] Phase 1 done in ${phase1Time}ms, total: ${phase1Total}`);
+    await appendLog(supabase, runId, 'ACTION', 'phase1', `Агрегация: ${phase1Total} артикулов`, { 
+      duration_ms: phase1Time, 
+      articles: phase1Total 
+    });
 
     // Phase 2: XYZ calculation (BATCHED to avoid timeout)
     console.log(`[run-analytics-sql] Phase 2: XYZ calculation (batched)...`);
@@ -136,7 +165,7 @@ serve(async (req) => {
         throw new Error(`Phase 2 batch failed at offset ${phase2Offset}: ${batchError.message}`);
       }
 
-      const processedCount = batchResult || 0;
+      const processedCount = typeof batchResult === 'number' ? batchResult : 0;
       console.log(`[run-analytics-sql] Phase 2 batch: offset=${phase2Offset}, processed=${processedCount}`);
       
       if (processedCount === 0) break;
@@ -145,7 +174,12 @@ serve(async (req) => {
       phase2Offset += BATCH_SIZE;
     }
 
-    console.log(`[run-analytics-sql] Phase 2 done in ${Date.now() - phase2Start}ms, total: ${phase2Total}`);
+    const phase2Time = Date.now() - phase2Start;
+    console.log(`[run-analytics-sql] Phase 2 done in ${phase2Time}ms, total: ${phase2Total}`);
+    await appendLog(supabase, runId, 'ACTION', 'phase2', `XYZ расчёт: ${phase2Total} артикулов`, { 
+      duration_ms: phase2Time, 
+      articles: phase2Total 
+    });
 
     // Phase 3: ABC calculation
     console.log(`[run-analytics-sql] Phase 3: ABC calculation...`);
@@ -161,7 +195,11 @@ serve(async (req) => {
     if (phase3Error) {
       throw new Error(`Phase 3 failed: ${phase3Error.message}`);
     }
-    console.log(`[run-analytics-sql] Phase 3 done in ${Date.now() - phase3Start}ms`);
+    const phase3Time = Date.now() - phase3Start;
+    console.log(`[run-analytics-sql] Phase 3 done in ${phase3Time}ms`);
+    await appendLog(supabase, runId, 'ACTION', 'phase3', 'ABC классификация выполнена', { 
+      duration_ms: phase3Time 
+    });
 
     // Phase 4: Plans and recommendations
     console.log(`[run-analytics-sql] Phase 4: Plans and recommendations...`);
@@ -177,7 +215,11 @@ serve(async (req) => {
     if (phase4Error) {
       throw new Error(`Phase 4 failed: ${phase4Error.message}`);
     }
-    console.log(`[run-analytics-sql] Phase 4 done in ${Date.now() - phase4Start}ms`);
+    const phase4Time = Date.now() - phase4Start;
+    console.log(`[run-analytics-sql] Phase 4 done in ${phase4Time}ms`);
+    await appendLog(supabase, runId, 'ACTION', 'phase4', 'Планы и рекомендации сформированы', { 
+      duration_ms: phase4Time 
+    });
 
     // Get distinct periods from raw data using RPC (avoids 1000 row limit)
     const { data: periodData, error: periodError } = await supabase
@@ -187,7 +229,8 @@ serve(async (req) => {
       console.warn(`[run-analytics-sql] Period query warning: ${periodError.message}`);
     }
 
-    const uniquePeriods = (periodData || []).map((r: { period: string }) => r.period);
+    const periodsArray = Array.isArray(periodData) ? periodData : [];
+    const uniquePeriods = periodsArray.map((r: { period: string }) => r.period);
     const periodCount = uniquePeriods.length;
     const firstPeriod = uniquePeriods[0] || null;
     const lastPeriod = uniquePeriods[uniquePeriods.length - 1] || null;
@@ -222,6 +265,11 @@ serve(async (req) => {
     }
 
     console.log(`[run-analytics-sql] All phases completed in ${processingTimeMs}ms`);
+    await appendLog(supabase, runId, 'ACTION', 'complete', `Обработка завершена за ${(processingTimeMs / 1000).toFixed(1)} сек`, { 
+      duration_ms: processingTimeMs,
+      articles: analyticsRowCount,
+      periods: periodCount
+    });
 
     return new Response(
       JSON.stringify({
@@ -234,15 +282,18 @@ serve(async (req) => {
 
   } catch (error) {
     console.error(`[run-analytics-sql] Error:`, error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
 
     if (runId) {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
+      const supabaseClient = supabase || createClient(supabaseUrl, supabaseKey);
 
-      await supabase.from('runs').update({
+      await appendLog(supabaseClient, runId, 'ERROR', 'error', errorMessage);
+
+      await supabaseClient.from('runs').update({
         status: 'ERROR',
-        error_message: error instanceof Error ? error.message : String(error),
+        error_message: errorMessage,
         processing_time_ms: Date.now() - startTime,
       }).eq('id', runId);
     }
@@ -250,7 +301,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
