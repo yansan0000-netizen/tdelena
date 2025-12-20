@@ -1,8 +1,10 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import {
   AnalyticsRow,
+  UnitEconData,
   generateAnalyticsReport,
   generateProductionPlanReport,
   downloadBlob,
@@ -17,9 +19,11 @@ export interface ExportProgress {
 }
 
 export function useAnalyticsExport(runId: string | undefined) {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<ExportProgress>({ loaded: 0, total: null, percent: 0 });
   const [analyticsData, setAnalyticsData] = useState<AnalyticsRow[] | null>(null);
+  const [costsData, setCostsData] = useState<UnitEconData[] | null>(null);
 
   const fetchAnalyticsData = useCallback(async (): Promise<AnalyticsRow[] | null> => {
     if (!runId) return null;
@@ -75,16 +79,41 @@ export function useAnalyticsExport(runId: string | undefined) {
     return all;
   }, [runId, analyticsData]);
 
+  const fetchCostsData = useCallback(async (): Promise<UnitEconData[] | null> => {
+    if (!user) return null;
+    
+    // Return cached data if available
+    if (costsData) return costsData;
+
+    const { data, error } = await supabase
+      .from('unit_econ_inputs')
+      .select('article, unit_cost_real_rub')
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('Error fetching costs:', error);
+      return null;
+    }
+
+    const costs = (data ?? []) as UnitEconData[];
+    setCostsData(costs);
+    return costs;
+  }, [user, costsData]);
+
   const downloadReport = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchAnalyticsData();
+      const [data, costs] = await Promise.all([
+        fetchAnalyticsData(),
+        fetchCostsData()
+      ]);
+      
       if (!data || data.length === 0) {
         toast.error('Нет данных для отчёта');
         return;
       }
 
-      const blob = generateAnalyticsReport(data);
+      const blob = generateAnalyticsReport(data, costs || undefined);
       downloadBlob(blob, `Отчёт_ABC_XYZ_${runId?.slice(0, 8)}.xlsx`);
       toast.success(`Отчёт скачан (${data.length.toLocaleString('ru-RU')} строк)`);
     } catch (err) {
@@ -93,18 +122,22 @@ export function useAnalyticsExport(runId: string | undefined) {
     } finally {
       setLoading(false);
     }
-  }, [fetchAnalyticsData, runId]);
+  }, [fetchAnalyticsData, fetchCostsData, runId]);
 
   const downloadProductionPlan = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await fetchAnalyticsData();
+      const [data, costs] = await Promise.all([
+        fetchAnalyticsData(),
+        fetchCostsData()
+      ]);
+      
       if (!data || data.length === 0) {
         toast.error('Нет данных для плана');
         return;
       }
 
-      const blob = generateProductionPlanReport(data);
+      const blob = generateProductionPlanReport(data, costs || undefined);
       downloadBlob(blob, `План_Производства_${runId?.slice(0, 8)}.xlsx`);
       toast.success('План производства скачан');
     } catch (err) {
@@ -113,7 +146,7 @@ export function useAnalyticsExport(runId: string | undefined) {
     } finally {
       setLoading(false);
     }
-  }, [fetchAnalyticsData, runId]);
+  }, [fetchAnalyticsData, fetchCostsData, runId]);
 
   return {
     loading,
