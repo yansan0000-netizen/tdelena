@@ -16,11 +16,12 @@ export default function Documentation() {
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Обзор</TabsTrigger>
             <TabsTrigger value="format">Формат файла</TabsTrigger>
             <TabsTrigger value="analysis">Анализ</TabsTrigger>
             <TabsTrigger value="output">Результаты</TabsTrigger>
+            <TabsTrigger value="quality">Качество</TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -349,6 +350,106 @@ export default function Documentation() {
                   </div>
                   <div className="p-3 bg-muted/50 rounded-lg">
                     <strong>CV (коэфф. вариации)</strong> = (Стандартное отклонение / Среднее) × 100%
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Quality Tab */}
+          <TabsContent value="quality" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-primary" />
+                  Контроль качества данных
+                </CardTitle>
+                <CardDescription>Метрики и логирование обработки</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3">
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <strong>Сырых строк</strong> — общее количество записей в БД: каждая комбинация артикул×размер×период с продажами или остатками
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <strong>Уникальных артикулов</strong> — количество уникальных артикулов без учёта размеров
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <strong>Артикул+размер</strong> — количество уникальных комбинаций в итоговой аналитике
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <strong>Сжатие данных</strong> — коэффициент агрегации от сырых строк к аналитике (например, 3% означает сжатие в ~33 раза)
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Этапы обработки</CardTitle>
+                <CardDescription>Процесс анализа данных</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <ol className="space-y-3">
+                  <li className="flex items-start gap-3">
+                    <Badge className="shrink-0">1</Badge>
+                    <div>
+                      <strong>Загрузка файла</strong> — парсинг Excel, разбиение на чанки и загрузка в базу данных
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <Badge className="shrink-0">2</Badge>
+                    <div>
+                      <strong>Агрегация</strong> — группировка по артикулам, расчёт сумм и средних значений
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <Badge className="shrink-0">3</Badge>
+                    <div>
+                      <strong>XYZ-анализ</strong> — расчёт коэффициента вариации для каждого артикула
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <Badge className="shrink-0">4</Badge>
+                    <div>
+                      <strong>ABC-анализ</strong> — ранжирование по выручке и расчёт кумулятивных долей
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <Badge className="shrink-0">5</Badge>
+                    <div>
+                      <strong>Рекомендации</strong> — формирование планов производства и рекомендаций
+                    </div>
+                  </li>
+                </ol>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Логирование</CardTitle>
+                <CardDescription>Отслеживание процесса обработки</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Система записывает логи на каждом этапе обработки. Логи доступны на странице деталей запуска и содержат:
+                </p>
+                <div className="grid gap-2">
+                  <div className="flex items-center gap-2 p-2 bg-muted/50 rounded">
+                    <Badge variant="outline" className="bg-primary/10 text-primary">INFO</Badge>
+                    <span className="text-sm">Информационные сообщения о начале этапов</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-muted/50 rounded">
+                    <Badge variant="outline" className="bg-green-500/10 text-green-600">ACTION</Badge>
+                    <span className="text-sm">Успешное завершение этапов с метриками</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-muted/50 rounded">
+                    <Badge variant="outline" className="bg-amber-500/10 text-amber-600">WARN</Badge>
+                    <span className="text-sm">Предупреждения о возможных проблемах</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-muted/50 rounded">
+                    <Badge variant="outline" className="bg-red-500/10 text-red-600">ERROR</Badge>
+                    <span className="text-sm">Ошибки обработки</span>
                   </div>
                 </div>
               </CardContent>
