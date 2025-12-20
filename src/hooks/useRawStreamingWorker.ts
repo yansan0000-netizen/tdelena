@@ -45,6 +45,27 @@ interface AggregatedRow {
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Helper to append log entry to the runs table
+async function appendLog(
+  runId: string,
+  level: string,
+  step: string,
+  message: string,
+  context?: Record<string, string | number | boolean | null>
+) {
+  try {
+    await supabase.rpc('append_run_log', {
+      p_run_id: runId,
+      p_level: level,
+      p_step: step,
+      p_message: message,
+      p_context: context ? JSON.parse(JSON.stringify(context)) : null
+    });
+  } catch (err) {
+    console.warn('Failed to append log:', err);
+  }
+}
+
 export function useRawStreamingWorker() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState<StreamingProgress>({ message: '', percent: 0 });
@@ -160,6 +181,12 @@ export function useRawStreamingWorker() {
       setIsProcessing(true);
       setProgress({ message: 'Инициализация...', percent: 0 });
 
+      // Log file processing start
+      appendLog(runId, 'INFO', 'start', `Начало обработки файла: ${file.name}`, { 
+        file_size: file.size, 
+        file_name: file.name 
+      });
+
       // Terminate existing worker
       if (workerRef.current) {
         workerRef.current.terminate();
@@ -258,6 +285,15 @@ export function useRawStreamingWorker() {
           case 'complete': {
             metrics = e.data.metrics;
 
+            // Log upload complete
+            if (metrics) {
+              appendLog(runId, 'ACTION', 'upload', `Загрузка завершена: ${metrics.totalRows} строк в ${metrics.totalChunks} чанках`, {
+                total_rows: metrics.totalRows,
+                total_chunks: metrics.totalChunks,
+                periods_count: metrics.periods?.length || 0
+              });
+            }
+
             // With back-pressure, all uploads complete before 'complete' is sent
             // CRITICAL: Run analytics ONLY HERE, ONCE
             if (!hasError) {
@@ -268,6 +304,7 @@ export function useRawStreamingWorker() {
 
           case 'error':
             hasError = true;
+            appendLog(runId, 'ERROR', 'worker', workerError || 'Unknown worker error');
             worker.terminate();
             setIsProcessing(false);
             resolve({

@@ -329,6 +329,16 @@ export type Database = {
       }
       analytics_phase3_abc: { Args: { p_run_id: string }; Returns: undefined }
       analytics_phase4_plans: { Args: { p_run_id: string }; Returns: undefined }
+      append_run_log: {
+        Args: {
+          p_context?: Json
+          p_level: string
+          p_message: string
+          p_run_id: string
+          p_step: string
+        }
+        Returns: undefined
+      }
       get_run_periods: {
         Args: { p_run_id: string }
         Returns: {
