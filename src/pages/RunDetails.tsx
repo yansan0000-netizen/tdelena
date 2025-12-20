@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useRuns } from '@/hooks/useRuns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAnalyticsExport } from '@/hooks/useAnalyticsExport';
@@ -317,7 +318,7 @@ export default function RunDetails() {
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="text-center p-3 bg-muted rounded-lg">
                     <Layers className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
                     <p className="text-2xl font-bold">{qualityStats.rawRows.toLocaleString('ru-RU')}</p>
@@ -333,11 +334,6 @@ export default function RunDetails() {
                     <p className="text-2xl font-bold">{qualityStats.analyticsRows.toLocaleString('ru-RU')}</p>
                     <p className="text-xs text-muted-foreground">Артикул+размер</p>
                   </div>
-                  <div className="text-center p-3 bg-muted rounded-lg">
-                    <Calendar className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
-                    <p className="text-2xl font-bold">{qualityStats.periodsCount}</p>
-                    <p className="text-xs text-muted-foreground">Периодов</p>
-                  </div>
                   <div className="text-center p-3 bg-primary/10 border border-primary/20 rounded-lg">
                     <CheckCircle className="h-5 w-5 mx-auto mb-1 text-primary" />
                     <p className="text-2xl font-bold text-primary">
@@ -345,7 +341,19 @@ export default function RunDetails() {
                         ? Math.round((qualityStats.analyticsRows / qualityStats.rawRows) * 100) 
                         : 0}%
                     </p>
-                    <p className="text-xs text-muted-foreground">Сжатие данных</p>
+                    <div className="flex items-center justify-center gap-1">
+                      <p className="text-xs text-muted-foreground">Сжатие данных</p>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p>Коэффициент агрегации: показывает во сколько раз данные сжаты при переходе от сырых строк (артикул×размер×период) к итоговой аналитике (артикул).</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                   </div>
                 </div>
               )}
