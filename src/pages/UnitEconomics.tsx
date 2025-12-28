@@ -11,7 +11,9 @@ import { CategorySelect } from '@/components/ui/category-select';
 import { useCosts } from '@/hooks/useCosts';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { PRODUCT_CATEGORIES } from '@/lib/categories';
-import { Plus, Upload, Search, Calculator, TrendingUp, Package } from 'lucide-react';
+import { downloadUnitEconExport } from '@/lib/excel/unitEconExport';
+import { Plus, Upload, Search, Calculator, TrendingUp, Package, Download } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function UnitEconomics() {
   const { costs, loading } = useCosts();
@@ -59,6 +61,21 @@ export default function UnitEconomics() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              className="gap-2"
+              onClick={() => {
+                if (costs.length === 0) {
+                  toast.error('Нет данных для экспорта');
+                  return;
+                }
+                downloadUnitEconExport(costs);
+                toast.success('Экспорт выполнен');
+              }}
+            >
+              <Download className="h-4 w-4" />
+              Экспорт Excel
+            </Button>
             <Dialog open={importOpen} onOpenChange={setImportOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" className="gap-2">
