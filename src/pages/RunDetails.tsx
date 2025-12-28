@@ -4,6 +4,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { StatusBadge } from '@/components/StatusBadge';
 import { RunDataTable } from '@/components/RunDataTable';
 import { EconomicsPanel } from '@/components/costs/EconomicsPanel';
+import { ExportFiltersPanel } from '@/components/ExportFilters';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -57,7 +58,18 @@ const logLevelConfig: Record<string, { icon: React.ElementType; className: strin
 export default function RunDetails() {
   const { id } = useParams<{ id: string }>();
   const { getRun, getDownloadUrl } = useRuns();
-  const { loading: exportLoading, progress, downloadReport, downloadProductionPlan } = useAnalyticsExport(id);
+  const { 
+    loading: exportLoading, 
+    progress, 
+    filters,
+    setFilters,
+    filterOptions,
+    filteredCount,
+    totalCount,
+    downloadReport, 
+    downloadProductionPlan,
+    loadDataForFilters,
+  } = useAnalyticsExport(id);
   const { stats: qualityStats } = useDataQuality(id);
   const [run, setRun] = useState<Run | null>(null);
   const [loading, setLoading] = useState(true);
@@ -86,6 +98,8 @@ export default function RunDetails() {
         if (data.status === 'DONE') {
           toast.success('Обработка завершена!');
           clearInterval(interval);
+          // Load data for export filters
+          loadDataForFilters();
         } else if (data.status === 'ERROR') {
           toast.error('Ошибка обработки');
           clearInterval(interval);
@@ -94,7 +108,14 @@ export default function RunDetails() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [run?.status, id, getRun]);
+  }, [run?.status, id, getRun, loadDataForFilters]);
+
+  // Load data for filters when run is DONE
+  useEffect(() => {
+    if (run?.status === 'DONE') {
+      loadDataForFilters();
+    }
+  }, [run?.status, loadDataForFilters]);
 
   // Listen for processing complete event (immediate refresh)
   useEffect(() => {
@@ -399,6 +420,19 @@ export default function RunDetails() {
           </Card>
         )}
 
+        {/* Export Filters & Files */}
+        {run.status === 'DONE' && (
+          <ExportFiltersPanel
+            options={filterOptions}
+            filters={filters}
+            onFiltersChange={setFilters}
+            onExport={downloadReport}
+            loading={exportLoading}
+            totalCount={totalCount}
+            filteredCount={filteredCount}
+          />
+        )}
+
         {/* Files */}
         <Card>
           <CardHeader>
@@ -435,26 +469,6 @@ export default function RunDetails() {
               {/* Client-side generated reports from analytics data */}
               {run.status === 'DONE' && (
                 <>
-                  <Button
-                    variant="outline"
-                    className="h-auto py-4 flex-col gap-2 relative overflow-hidden"
-                    onClick={downloadReport}
-                    disabled={exportLoading}
-                  >
-                    {exportLoading ? (
-                      <>
-                        <Loader2 className="h-6 w-6 animate-spin" />
-                        <span className="text-sm">
-                          {progress.percent > 0 ? `${progress.percent}%` : 'Загрузка...'}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <FileSpreadsheet className="h-6 w-6" />
-                        <span className="text-sm">Отчёт ABC/XYZ</span>
-                      </>
-                    )}
-                  </Button>
                   <Button
                     className="h-auto py-4 flex-col gap-2 gradient-primary"
                     onClick={downloadProductionPlan}
