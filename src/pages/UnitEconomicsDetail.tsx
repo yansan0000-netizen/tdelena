@@ -102,6 +102,8 @@ export default function UnitEconomicsDetail() {
           cutting_cost: data.cutting_cost,
           accessories_cost: data.accessories_cost,
           print_embroidery_cost: data.print_embroidery_cost,
+          print_embroidery_work_cost: (data as any).print_embroidery_work_cost,
+          print_embroidery_materials_cost: (data as any).print_embroidery_materials_cost,
           fx_rate: data.fx_rate,
           admin_overhead_pct: data.admin_overhead_pct,
           wholesale_markup_pct: data.wholesale_markup_pct,

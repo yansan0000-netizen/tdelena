@@ -43,6 +43,8 @@ export interface UnitEconInput {
   cutting_cost: number | null;
   accessories_cost: number | null;
   print_embroidery_cost: number | null;
+  print_embroidery_work_cost: number | null;
+  print_embroidery_materials_cost: number | null;
   fx_rate: number | null;
   
   // Markup
@@ -99,10 +101,15 @@ export function calculateDerivedFields(input: Partial<UnitEconInputInsert>): {
   const cuttingCost = input.cutting_cost || 0;
   const accessoriesCost = input.accessories_cost || 0;
   const printEmbroideryCost = input.print_embroidery_cost || 0;
+  const printEmbroideryWorkCost = (input as any).print_embroidery_work_cost || 0;
+  const printEmbroideryMaterialsCost = (input as any).print_embroidery_materials_cost || 0;
   const adminOverheadPct = input.admin_overhead_pct || 0;
   const wholesaleMarkupPct = input.wholesale_markup_pct || 0;
   
-  const baseCost = fabricCostTotal + sewingCost + cuttingCost + accessoriesCost + printEmbroideryCost;
+  // Use new split fields if available, otherwise fall back to legacy field
+  const totalPrintEmbroidery = (printEmbroideryWorkCost + printEmbroideryMaterialsCost) || printEmbroideryCost;
+  
+  const baseCost = fabricCostTotal + sewingCost + cuttingCost + accessoriesCost + totalPrintEmbroidery;
   const unitCostReal = baseCost * (1 + adminOverheadPct / 100);
   const wholesalePrice = Math.ceil(unitCostReal * (1 + wholesaleMarkupPct / 100) / 10) * 10;
   const retailPrice = wholesalePrice * 1.15;

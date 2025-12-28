@@ -28,6 +28,8 @@ export interface UserSettings {
   // Custom categories
   custom_product_categories: string[];
   custom_material_categories: string[];
+  // Excluded articles from final report
+  excluded_articles: string[];
   // Meta
   created_at: string;
   updated_at: string;
@@ -50,6 +52,7 @@ export const defaultSettings: Omit<UserSettings, 'id' | 'user_id' | 'created_at'
   tax_mode: 'income_expenses',
   custom_product_categories: [],
   custom_material_categories: [],
+  excluded_articles: [],
 };
 
 export function useUserSettings() {
@@ -88,6 +91,9 @@ export function useUserSettings() {
         custom_material_categories: Array.isArray(data.custom_material_categories) 
           ? data.custom_material_categories 
           : [],
+        excluded_articles: Array.isArray(data.excluded_articles) 
+          ? data.excluded_articles 
+          : [],
       };
       setSettings(parsed as UserSettings);
     } else {
@@ -105,6 +111,7 @@ export function useUserSettings() {
           ...newSettings,
           custom_product_categories: [],
           custom_material_categories: [],
+          excluded_articles: [],
         } as UserSettings);
       }
     }

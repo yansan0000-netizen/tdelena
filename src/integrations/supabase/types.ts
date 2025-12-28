@@ -407,6 +407,8 @@ export type Database = {
           price_no_spp: number | null
           price_with_spp_calculated: number | null
           print_embroidery_cost: number | null
+          print_embroidery_materials_cost: number | null
+          print_embroidery_work_cost: number | null
           product_url: string | null
           profit_per_unit: number | null
           retail_before_discount: number | null
@@ -487,6 +489,8 @@ export type Database = {
           price_no_spp?: number | null
           price_with_spp_calculated?: number | null
           print_embroidery_cost?: number | null
+          print_embroidery_materials_cost?: number | null
+          print_embroidery_work_cost?: number | null
           product_url?: string | null
           profit_per_unit?: number | null
           retail_before_discount?: number | null
@@ -567,6 +571,8 @@ export type Database = {
           price_no_spp?: number | null
           price_with_spp_calculated?: number | null
           print_embroidery_cost?: number | null
+          print_embroidery_materials_cost?: number | null
+          print_embroidery_work_cost?: number | null
           product_url?: string | null
           profit_per_unit?: number | null
           retail_before_discount?: number | null
@@ -605,6 +611,7 @@ export type Database = {
           default_buyout_pct: number | null
           default_logistics_return: number | null
           default_logistics_to_client: number | null
+          excluded_articles: Json | null
           fx_rate: number | null
           global_trend_coef: number | null
           global_trend_manual: boolean | null
@@ -627,6 +634,7 @@ export type Database = {
           default_buyout_pct?: number | null
           default_logistics_return?: number | null
           default_logistics_to_client?: number | null
+          excluded_articles?: Json | null
           fx_rate?: number | null
           global_trend_coef?: number | null
           global_trend_manual?: boolean | null
@@ -649,6 +657,7 @@ export type Database = {
           default_buyout_pct?: number | null
           default_logistics_return?: number | null
           default_logistics_to_client?: number | null
+          excluded_articles?: Json | null
           fx_rate?: number | null
           global_trend_coef?: number | null
           global_trend_manual?: boolean | null
