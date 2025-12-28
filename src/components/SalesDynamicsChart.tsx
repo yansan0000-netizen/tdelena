@@ -31,7 +31,7 @@ import {
   Cell,
 } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, TrendingUp, BarChart3, PieChart as PieChartIcon, GitCompare } from 'lucide-react';
+import { Loader2, TrendingUp, BarChart3, PieChart as PieChartIcon, GitCompare, Sparkles } from 'lucide-react';
 
 interface SalesDynamicsChartProps {
   runId: string;
@@ -80,6 +80,7 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
   const [dataType, setDataType] = useState<'revenue' | 'quantity'>('revenue');
   const [topN, setTopN] = useState<number>(10);
   const [compareMode, setCompareMode] = useState<'none' | 'yoy' | 'mom'>('none');
+  const [forecastPeriods, setForecastPeriods] = useState<number>(3);
 
   // Load data
   useEffect(() => {
@@ -300,6 +301,83 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
     }
   }, [filteredPeriodData, compareMode, dataType]);
 
+  // Linear regression for trend forecast
+  const forecastData = useMemo(() => {
+    if (filteredPeriodData.length < 2) return null;
+
+    const values = filteredPeriodData.map((p) => (dataType === 'revenue' ? p.revenue : p.quantity));
+    const n = values.length;
+
+    // Calculate linear regression: y = mx + b
+    const sumX = (n * (n - 1)) / 2;
+    const sumY = values.reduce((a, b) => a + b, 0);
+    const sumXY = values.reduce((sum, y, x) => sum + x * y, 0);
+    const sumX2 = Array.from({ length: n }, (_, i) => i * i).reduce((a, b) => a + b, 0);
+
+    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+
+    // Calculate R² (coefficient of determination)
+    const meanY = sumY / n;
+    const ssTotal = values.reduce((sum, y) => sum + Math.pow(y - meanY, 2), 0);
+    const ssResidual = values.reduce((sum, y, x) => sum + Math.pow(y - (slope * x + intercept), 2), 0);
+    const rSquared = ssTotal > 0 ? 1 - ssResidual / ssTotal : 0;
+
+    // Generate forecast periods
+    const lastPeriod = filteredPeriodData[n - 1].period;
+    const [lastYear, lastMonth] = lastPeriod.split('-').map(Number);
+
+    const forecastPeriodsList: string[] = [];
+    for (let i = 1; i <= forecastPeriods; i++) {
+      let newMonth = lastMonth + i;
+      let newYear = lastYear;
+      while (newMonth > 12) {
+        newMonth -= 12;
+        newYear += 1;
+      }
+      forecastPeriodsList.push(`${newYear}-${String(newMonth).padStart(2, '0')}`);
+    }
+
+    // Calculate trend line and forecast values
+    const trendLine = filteredPeriodData.map((p, idx) => ({
+      period: p.period,
+      actual: dataType === 'revenue' ? p.revenue : p.quantity,
+      trend: Math.max(0, slope * idx + intercept),
+      isForecast: false,
+    }));
+
+    const forecastValues = forecastPeriodsList.map((period, idx) => ({
+      period,
+      actual: null as number | null,
+      trend: Math.max(0, slope * (n + idx) + intercept),
+      isForecast: true,
+    }));
+
+    // Calculate growth metrics
+    const firstValue = values[0];
+    const lastValue = values[n - 1];
+    const totalGrowth = firstValue > 0 ? ((lastValue - firstValue) / firstValue) * 100 : 0;
+    const avgMonthlyGrowth = n > 1 ? totalGrowth / (n - 1) : 0;
+    
+    // Predicted value at end of forecast
+    const forecastEndValue = slope * (n + forecastPeriods - 1) + intercept;
+    const forecastGrowth = lastValue > 0 ? ((forecastEndValue - lastValue) / lastValue) * 100 : 0;
+
+    return {
+      combined: [...trendLine, ...forecastValues],
+      slope,
+      intercept,
+      rSquared,
+      trendDirection: slope > 0 ? 'up' : slope < 0 ? 'down' : 'flat',
+      totalGrowth,
+      avgMonthlyGrowth,
+      forecastEndValue,
+      forecastGrowth,
+      lastActualValue: lastValue,
+      forecastPeriodsList,
+    };
+  }, [filteredPeriodData, dataType, forecastPeriods]);
+
   // Category breakdown
   const categoryBreakdown = useMemo(() => {
     const catMap = new Map<string, number>();
@@ -494,6 +572,21 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Прогноз:</Label>
+              <Select value={String(forecastPeriods)} onValueChange={(v) => setForecastPeriods(Number(v))}>
+                <SelectTrigger className="w-[100px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 месяц</SelectItem>
+                  <SelectItem value="3">3 месяца</SelectItem>
+                  <SelectItem value="6">6 месяцев</SelectItem>
+                  <SelectItem value="12">12 месяцев</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -518,6 +611,10 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
           <TabsTrigger value="structure" className="gap-2">
             <PieChartIcon className="h-4 w-4" />
             Структура
+          </TabsTrigger>
+          <TabsTrigger value="forecast" className="gap-2">
+            <Sparkles className="h-4 w-4" />
+            Прогноз
           </TabsTrigger>
         </TabsList>
 
@@ -868,6 +965,191 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Forecast */}
+        <TabsContent value="forecast">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                Прогноз {dataType === 'revenue' ? 'выручки' : 'продаж'} на {forecastPeriods} {forecastPeriods === 1 ? 'месяц' : forecastPeriods < 5 ? 'месяца' : 'месяцев'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {forecastData ? (
+                <>
+                  {/* Forecast Chart */}
+                  <div className="h-[400px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={forecastData.combined}>
+                        <defs>
+                          <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                          </linearGradient>
+                          <linearGradient id="colorForecast" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis 
+                          dataKey="period" 
+                          className="text-xs"
+                          tick={({ x, y, payload }) => {
+                            const isForecast = forecastData.forecastPeriodsList.includes(payload.value);
+                            return (
+                              <text 
+                                x={x} 
+                                y={y + 12} 
+                                textAnchor="middle" 
+                                className={`text-xs ${isForecast ? 'fill-chart-2 font-medium' : 'fill-foreground'}`}
+                              >
+                                {payload.value}
+                              </text>
+                            );
+                          }}
+                        />
+                        <YAxis tickFormatter={formatValue} className="text-xs" />
+                        <Tooltip
+                          formatter={(value: number | null, name: string) => {
+                            if (value === null) return ['-', name];
+                            const formatted = dataType === 'revenue'
+                              ? `${value.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ₽`
+                              : `${value.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} шт`;
+                            return [formatted, name === 'actual' ? 'Факт' : 'Тренд/Прогноз'];
+                          }}
+                          labelFormatter={(label) => {
+                            const isForecast = forecastData.forecastPeriodsList.includes(label);
+                            return `${label}${isForecast ? ' (прогноз)' : ''}`;
+                          }}
+                        />
+                        <Legend 
+                          formatter={(value) => value === 'actual' ? 'Факт' : 'Тренд / Прогноз'}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="actual"
+                          stroke="hsl(var(--primary))"
+                          fill="url(#colorActual)"
+                          strokeWidth={2}
+                          dot={{ fill: 'hsl(var(--primary))', r: 3 }}
+                          connectNulls={false}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="trend"
+                          stroke="hsl(var(--chart-2))"
+                          strokeWidth={2}
+                          strokeDasharray="5 5"
+                          dot={(props) => {
+                            const { cx, cy, payload } = props;
+                            if (!payload.isForecast) return <circle cx={cx} cy={cy} r={0} />;
+                            return <circle cx={cx} cy={cy} r={4} fill="hsl(var(--chart-2))" />;
+                          }}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Trend metrics */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                    <div className="p-4 bg-muted rounded-lg text-center">
+                      <p className={`text-xl font-bold ${forecastData.trendDirection === 'up' ? 'text-success' : forecastData.trendDirection === 'down' ? 'text-destructive' : 'text-muted-foreground'}`}>
+                        {forecastData.trendDirection === 'up' ? '↑' : forecastData.trendDirection === 'down' ? '↓' : '→'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Тренд</p>
+                    </div>
+                    
+                    <div className="p-4 bg-muted rounded-lg text-center">
+                      <p className="text-xl font-bold">
+                        {(forecastData.rSquared * 100).toFixed(0)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">R² (точность)</p>
+                    </div>
+                    
+                    <div className="p-4 bg-muted rounded-lg text-center">
+                      <p className={`text-xl font-bold ${forecastData.totalGrowth >= 0 ? 'text-success' : 'text-destructive'}`}>
+                        {forecastData.totalGrowth >= 0 ? '+' : ''}{forecastData.totalGrowth.toFixed(1)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">Рост за период</p>
+                    </div>
+                    
+                    <div className="p-4 bg-muted rounded-lg text-center">
+                      <p className={`text-xl font-bold ${forecastData.avgMonthlyGrowth >= 0 ? 'text-success' : 'text-destructive'}`}>
+                        {forecastData.avgMonthlyGrowth >= 0 ? '+' : ''}{forecastData.avgMonthlyGrowth.toFixed(1)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">Ср. рост/мес</p>
+                    </div>
+                    
+                    <div className="p-4 bg-muted rounded-lg text-center">
+                      <p className="text-xl font-bold text-chart-2">
+                        {formatValue(forecastData.forecastEndValue)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Прогноз ({forecastData.forecastPeriodsList[forecastData.forecastPeriodsList.length - 1]})</p>
+                    </div>
+                    
+                    <div className="p-4 bg-muted rounded-lg text-center">
+                      <p className={`text-xl font-bold ${forecastData.forecastGrowth >= 0 ? 'text-success' : 'text-destructive'}`}>
+                        {forecastData.forecastGrowth >= 0 ? '+' : ''}{forecastData.forecastGrowth.toFixed(1)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">Изменение к прогнозу</p>
+                    </div>
+                  </div>
+
+                  {/* Forecast table */}
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="px-4 py-2 text-left font-medium">Период</th>
+                          <th className="px-4 py-2 text-right font-medium">Прогноз</th>
+                          <th className="px-4 py-2 text-right font-medium">Изменение</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {forecastData.combined
+                          .filter((p) => p.isForecast)
+                          .map((p, idx) => {
+                            const prevValue = idx === 0 
+                              ? forecastData.lastActualValue 
+                              : forecastData.combined.filter(c => c.isForecast)[idx - 1].trend;
+                            const change = prevValue > 0 ? ((p.trend - prevValue) / prevValue) * 100 : 0;
+                            
+                            return (
+                              <tr key={p.period} className="border-t">
+                                <td className="px-4 py-2 font-medium text-chart-2">{p.period}</td>
+                                <td className="px-4 py-2 text-right">
+                                  {dataType === 'revenue'
+                                    ? `${p.trend.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ₽`
+                                    : `${p.trend.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} шт`}
+                                </td>
+                                <td className={`px-4 py-2 text-right ${change >= 0 ? 'text-success' : 'text-destructive'}`}>
+                                  {change >= 0 ? '+' : ''}{change.toFixed(1)}%
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Accuracy note */}
+                  <p className="text-xs text-muted-foreground">
+                    * Прогноз построен на основе линейной регрессии. R² = {(forecastData.rSquared * 100).toFixed(1)}% — 
+                    {forecastData.rSquared >= 0.8 ? ' высокая точность модели' : 
+                     forecastData.rSquared >= 0.5 ? ' средняя точность модели' : 
+                     ' низкая точность, данные имеют высокую волатильность'}
+                  </p>
+                </>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  Недостаточно данных для построения прогноза (минимум 2 периода)
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
