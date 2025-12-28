@@ -2,7 +2,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { FileSpreadsheet, Upload, BarChart3, Download, TrendingUp, Package, Calculator, AlertTriangle, CheckCircle, DollarSign, Layers, FileUp, Link2, Settings, History, Store, Filter, FileDown, Ban } from 'lucide-react';
+import { FileSpreadsheet, Upload, BarChart3, Download, TrendingUp, Package, Calculator, AlertTriangle, CheckCircle, DollarSign, Layers, FileUp, Link2, Settings, History, Store, Filter, FileDown, Ban, Sparkles, UserPlus, LineChart } from 'lucide-react';
 
 export default function Documentation() {
   return (
@@ -23,10 +23,12 @@ export default function Documentation() {
             <TabsTrigger value="overview">Обзор</TabsTrigger>
             <TabsTrigger value="format">Формат файла</TabsTrigger>
             <TabsTrigger value="analysis">Анализ</TabsTrigger>
+            <TabsTrigger value="forecast">Прогноз</TabsTrigger>
             <TabsTrigger value="output">Результаты</TabsTrigger>
             <TabsTrigger value="export">Экспорт</TabsTrigger>
             <TabsTrigger value="unit-economics">Юнит-экономика</TabsTrigger>
             <TabsTrigger value="settings">Настройки</TabsTrigger>
+            <TabsTrigger value="auth">Регистрация</TabsTrigger>
             <TabsTrigger value="quality">Качество</TabsTrigger>
           </TabsList>
 
@@ -78,6 +80,12 @@ export default function Documentation() {
                     <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
                     <div>
                       <strong>История изменений</strong> — отслеживание всех изменений карточек товаров
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                    <div>
+                      <strong>Прогнозирование</strong> — расчёт прогноза методами линейной регрессии, экспоненциального сглаживания, скользящего среднего с сезонной корректировкой
                     </div>
                   </li>
                 </ul>
@@ -301,6 +309,108 @@ export default function Documentation() {
                       </tr>
                     </tbody>
                   </table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Forecast Tab */}
+          <TabsContent value="forecast" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                  Прогнозирование продаж
+                </CardTitle>
+                <CardDescription>Методы прогнозирования и сезонная корректировка</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Система поддерживает несколько методов прогнозирования с возможностью сезонной корректировки:
+                </p>
+                
+                <div className="grid gap-3">
+                  <div className="flex items-center gap-4 p-4 bg-primary/10 border border-primary/20 rounded-xl backdrop-blur-sm">
+                    <Badge className="bg-primary text-primary-foreground px-3 py-1">1</Badge>
+                    <div>
+                      <div className="font-medium">Линейная регрессия</div>
+                      <div className="text-sm text-muted-foreground">
+                        Классический метод: y = mx + b. Лучше всего работает при устойчивом тренде без резких колебаний.
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl backdrop-blur-sm">
+                    <Badge className="bg-blue-600 text-white px-3 py-1">2</Badge>
+                    <div>
+                      <div className="font-medium">Экспоненциальное сглаживание (Holt)</div>
+                      <div className="text-sm text-muted-foreground">
+                        Учитывает уровень и тренд с адаптивными коэффициентами (α=0.3, β=0.1). Хорош при изменяющемся тренде.
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-4 p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl backdrop-blur-sm">
+                    <Badge className="bg-purple-600 text-white px-3 py-1">3</Badge>
+                    <div>
+                      <div className="font-medium">Скользящее среднее</div>
+                      <div className="text-sm text-muted-foreground">
+                        Простой метод на основе среднего за последние 3 периода. Хорош при стабильных продажах без выраженного тренда.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <LineChart className="h-5 w-5 text-primary" />
+                  Сезонная корректировка
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30 space-y-3">
+                  <h4 className="font-medium">Как работает сезонность?</h4>
+                  <ul className="list-disc list-inside text-sm text-muted-foreground space-y-2">
+                    <li>Система рассчитывает коэффициенты для каждого месяца на основе исторических данных</li>
+                    <li>Коэффициент {'>'} 1 означает сезон с повышенными продажами</li>
+                    <li>Коэффициент {'<'} 1 означает сезон со сниженными продажами</li>
+                    <li>Для расчёта требуется минимум 12 месяцев данных</li>
+                  </ul>
+                </div>
+
+                <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl backdrop-blur-sm">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                    <p className="text-sm">
+                      <strong>Важно:</strong> Точность прогноза (R²) показывает, насколько хорошо модель описывает данные.
+                      R² {'>'} 80% — высокая точность, 50-80% — средняя, {'<'} 50% — низкая.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Настройки прогноза</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 text-sm">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <strong>Метод прогноза</strong> — выбор алгоритма: линейная регрессия, экспоненциальное сглаживание, скользящее среднее
+                  </div>
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <strong>Горизонт прогноза</strong> — от 1 до 12 месяцев вперёд
+                  </div>
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <strong>Сезонность</strong> — включение/выключение сезонной корректировки
+                  </div>
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <strong>Показатель</strong> — выручка или количество продаж
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -837,6 +947,86 @@ export default function Documentation() {
                       <div className="flex items-start gap-2">
                         <code className="bg-muted px-2 py-0.5 rounded font-mono font-medium shrink-0">global_trend</code>
                         <span className="text-muted-foreground">— глобальный тренд рынка (задаётся вручную в настройках)</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Auth Tab */}
+          <TabsContent value="auth" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <UserPlus className="h-5 w-5 text-primary" />
+                  Регистрация в системе
+                </CardTitle>
+                <CardDescription>Как получить доступ к системе</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl backdrop-blur-sm">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                    <p className="text-sm">
+                      <strong>Важно:</strong> Для регистрации требуется специальный код доступа. 
+                      Получите его у администратора системы.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📝 Поля регистрации</h4>
+                    <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+                      <li><strong>Код регистрации</strong> — специальный пароль для доступа</li>
+                      <li><strong>ФИО</strong> — полное имя пользователя</li>
+                      <li><strong>Телефон</strong> — контактный номер</li>
+                      <li><strong>Должность</strong> — позиция в компании</li>
+                      <li><strong>Email</strong> — адрес электронной почты (логин)</li>
+                      <li><strong>Пароль</strong> — минимум 6 символов</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">🔐 Вход в систему</h4>
+                    <p className="text-sm text-muted-foreground">
+                      После регистрации используйте email и пароль для входа. 
+                      Код регистрации при входе не требуется.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Безопасность</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 text-sm">
+                  <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl backdrop-blur-sm">
+                    <div className="flex items-start gap-3">
+                      <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
+                      <div>
+                        <strong>Защита данных</strong>
+                        <p className="text-muted-foreground mt-1">
+                          Все данные хранятся в защищённой базе данных. 
+                          Каждый пользователь видит только свои данные.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl backdrop-blur-sm">
+                    <div className="flex items-start gap-3">
+                      <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
+                      <div>
+                        <strong>Код доступа</strong>
+                        <p className="text-muted-foreground mt-1">
+                          Код регистрации защищает систему от несанкционированного доступа. 
+                          Не передавайте его третьим лицам.
+                        </p>
                       </div>
                     </div>
                   </div>
