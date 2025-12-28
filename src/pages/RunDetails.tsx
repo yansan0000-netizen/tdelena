@@ -5,6 +5,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { RunDataTable } from '@/components/RunDataTable';
 import { EconomicsPanel } from '@/components/costs/EconomicsPanel';
 import { ExportFiltersPanel } from '@/components/ExportFilters';
+import { SalesDynamicsChart } from '@/components/SalesDynamicsChart';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -36,7 +37,8 @@ import {
   Layers,
   Hash,
   Package,
-  X
+  X,
+  TrendingUp
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -518,13 +520,20 @@ export default function RunDetails() {
 
         {/* Data & Economics Tabs */}
         {run.status === 'DONE' && (
-          <Tabs defaultValue="economics" className="w-full">
+          <Tabs defaultValue="dynamics" className="w-full">
             <TabsList>
+              <TabsTrigger value="dynamics" className="gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Динамика продаж
+              </TabsTrigger>
               <TabsTrigger value="economics">Экономика</TabsTrigger>
               {(run.processed_file_path || run.result_file_path) && (
                 <TabsTrigger value="data">Данные</TabsTrigger>
               )}
             </TabsList>
+            <TabsContent value="dynamics" className="mt-4">
+              <SalesDynamicsChart runId={run.id} />
+            </TabsContent>
             <TabsContent value="economics" className="mt-4">
               <EconomicsPanel runId={run.id} />
             </TabsContent>

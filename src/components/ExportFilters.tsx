@@ -126,7 +126,7 @@ export function ExportFiltersPanel({
               ) : (
                 <Download className="h-4 w-4" />
               )}
-              Экспорт ({filteredCount.toLocaleString('ru-RU')})
+              Скачать отчёт ABC/XYZ ({filteredCount.toLocaleString('ru-RU')})
             </Button>
           </div>
         </div>
