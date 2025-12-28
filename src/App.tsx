@@ -13,6 +13,7 @@ import RunDetails from "./pages/RunDetails";
 import Documentation from "./pages/Documentation";
 import UnitEconomics from "./pages/UnitEconomics";
 import UnitEconomicsDetail from "./pages/UnitEconomicsDetail";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -65,6 +66,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <UnitEconomicsDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <Settings />
                 </ProtectedRoute>
               }
             />
