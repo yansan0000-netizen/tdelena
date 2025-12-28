@@ -8,15 +8,18 @@ export default function Documentation() {
   return (
     <AppLayout>
       <div className="max-w-4xl mx-auto space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Документация</h1>
-          <p className="text-muted-foreground mt-2">
+        {/* Header with glass effect */}
+        <div className="glass-panel rounded-2xl p-6">
+          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+            Документация
+          </h1>
+          <p className="text-muted-foreground mt-2 leading-relaxed">
             Система ABC/XYZ анализа, планирования производства и юнит-экономики
           </p>
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7">
+          <TabsList className="flex flex-wrap gap-1 h-auto p-2">
             <TabsTrigger value="overview">Обзор</TabsTrigger>
             <TabsTrigger value="format">Формат файла</TabsTrigger>
             <TabsTrigger value="analysis">Анализ</TabsTrigger>
@@ -139,7 +142,7 @@ export default function Documentation() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="bg-muted/50 p-4 rounded-lg space-y-3">
+                <div className="bg-muted/40 p-4 rounded-xl backdrop-blur-sm border border-border/30 space-y-3">
                   <h4 className="font-medium">Структура файла:</h4>
                   <ul className="list-disc list-inside text-sm text-muted-foreground space-y-2">
                     <li>Заголовок с 3-мя строками (даты, метрики, технические поля)</li>
@@ -150,33 +153,33 @@ export default function Documentation() {
                   </ul>
                 </div>
 
-                <div className="bg-muted/50 p-4 rounded-lg space-y-3">
+                <div className="bg-muted/40 p-4 rounded-xl backdrop-blur-sm border border-border/30 space-y-3">
                   <h4 className="font-medium">Пример структуры заголовков:</h4>
                   <div className="overflow-x-auto">
                     <table className="text-sm border-collapse w-full">
                       <thead>
-                        <tr className="border-b">
-                          <th className="p-2 text-left">Строка 1</th>
-                          <th className="p-2 text-left">Артикул</th>
-                          <th className="p-2 text-left" colSpan={3}>Декабрь 2024</th>
-                          <th className="p-2 text-left" colSpan={3}>Январь 2025</th>
+                        <tr className="border-b border-border/50">
+                          <th className="p-2.5 text-left">Строка 1</th>
+                          <th className="p-2.5 text-left">Артикул</th>
+                          <th className="p-2.5 text-left" colSpan={3}>Декабрь 2024</th>
+                          <th className="p-2.5 text-left" colSpan={3}>Январь 2025</th>
                         </tr>
-                        <tr className="border-b">
-                          <th className="p-2 text-left">Строка 2</th>
-                          <th className="p-2 text-left">—</th>
-                          <th className="p-2 text-left">Кол-во</th>
-                          <th className="p-2 text-left">Сумма</th>
-                          <th className="p-2 text-left">Остаток</th>
-                          <th className="p-2 text-left">Кол-во</th>
-                          <th className="p-2 text-left">Сумма</th>
-                          <th className="p-2 text-left">Остаток</th>
+                        <tr className="border-b border-border/50">
+                          <th className="p-2.5 text-left">Строка 2</th>
+                          <th className="p-2.5 text-left">—</th>
+                          <th className="p-2.5 text-left">Кол-во</th>
+                          <th className="p-2.5 text-left">Сумма</th>
+                          <th className="p-2.5 text-left">Остаток</th>
+                          <th className="p-2.5 text-left">Кол-во</th>
+                          <th className="p-2.5 text-left">Сумма</th>
+                          <th className="p-2.5 text-left">Остаток</th>
                         </tr>
                       </thead>
                     </table>
                   </div>
                 </div>
 
-                <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                <div className="flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl backdrop-blur-sm">
                   <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
                   <p className="text-sm">
                     Колонки «Итого» автоматически пропускаются. Размер файла: до 50 МБ, до 100 000+ строк.
@@ -195,24 +198,24 @@ export default function Documentation() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-3">
-                  <div className="flex items-center gap-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-                    <Badge className="bg-green-600 text-white text-lg px-3 py-1">A</Badge>
+                  <div className="flex items-center gap-4 p-4 bg-green-500/10 border border-green-500/20 rounded-xl backdrop-blur-sm hover:bg-green-500/15 transition-colors duration-220">
+                    <Badge className="bg-green-600 text-white text-lg px-3 py-1 shadow-sm">A</Badge>
                     <div>
                       <div className="font-medium">Категория A — первые 80% выручки</div>
                       <div className="text-sm text-muted-foreground">Ключевые товары, требующие максимального внимания к запасам</div>
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                    <Badge className="bg-amber-600 text-white text-lg px-3 py-1">B</Badge>
+                  <div className="flex items-center gap-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl backdrop-blur-sm hover:bg-amber-500/15 transition-colors duration-220">
+                    <Badge className="bg-amber-600 text-white text-lg px-3 py-1 shadow-sm">B</Badge>
                     <div>
                       <div className="font-medium">Категория B — следующие 15% выручки</div>
                       <div className="text-sm text-muted-foreground">Товары средней важности, стандартное управление</div>
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                    <Badge className="bg-red-600 text-white text-lg px-3 py-1">C</Badge>
+                  <div className="flex items-center gap-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl backdrop-blur-sm hover:bg-red-500/15 transition-colors duration-220">
+                    <Badge className="bg-red-600 text-white text-lg px-3 py-1 shadow-sm">C</Badge>
                     <div>
                       <div className="font-medium">Категория C — оставшиеся 5% выручки</div>
                       <div className="text-sm text-muted-foreground">Наименее значимые товары, кандидаты на оптимизацию</div>
@@ -228,30 +231,30 @@ export default function Documentation() {
                 <CardDescription>Классификация по стабильности спроса (коэффициент вариации)</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl backdrop-blur-sm">
                   <p className="text-sm">
                     <strong>Пороги настраиваются</strong> в разделе «Настройки». По умолчанию: X ≤ 30%, Y ≤ 60%.
                   </p>
                 </div>
                 <div className="grid gap-3">
-                  <div className="flex items-center gap-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                    <Badge className="bg-blue-600 text-white text-lg px-3 py-1">X</Badge>
+                  <div className="flex items-center gap-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl backdrop-blur-sm hover:bg-blue-500/15 transition-colors duration-220">
+                    <Badge className="bg-blue-600 text-white text-lg px-3 py-1 shadow-sm">X</Badge>
                     <div>
                       <div className="font-medium">Категория X — CV ≤ порог X%</div>
                       <div className="text-sm text-muted-foreground">Стабильный спрос, легко прогнозируемый</div>
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-4 p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-                    <Badge className="bg-purple-600 text-white text-lg px-3 py-1">Y</Badge>
+                  <div className="flex items-center gap-4 p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl backdrop-blur-sm hover:bg-purple-500/15 transition-colors duration-220">
+                    <Badge className="bg-purple-600 text-white text-lg px-3 py-1 shadow-sm">Y</Badge>
                     <div>
                       <div className="font-medium">Категория Y — CV между порогами X и Y</div>
                       <div className="text-sm text-muted-foreground">Умеренные колебания, требуется страховой запас</div>
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-4 p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
-                    <Badge className="bg-orange-600 text-white text-lg px-3 py-1">Z</Badge>
+                  <div className="flex items-center gap-4 p-4 bg-orange-500/10 border border-orange-500/20 rounded-xl backdrop-blur-sm hover:bg-orange-500/15 transition-colors duration-220">
+                    <Badge className="bg-orange-600 text-white text-lg px-3 py-1 shadow-sm">Z</Badge>
                     <div>
                       <div className="font-medium">Категория Z — CV {'>'} порог Y%</div>
                       <div className="text-sm text-muted-foreground">Нестабильный спрос, требуется индивидуальный анализ</div>
@@ -312,7 +315,7 @@ export default function Documentation() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30 space-y-3">
                   <h4 className="font-medium flex items-center gap-2">
                     <BarChart3 className="h-4 w-4" />
                     Обработанный отчёт (CSV/XLSX)
@@ -321,20 +324,20 @@ export default function Documentation() {
                     Полный отчёт со всеми показателями по каждому артикулу:
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline">Артикул</Badge>
-                    <Badge variant="outline">Категория</Badge>
-                    <Badge variant="outline">ABC</Badge>
-                    <Badge variant="outline">XYZ</Badge>
-                    <Badge variant="outline">Кол-во продаж</Badge>
-                    <Badge variant="outline">Остаток</Badge>
-                    <Badge variant="outline">Скорость/день</Badge>
-                    <Badge variant="outline">Дней до 0</Badge>
-                    <Badge variant="outline">План 1м/3м/6м</Badge>
-                    <Badge variant="outline">Рекомендация</Badge>
+                    <Badge variant="glass">Артикул</Badge>
+                    <Badge variant="glass">Категория</Badge>
+                    <Badge variant="glass">ABC</Badge>
+                    <Badge variant="glass">XYZ</Badge>
+                    <Badge variant="glass">Кол-во продаж</Badge>
+                    <Badge variant="glass">Остаток</Badge>
+                    <Badge variant="glass">Скорость/день</Badge>
+                    <Badge variant="glass">Дней до 0</Badge>
+                    <Badge variant="glass">План 1м/3м/6м</Badge>
+                    <Badge variant="glass">Рекомендация</Badge>
                   </div>
                 </div>
 
-                <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-3">
+                <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl backdrop-blur-sm space-y-3">
                   <h4 className="font-medium flex items-center gap-2">
                     <DollarSign className="h-4 w-4 text-primary" />
                     Колонки с юнит-экономикой
@@ -343,10 +346,10 @@ export default function Documentation() {
                     При наличии данных о себестоимости добавляются:
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    <Badge variant="outline" className="bg-primary/10">Себестоимость</Badge>
-                    <Badge variant="outline" className="bg-primary/10">Маржа/шт</Badge>
-                    <Badge variant="outline" className="bg-primary/10">Маржинальность %</Badge>
-                    <Badge variant="outline" className="bg-primary/10">Прибыль</Badge>
+                    <Badge variant="glass" className="bg-primary/10">Себестоимость</Badge>
+                    <Badge variant="glass" className="bg-primary/10">Маржа/шт</Badge>
+                    <Badge variant="glass" className="bg-primary/10">Маржинальность %</Badge>
+                    <Badge variant="glass" className="bg-primary/10">Прибыль</Badge>
                   </div>
                 </div>
               </CardContent>
@@ -358,19 +361,19 @@ export default function Documentation() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-3 text-sm">
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <strong>Ср. месячные продажи</strong> = Общее кол-во продаж / Число периодов
                   </div>
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <strong>Скорость продаж/день</strong> = Ср.мес.продажи × Тренд / 30
                   </div>
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <strong>Дней до нуля</strong> = Текущий остаток / Скорость в день
                   </div>
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <strong>План на N мес.</strong> = max(0, Ср.мес.продажи × Тренд × N − Остаток)
                   </div>
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <strong>CV (коэфф. вариации)</strong> = (Стандартное отклонение / Среднее) × 100%
                   </div>
                 </div>
@@ -439,13 +442,13 @@ export default function Documentation() {
                 <CardDescription>Расчёт юнит-экономики для маркетплейса</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl backdrop-blur-sm">
                   <p className="text-sm">
                     Модуль активируется переключателем <strong>«Продавать на WB»</strong> в карточке товара.
                   </p>
                 </div>
                 <div className="grid gap-3">
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <h4 className="font-medium mb-2">📊 Ценообразование с СПП</h4>
                     <p className="text-sm text-muted-foreground">
                       Вводите «Цена без СПП» и «СПП %» — система автоматически рассчитывает «Цена с СПП»
@@ -455,21 +458,21 @@ export default function Documentation() {
                     </p>
                   </div>
                   
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <h4 className="font-medium mb-2">🚚 Логистика с возвратами</h4>
                     <p className="text-sm text-muted-foreground">
                       Учитывается % выкупа, логистика до клиента и возврата. Рассчитывается стоимость доставки на 1 выкуп.
                     </p>
                   </div>
                   
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <h4 className="font-medium mb-2">💰 Инвестиции</h4>
                     <p className="text-sm text-muted-foreground">
                       Автоматический расчёт вложений: Инвестиции = Кол-во отгрузки × Себестоимость
                     </p>
                   </div>
                   
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <h4 className="font-medium mb-2">📋 Налоги</h4>
                     <p className="text-sm text-muted-foreground">
                       Выбор режима: «УСН доход-расход» или «УСН доход-расход + НДС». Налог считается только в WB-модуле.
@@ -516,7 +519,7 @@ export default function Documentation() {
                   <li>3. Нажмите «+» для добавления</li>
                   <li>4. Новая категория сохраняется в вашем профиле и доступна везде</li>
                 </ol>
-                <div className="flex items-start gap-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                <div className="flex items-start gap-3 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl backdrop-blur-sm">
                   <CheckCircle className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
                   <p className="text-sm">
                     Пользовательские категории помечаются как «(свой)» в списке.
@@ -538,28 +541,28 @@ export default function Documentation() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-3">
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <h4 className="font-medium mb-2">💱 Курс валюты</h4>
                     <p className="text-sm text-muted-foreground">
                       USD/RUB для пересчёта цен на ткани. По умолчанию: 90₽
                     </p>
                   </div>
                   
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <h4 className="font-medium mb-2">📊 Накладные расходы</h4>
                     <p className="text-sm text-muted-foreground">
                       Административные расходы (%) добавляются к себестоимости. По умолчанию: 15%
                     </p>
                   </div>
                   
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <h4 className="font-medium mb-2">💰 Оптовая наценка</h4>
                     <p className="text-sm text-muted-foreground">
                       Наценка для расчёта оптовой цены. По умолчанию: 35%
                     </p>
                   </div>
                   
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <h4 className="font-medium mb-2">📋 Налоги</h4>
                     <p className="text-sm text-muted-foreground">
                       УСН: 7%, НДС: 0% (по умолчанию). Режим: «УСН доход-расход» или «+ НДС»
@@ -581,16 +584,16 @@ export default function Documentation() {
                   Значения применяются автоматически при создании нового товара:
                 </p>
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <strong>Выкуп:</strong> 90%
                   </div>
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <strong>Логистика до клиента:</strong> 50₽
                   </div>
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <strong>Логистика возврата:</strong> 50₽
                   </div>
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <strong>Приёмка:</strong> 50₽
                   </div>
                 </div>
@@ -606,7 +609,7 @@ export default function Documentation() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-3">
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <h4 className="font-medium mb-2">📈 Пороги XYZ</h4>
                     <p className="text-sm text-muted-foreground">
                       X ≤ 30%, Y ≤ 60% (по умолчанию). Позволяет расширить категорию X до 70% для включения большего числа товаров.
@@ -667,13 +670,13 @@ export default function Documentation() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-3">
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <strong>Сырых строк</strong> — общее количество записей: артикул×размер×период
                   </div>
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <strong>Уникальных артикулов</strong> — количество уникальных артикулов без учёта размеров
                   </div>
-                  <div className="p-3 bg-muted/50 rounded-lg">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <strong>Сжатие данных</strong> — коэффициент агрегации от сырых строк к аналитике
                   </div>
                 </div>
@@ -729,20 +732,20 @@ export default function Documentation() {
                   Логи доступны на странице деталей запуска:
                 </p>
                 <div className="grid gap-2">
-                  <div className="flex items-center gap-2 p-2 bg-muted/50 rounded">
-                    <Badge variant="outline" className="bg-primary/10 text-primary">INFO</Badge>
+                  <div className="flex items-center gap-3 p-3 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <Badge variant="glass" className="bg-primary/10 text-primary">INFO</Badge>
                     <span className="text-sm">Информационные сообщения</span>
                   </div>
-                  <div className="flex items-center gap-2 p-2 bg-muted/50 rounded">
-                    <Badge variant="outline" className="bg-green-500/10 text-green-600">ACTION</Badge>
+                  <div className="flex items-center gap-3 p-3 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <Badge variant="glass" className="bg-green-500/10 text-green-600">ACTION</Badge>
                     <span className="text-sm">Успешное завершение этапов</span>
                   </div>
-                  <div className="flex items-center gap-2 p-2 bg-muted/50 rounded">
-                    <Badge variant="outline" className="bg-amber-500/10 text-amber-600">WARN</Badge>
+                  <div className="flex items-center gap-3 p-3 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <Badge variant="glass" className="bg-amber-500/10 text-amber-600">WARN</Badge>
                     <span className="text-sm">Предупреждения</span>
                   </div>
-                  <div className="flex items-center gap-2 p-2 bg-muted/50 rounded">
-                    <Badge variant="outline" className="bg-red-500/10 text-red-600">ERROR</Badge>
+                  <div className="flex items-center gap-3 p-3 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <Badge variant="glass" className="bg-red-500/10 text-red-600">ERROR</Badge>
                     <span className="text-sm">Ошибки</span>
                   </div>
                 </div>
