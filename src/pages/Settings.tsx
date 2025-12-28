@@ -36,6 +36,8 @@ export default function Settings() {
         global_trend_coef: settings.global_trend_coef,
         global_trend_manual: settings.global_trend_manual,
         tax_mode: settings.tax_mode,
+        custom_product_categories: settings.custom_product_categories || [],
+        custom_material_categories: settings.custom_material_categories || [],
       });
       setHasChanges(false);
     }
@@ -72,6 +74,8 @@ export default function Settings() {
         global_trend_coef: settings.global_trend_coef,
         global_trend_manual: settings.global_trend_manual,
         tax_mode: settings.tax_mode,
+        custom_product_categories: settings.custom_product_categories || [],
+        custom_material_categories: settings.custom_material_categories || [],
       });
       setHasChanges(false);
     }

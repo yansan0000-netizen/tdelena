@@ -25,6 +25,9 @@ export interface UserSettings {
   global_trend_manual: boolean;
   // Tax mode
   tax_mode: 'income_expenses' | 'income_expenses_vat';
+  // Custom categories
+  custom_product_categories: string[];
+  custom_material_categories: string[];
   // Meta
   created_at: string;
   updated_at: string;
@@ -45,6 +48,8 @@ export const defaultSettings: Omit<UserSettings, 'id' | 'user_id' | 'created_at'
   global_trend_coef: 1.0,
   global_trend_manual: false,
   tax_mode: 'income_expenses',
+  custom_product_categories: [],
+  custom_material_categories: [],
 };
 
 export function useUserSettings() {
@@ -74,7 +79,17 @@ export function useUserSettings() {
     }
 
     if (data) {
-      setSettings(data as UserSettings);
+      // Ensure arrays are properly parsed
+      const parsed = {
+        ...data,
+        custom_product_categories: Array.isArray(data.custom_product_categories) 
+          ? data.custom_product_categories 
+          : [],
+        custom_material_categories: Array.isArray(data.custom_material_categories) 
+          ? data.custom_material_categories 
+          : [],
+      };
+      setSettings(parsed as UserSettings);
     } else {
       // Create default settings for new user
       const { data: newSettings, error: insertError } = await supabase
@@ -86,7 +101,11 @@ export function useUserSettings() {
       if (insertError) {
         console.error('Error creating settings:', insertError);
       } else {
-        setSettings(newSettings as UserSettings);
+        setSettings({
+          ...newSettings,
+          custom_product_categories: [],
+          custom_material_categories: [],
+        } as UserSettings);
       }
     }
     
@@ -118,10 +137,45 @@ export function useUserSettings() {
     return true;
   }, [user, settings]);
 
+  // Add custom category
+  const addCustomCategory = useCallback(async (
+    type: 'product' | 'material',
+    category: string
+  ): Promise<boolean> => {
+    if (!user || !settings) return false;
+    
+    const trimmed = category.trim();
+    if (!trimmed) return false;
+
+    const field = type === 'product' ? 'custom_product_categories' : 'custom_material_categories';
+    const current = settings[field] || [];
+    
+    // Check if already exists
+    if (current.includes(trimmed)) return true;
+    
+    const updated = [...current, trimmed];
+    
+    const { error } = await supabase
+      .from('user_settings')
+      .update({ [field]: updated })
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('Error adding category:', error);
+      toast.error('Ошибка добавления категории');
+      return false;
+    }
+
+    setSettings(prev => prev ? { ...prev, [field]: updated } : null);
+    toast.success('Категория добавлена');
+    return true;
+  }, [user, settings]);
+
   return {
     settings,
     loading,
     updateSettings,
+    addCustomCategory,
     refetch: fetchSettings,
   };
 }
