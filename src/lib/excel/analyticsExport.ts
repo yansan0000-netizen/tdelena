@@ -24,6 +24,13 @@ export interface AnalyticsRow {
   recommendation: string;
 }
 
+export interface PeriodSalesData {
+  article: string;
+  period: string;
+  quantity: number;
+  revenue: number;
+}
+
 export interface UnitEconData {
   article: string;
   unit_cost_real_rub: number | null;
@@ -79,7 +86,11 @@ export function enrichAnalyticsWithCosts(
   });
 }
 
-export function generateAnalyticsReport(data: AnalyticsRow[], costs?: UnitEconData[]): Blob {
+export function generateAnalyticsReport(
+  data: AnalyticsRow[], 
+  costs?: UnitEconData[],
+  periodSales?: PeriodSalesData[]
+): Blob {
   const workbook = XLSX.utils.book_new();
 
   // Enrich with costs if available
@@ -194,6 +205,108 @@ export function generateAnalyticsReport(data: AnalyticsRow[], costs?: UnitEconDa
     ];
     const econSheet = XLSX.utils.json_to_sheet(econSummary);
     XLSX.utils.book_append_sheet(workbook, econSheet, 'Юнит-экономика');
+  }
+
+  // Period sales dynamics sheet
+  if (periodSales && periodSales.length > 0) {
+    // Get unique periods and sort them
+    const periods = [...new Set(periodSales.map(p => p.period))].sort();
+    
+    // Aggregate by period
+    const periodAggregates = new Map<string, { quantity: number; revenue: number }>();
+    periodSales.forEach(p => {
+      const existing = periodAggregates.get(p.period) || { quantity: 0, revenue: 0 };
+      existing.quantity += p.quantity;
+      existing.revenue += p.revenue;
+      periodAggregates.set(p.period, existing);
+    });
+
+    // Create period summary data for chart
+    const periodSummary = periods.map(period => {
+      const agg = periodAggregates.get(period) || { quantity: 0, revenue: 0 };
+      return {
+        'Период': period,
+        'Количество': agg.quantity,
+        'Выручка': Math.round(agg.revenue),
+      };
+    });
+
+    const periodSummarySheet = XLSX.utils.json_to_sheet(periodSummary);
+    periodSummarySheet['!cols'] = [{ wch: 15 }, { wch: 12 }, { wch: 15 }];
+    XLSX.utils.book_append_sheet(workbook, periodSummarySheet, 'Динамика продаж');
+
+    // Create pivot table: articles as rows, periods as columns
+    const articlePeriodMap = new Map<string, Map<string, { qty: number; rev: number }>>();
+    periodSales.forEach(p => {
+      if (!articlePeriodMap.has(p.article)) {
+        articlePeriodMap.set(p.article, new Map());
+      }
+      const periodMap = articlePeriodMap.get(p.article)!;
+      const existing = periodMap.get(p.period) || { qty: 0, rev: 0 };
+      existing.qty += p.quantity;
+      existing.rev += p.revenue;
+      periodMap.set(p.period, existing);
+    });
+
+    // Build pivot data
+    const pivotData: Record<string, unknown>[] = [];
+    articlePeriodMap.forEach((periodMap, article) => {
+      const row: Record<string, unknown> = { 'Артикул': article };
+      let totalQty = 0;
+      let totalRev = 0;
+      
+      periods.forEach(period => {
+        const data = periodMap.get(period);
+        row[`${period} шт`] = data?.qty || 0;
+        row[`${period} ₽`] = data?.rev ? Math.round(data.rev) : 0;
+        totalQty += data?.qty || 0;
+        totalRev += data?.rev || 0;
+      });
+      
+      row['Итого шт'] = totalQty;
+      row['Итого ₽'] = Math.round(totalRev);
+      pivotData.push(row);
+    });
+
+    // Sort by total revenue
+    pivotData.sort((a, b) => (b['Итого ₽'] as number) - (a['Итого ₽'] as number));
+
+    const pivotSheet = XLSX.utils.json_to_sheet(pivotData);
+    const pivotCols = [{ wch: 25 }];
+    periods.forEach(() => {
+      pivotCols.push({ wch: 10 }, { wch: 12 });
+    });
+    pivotCols.push({ wch: 10 }, { wch: 12 });
+    pivotSheet['!cols'] = pivotCols;
+    XLSX.utils.book_append_sheet(workbook, pivotSheet, 'Продажи по периодам');
+
+    // Top articles dynamics
+    const topArticles = data.slice(0, 20); // Top 20 by revenue
+    const topArticlesData: Record<string, unknown>[] = [];
+    
+    topArticles.forEach(article => {
+      const periodMap = articlePeriodMap.get(article.article);
+      if (!periodMap) return;
+      
+      const row: Record<string, unknown> = { 
+        'Артикул': article.article,
+        'ABC': article.abc_group,
+        'XYZ': article.xyz_group,
+      };
+      
+      periods.forEach(period => {
+        const data = periodMap.get(period);
+        row[period] = data?.qty || 0;
+      });
+      
+      topArticlesData.push(row);
+    });
+
+    const topSheet = XLSX.utils.json_to_sheet(topArticlesData);
+    const topCols = [{ wch: 25 }, { wch: 5 }, { wch: 5 }];
+    periods.forEach(() => topCols.push({ wch: 10 }));
+    topSheet['!cols'] = topCols;
+    XLSX.utils.book_append_sheet(workbook, topSheet, 'Топ-20 динамика');
   }
 
   const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
