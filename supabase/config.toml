@@ -1,1 +1,22 @@
 project_id = "oiqrhkaoqqdygeryxdwo"
+
+[functions.upload-raw-data]
+verify_jwt = false
+
+[functions.upload-sales-data]
+verify_jwt = false
+
+[functions.run-analytics-sql]
+verify_jwt = false
+
+[functions.run-analytics]
+verify_jwt = false
+
+[functions.process-excel]
+verify_jwt = false
+
+[functions.process-excel-stream]
+verify_jwt = false
+
+[functions.generate-reports]
+verify_jwt = false
