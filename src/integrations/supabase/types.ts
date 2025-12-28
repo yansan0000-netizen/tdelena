@@ -161,6 +161,9 @@ export type Database = {
           plan_6m: number | null
           product_group: string | null
           recommendation: string | null
+          recommendation_action: string | null
+          recommendation_details: Json | null
+          recommendation_priority: string | null
           revenue_share: number | null
           run_id: string
           sales_velocity_day: number | null
@@ -187,6 +190,9 @@ export type Database = {
           plan_6m?: number | null
           product_group?: string | null
           recommendation?: string | null
+          recommendation_action?: string | null
+          recommendation_details?: Json | null
+          recommendation_priority?: string | null
           revenue_share?: number | null
           run_id: string
           sales_velocity_day?: number | null
@@ -213,6 +219,9 @@ export type Database = {
           plan_6m?: number | null
           product_group?: string | null
           recommendation?: string | null
+          recommendation_action?: string | null
+          recommendation_details?: Json | null
+          recommendation_priority?: string | null
           revenue_share?: number | null
           run_id?: string
           sales_velocity_day?: number | null

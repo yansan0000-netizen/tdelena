@@ -170,13 +170,37 @@ function findColIndexFlexible(headers: string[], possibleNames: string[]): numbe
   return -1;
 }
 
+// Import unified recommendation logic
+import { 
+  getABCXYZRecommendation as getRecommendationBase,
+  getRecommendationText,
+  ArticleData,
+} from '../recommendations';
+
 function getABCXYZRecommendation(abc: string, xyz: string): string {
-  const matrix: Record<string, Record<string, string>> = {
-    'A': { 'X': 'Стабильный лидер - максимальное наличие', 'Y': 'Важный товар - держать запас', 'Z': 'Высокая выручка но непредсказуемый - осторожный заказ' },
-    'B': { 'X': 'Стабильный середняк - регулярное пополнение', 'Y': 'Типичный товар - стандартный заказ', 'Z': 'Умеренная выручка, нестабильный - минимальный запас' },
-    'C': { 'X': 'Низкая выручка но стабильный - на заказ', 'Y': 'Маргинальный товар - под заказ', 'Z': 'Кандидат на вывод - не заказывать' },
+  return getRecommendationBase(abc, xyz);
+}
+
+function getEnhancedRecommendation(data: {
+  abc: string;
+  xyz: string;
+  daysUntilStockout: number;
+  currentStock: number;
+  avgMonthlyQty: number;
+  plan1m: number;
+  cv: number;
+}): string {
+  const articleData: ArticleData = {
+    abc: data.abc,
+    xyz: data.xyz,
+    daysUntilStockout: data.daysUntilStockout,
+    currentStock: data.currentStock,
+    avgMonthlyQty: data.avgMonthlyQty,
+    plan1m: data.plan1m,
+    cv: data.cv,
+    revenueShare: 0,
   };
-  return matrix[abc]?.[xyz] || 'Нет рекомендации';
+  return getRecommendationText(articleData);
 }
 
 const yieldToMain = () => new Promise(resolve => setTimeout(resolve, 0));

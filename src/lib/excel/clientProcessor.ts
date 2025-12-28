@@ -468,13 +468,35 @@ function calculateArticleMetrics(
   return metrics.sort((a, b) => b.totalRevenue - a.totalRevenue);
 }
 
-function getABCXYZRecommendation(abc: string, xyz: string): string {
-  const matrix: Record<string, Record<string, string>> = {
-    'A': { 'X': 'Стабильный лидер - максимальное наличие', 'Y': 'Важный товар - держать запас', 'Z': 'Высокая выручка но непредсказуемый - осторожный заказ' },
-    'B': { 'X': 'Стабильный середняк - регулярное пополнение', 'Y': 'Типичный товар - стандартный заказ', 'Z': 'Умеренная выручка, нестабильный - минимальный запас' },
-    'C': { 'X': 'Низкая выручка но стабильный - на заказ', 'Y': 'Маргинальный товар - под заказ', 'Z': 'Кандидат на вывод - не заказывать' },
+// Import unified recommendation logic
+import { 
+  getABCXYZRecommendation, 
+  getRecommendationText, 
+  getRecommendationPriority,
+  getRecommendationAction,
+  ArticleData 
+} from '../recommendations';
+
+function getEnhancedRecommendation(data: {
+  abc: string;
+  xyz: string;
+  daysToStockout: number;
+  currentStock: number;
+  avgMonthlySales: number;
+  plan1M: number;
+  cv: number;
+}): string {
+  const articleData: ArticleData = {
+    abc: data.abc,
+    xyz: data.xyz,
+    daysUntilStockout: data.daysToStockout,
+    currentStock: data.currentStock,
+    avgMonthlyQty: data.avgMonthlySales,
+    plan1m: data.plan1M,
+    cv: data.cv,
+    revenueShare: 0,
   };
-  return matrix[abc]?.[xyz] || 'Нет рекомендации';
+  return getRecommendationText(articleData);
 }
 
 // Yield to browser to prevent UI freezing
