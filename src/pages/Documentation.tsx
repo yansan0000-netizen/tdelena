@@ -2,7 +2,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { FileSpreadsheet, Upload, BarChart3, Download, TrendingUp, Package, Calculator, AlertTriangle, CheckCircle, DollarSign, Layers, FileUp, Link2, Settings, History, Store } from 'lucide-react';
+import { FileSpreadsheet, Upload, BarChart3, Download, TrendingUp, Package, Calculator, AlertTriangle, CheckCircle, DollarSign, Layers, FileUp, Link2, Settings, History, Store, Filter, FileDown, Ban } from 'lucide-react';
 
 export default function Documentation() {
   return (
@@ -24,6 +24,7 @@ export default function Documentation() {
             <TabsTrigger value="format">Формат файла</TabsTrigger>
             <TabsTrigger value="analysis">Анализ</TabsTrigger>
             <TabsTrigger value="output">Результаты</TabsTrigger>
+            <TabsTrigger value="export">Экспорт</TabsTrigger>
             <TabsTrigger value="unit-economics">Юнит-экономика</TabsTrigger>
             <TabsTrigger value="settings">Настройки</TabsTrigger>
             <TabsTrigger value="quality">Качество</TabsTrigger>
@@ -318,7 +319,7 @@ export default function Documentation() {
                 <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30 space-y-3">
                   <h4 className="font-medium flex items-center gap-2">
                     <BarChart3 className="h-4 w-4" />
-                    Обработанный отчёт (CSV/XLSX)
+                    Отчёт ABC/XYZ (XLSX)
                   </h4>
                   <p className="text-sm text-muted-foreground">
                     Полный отчёт со всеми показателями по каждому артикулу:
@@ -338,6 +339,24 @@ export default function Documentation() {
                 </div>
 
                 <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl backdrop-blur-sm space-y-3">
+                  <h4 className="font-medium flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-primary" />
+                    Листы с динамикой продаж
+                  </h4>
+                  <p className="text-sm text-muted-foreground">
+                    Отчёт включает дополнительные листы:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="glass" className="bg-primary/10">Динамика продаж</Badge>
+                    <Badge variant="glass" className="bg-primary/10">Продажи по периодам</Badge>
+                    <Badge variant="glass" className="bg-primary/10">Топ-20 динамика</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Эти листы показывают продажи за все периоды для анализа динамики.
+                  </p>
+                </div>
+
+                <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30 space-y-3">
                   <h4 className="font-medium flex items-center gap-2">
                     <DollarSign className="h-4 w-4 text-primary" />
                     Колонки с юнит-экономикой
@@ -376,6 +395,121 @@ export default function Documentation() {
                   <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <strong>CV (коэфф. вариации)</strong> = (Стандартное отклонение / Среднее) × 100%
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Export Tab */}
+          <TabsContent value="export" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Filter className="h-5 w-5 text-primary" />
+                  Фильтрация экспорта
+                </CardTitle>
+                <CardDescription>Гибкая настройка выгрузки отчётов</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  На странице деталей запуска доступна панель фильтров для настройки экспорта:
+                </p>
+                <div className="grid gap-3">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📅 Фильтр по периодам</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Выберите конкретные месяцы для включения в отчёт динамики продаж
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📂 Фильтр по категориям</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Отфильтруйте товары по категориям (например, «Платья», «Юбки»)
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">🏷️ Фильтр по ABC/XYZ группам</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Выберите только определённые группы (например, только A+X для ключевых товаров)
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📦 Фильтр по товарным группам</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Группировка по типам продукции
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📊 Фильтр по остаткам</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Все товары / С остатками / Без остатков
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileDown className="h-5 w-5 text-primary" />
+                  Экспорт юнит-экономики
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  В разделе «Юнит-экономика» доступна кнопка «Экспорт Excel» для выгрузки всех данных:
+                </p>
+                <div className="grid gap-3">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📋 Лист «Юнит-экономика»</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Все поля по каждому артикулу: себестоимость, ткани, работа, наценки, WB-параметры, маржа
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📊 Лист «Сводка»</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Общая статистика: количество товаров, средняя себестоимость, средняя маржа
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📁 Лист «По категориям»</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Разбивка по категориям: количество товаров, средние показатели
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Ban className="h-5 w-5 text-primary" />
+                  Исключённые артикулы
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  В разделе «Настройки» можно добавить артикулы, которые будут скрыты из финального отчёта:
+                </p>
+                <ul className="space-y-2 text-sm">
+                  <li>• Товары остаются в аналитике и сводных таблицах</li>
+                  <li>• Но не выводятся в экспортируемый Excel-файл</li>
+                  <li>• Удобно для тестовых артикулов, образцов, выводимых из ассортимента товаров</li>
+                </ul>
+                <div className="flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl backdrop-blur-sm">
+                  <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                  <p className="text-sm">
+                    Добавляйте артикулы через запятую. Регистр не учитывается.
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -429,7 +563,60 @@ export default function Documentation() {
                       <strong>История изменений</strong> — полный лог всех изменений карточки товара
                     </div>
                   </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                    <div>
+                      <strong>Экспорт в Excel</strong> — выгрузка всех данных со сводкой и разбивкой по категориям
+                    </div>
+                  </li>
                 </ul>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Layers className="h-5 w-5 text-primary" />
+                  Структура себестоимости
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">🧵 Ткани (до 3-х видов)</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Название, цена ($/кг), вес на единицу. Автоматический пересчёт по курсу.
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">✂️ Работа</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Раскрой и пошив — отдельные поля для точного учёта.
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">🎨 Вышивка/Принт</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Разделены на два компонента: <strong>Работа</strong> (услуги) и <strong>Материалы</strong> (нитки, краска). Это позволяет точнее учитывать затраты.
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">🔧 Фурнитура</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Молнии, пуговицы, лейблы и т.д.
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📊 Накладные расходы</h4>
+                    <p className="text-sm text-muted-foreground">
+                      % от себестоимости на административные и прочие расходы.
+                    </p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
