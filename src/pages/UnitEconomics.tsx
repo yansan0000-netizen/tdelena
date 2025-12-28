@@ -9,15 +9,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { CategorySelect } from '@/components/ui/category-select';
 import { useCosts } from '@/hooks/useCosts';
+import { useUserSettings } from '@/hooks/useUserSettings';
 import { PRODUCT_CATEGORIES } from '@/lib/categories';
 import { Plus, Upload, Search, Calculator, TrendingUp, Package } from 'lucide-react';
 
 export default function UnitEconomics() {
   const { costs, loading } = useCosts();
+  const { settings, addCustomCategory } = useUserSettings();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [showFilledOnly, setShowFilledOnly] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+
+  const customProductCategories = settings?.custom_product_categories || [];
+  
+  const handleAddProductCategory = async (category: string) => {
+    return addCustomCategory('product', category);
+  };
 
   // Filter costs
   const filteredCosts = costs.filter(cost => {
@@ -139,6 +147,8 @@ export default function UnitEconomics() {
                 value={categoryFilter || ''}
                 onValueChange={(v) => setCategoryFilter(v || null)}
                 categories={PRODUCT_CATEGORIES}
+                customCategories={customProductCategories}
+                onAddCustomCategory={handleAddProductCategory}
                 placeholder="Все категории"
                 searchPlaceholder="Поиск категории..."
                 emptyText="Категория не найдена"

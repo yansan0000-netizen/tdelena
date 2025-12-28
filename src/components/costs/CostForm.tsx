@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CategorySelect } from '@/components/ui/category-select';
 import { UnitEconFormData } from '@/lib/unitEconTypes';
 import { PRODUCT_CATEGORIES, MATERIAL_CATEGORIES, TAX_MODES } from '@/lib/categories';
+import { useUserSettings } from '@/hooks/useUserSettings';
 import { Package, Scissors, DollarSign, ShoppingCart, Users, Store } from 'lucide-react';
 import { useMemo } from 'react';
 
@@ -58,10 +59,14 @@ function FabricSection({
   index,
   formData,
   onChange,
+  customMaterialCategories,
+  onAddMaterialCategory,
 }: {
   index: 1 | 2 | 3;
   formData: UnitEconFormData;
   onChange: (data: UnitEconFormData) => void;
+  customMaterialCategories: string[];
+  onAddMaterialCategory: (category: string) => Promise<boolean>;
 }) {
   const prefix = `fabric${index}` as const;
   
@@ -75,6 +80,8 @@ function FabricSection({
             value={formData[`${prefix}_name` as keyof UnitEconFormData] as string || ''}
             onValueChange={(v) => onChange({ ...formData, [`${prefix}_name`]: v })}
             categories={MATERIAL_CATEGORIES}
+            customCategories={customMaterialCategories}
+            onAddCustomCategory={onAddMaterialCategory}
             placeholder="Выберите тип ткани"
             searchPlaceholder="Поиск ткани..."
             emptyText="Ткань не найдена"
@@ -118,6 +125,18 @@ function FabricSection({
 }
 
 export function CostForm({ formData, onChange, isNew }: CostFormProps) {
+  const { settings, addCustomCategory } = useUserSettings();
+  
+  const customProductCategories = settings?.custom_product_categories || [];
+  const customMaterialCategories = settings?.custom_material_categories || [];
+  
+  const handleAddProductCategory = async (category: string) => {
+    return addCustomCategory('product', category);
+  };
+  
+  const handleAddMaterialCategory = async (category: string) => {
+    return addCustomCategory('material', category);
+  };
   // Calculate WB logistics values
   const wbCalculations = useMemo(() => {
     if (!formData.sell_on_wb) return null;
@@ -208,6 +227,8 @@ export function CostForm({ formData, onChange, isNew }: CostFormProps) {
                     value={formData.category}
                     onValueChange={(v) => onChange({ ...formData, category: v })}
                     categories={PRODUCT_CATEGORIES}
+                    customCategories={customProductCategories}
+                    onAddCustomCategory={handleAddProductCategory}
                     placeholder="Выберите категорию"
                     searchPlaceholder="Поиск категории..."
                     emptyText="Категория не найдена"
@@ -254,9 +275,9 @@ export function CostForm({ formData, onChange, isNew }: CostFormProps) {
               </div>
             </AccordionTrigger>
             <AccordionContent className="pt-4 pb-6 space-y-4">
-              <FabricSection index={1} formData={formData} onChange={onChange} />
-              <FabricSection index={2} formData={formData} onChange={onChange} />
-              <FabricSection index={3} formData={formData} onChange={onChange} />
+              <FabricSection index={1} formData={formData} onChange={onChange} customMaterialCategories={customMaterialCategories} onAddMaterialCategory={handleAddMaterialCategory} />
+              <FabricSection index={2} formData={formData} onChange={onChange} customMaterialCategories={customMaterialCategories} onAddMaterialCategory={handleAddMaterialCategory} />
+              <FabricSection index={3} formData={formData} onChange={onChange} customMaterialCategories={customMaterialCategories} onAddMaterialCategory={handleAddMaterialCategory} />
               
               <div className="grid grid-cols-2 gap-4 pt-4 border-t">
                 <NumberInput

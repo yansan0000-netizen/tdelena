@@ -590,6 +590,8 @@ export type Database = {
         Row: {
           admin_overhead_pct: number | null
           created_at: string
+          custom_material_categories: Json | null
+          custom_product_categories: Json | null
           default_acceptance_fee: number | null
           default_buyout_pct: number | null
           default_logistics_return: number | null
@@ -610,6 +612,8 @@ export type Database = {
         Insert: {
           admin_overhead_pct?: number | null
           created_at?: string
+          custom_material_categories?: Json | null
+          custom_product_categories?: Json | null
           default_acceptance_fee?: number | null
           default_buyout_pct?: number | null
           default_logistics_return?: number | null
@@ -630,6 +634,8 @@ export type Database = {
         Update: {
           admin_overhead_pct?: number | null
           created_at?: string
+          custom_material_categories?: Json | null
+          custom_product_categories?: Json | null
           default_acceptance_fee?: number | null
           default_buyout_pct?: number | null
           default_logistics_return?: number | null
