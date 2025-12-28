@@ -38,6 +38,8 @@ export interface UnitEconFormData {
   sewing_cost: number | null;
   cutting_cost: number | null;
   accessories_cost: number | null;
+  print_embroidery_work_cost: number | null;
+  print_embroidery_materials_cost: number | null;
   print_embroidery_cost: number | null;
   fx_rate: number | null;
   
@@ -120,6 +122,8 @@ export const defaultFormData: UnitEconFormData = {
   cutting_cost: null,
   accessories_cost: null,
   print_embroidery_cost: null,
+  print_embroidery_work_cost: null,
+  print_embroidery_materials_cost: null,
   fx_rate: 90,
   admin_overhead_pct: 15,
   wholesale_markup_pct: 35,

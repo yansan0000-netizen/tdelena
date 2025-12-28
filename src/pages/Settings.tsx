@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { useUserSettings, defaultSettings } from '@/hooks/useUserSettings';
 import { TAX_MODES } from '@/lib/categories';
-import { Settings as SettingsIcon, Save, Loader2, DollarSign, TrendingUp, Package, Percent } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Loader2, DollarSign, TrendingUp, Package, Percent, EyeOff, Plus, X } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
 export default function Settings() {
@@ -17,6 +18,7 @@ export default function Settings() {
   const [formData, setFormData] = useState(defaultSettings);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [newExcludedArticle, setNewExcludedArticle] = useState('');
 
   // Load settings into form
   useEffect(() => {
@@ -38,6 +40,7 @@ export default function Settings() {
         tax_mode: settings.tax_mode,
         custom_product_categories: settings.custom_product_categories || [],
         custom_material_categories: settings.custom_material_categories || [],
+        excluded_articles: settings.excluded_articles || [],
       });
       setHasChanges(false);
     }
@@ -76,9 +79,33 @@ export default function Settings() {
         tax_mode: settings.tax_mode,
         custom_product_categories: settings.custom_product_categories || [],
         custom_material_categories: settings.custom_material_categories || [],
+        excluded_articles: settings.excluded_articles || [],
       });
       setHasChanges(false);
     }
+  };
+
+  const handleAddExcludedArticle = () => {
+    const trimmed = newExcludedArticle.trim();
+    if (!trimmed) return;
+    if (formData.excluded_articles.includes(trimmed)) {
+      toast.error('Артикул уже добавлен');
+      return;
+    }
+    setFormData(prev => ({
+      ...prev,
+      excluded_articles: [...prev.excluded_articles, trimmed],
+    }));
+    setNewExcludedArticle('');
+    setHasChanges(true);
+  };
+
+  const handleRemoveExcludedArticle = (article: string) => {
+    setFormData(prev => ({
+      ...prev,
+      excluded_articles: prev.excluded_articles.filter(a => a !== article),
+    }));
+    setHasChanges(true);
   };
 
   if (loading) {
@@ -383,6 +410,64 @@ export default function Settings() {
                 <p className="text-muted-foreground">
                   Глобальный тренд применяется ко всем прогнозам:<br />
                   <code className="text-xs">forecast = base_forecast × trend_coef × global_trend_coef</code>
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Excluded articles */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <EyeOff className="h-5 w-5" />
+                Исключённые артикулы
+              </CardTitle>
+              <CardDescription>
+                Артикулы, которые будут скрыты из финального отчёта (но учтены в анализе)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Введите артикул"
+                  value={newExcludedArticle}
+                  onChange={(e) => setNewExcludedArticle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddExcludedArticle();
+                    }
+                  }}
+                />
+                <Button onClick={handleAddExcludedArticle} size="icon" variant="outline">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              {formData.excluded_articles.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {formData.excluded_articles.map((article) => (
+                    <Badge key={article} variant="secondary" className="gap-1 pr-1">
+                      {article}
+                      <button
+                        onClick={() => handleRemoveExcludedArticle(article)}
+                        className="ml-1 rounded-full hover:bg-muted p-0.5"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Нет исключённых артикулов
+                </p>
+              )}
+              
+              <div className="p-3 bg-muted/50 rounded-lg text-sm">
+                <p className="text-muted-foreground">
+                  Исключённые артикулы будут проанализированы и учтены в сводных таблицах,
+                  но не будут отображаться в финальном отчёте для визуальной чистоты.
                 </p>
               </div>
             </CardContent>

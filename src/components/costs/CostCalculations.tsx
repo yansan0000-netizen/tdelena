@@ -13,12 +13,17 @@ interface CostCalculationsProps {
 }
 
 export function CostCalculations({ calculations, formData }: CostCalculationsProps) {
+  const printEmbroideryWorkCost = formData.print_embroidery_work_cost || 0;
+  const printEmbroideryMaterialsCost = formData.print_embroidery_materials_cost || 0;
+  const printEmbroideryCost = formData.print_embroidery_cost || 0;
+  const totalPrintEmbroidery = (printEmbroideryWorkCost + printEmbroideryMaterialsCost) || printEmbroideryCost;
+  
   const baseCost = 
     (formData.fabric_cost_total || 0) +
     (formData.sewing_cost || 0) +
     (formData.cutting_cost || 0) +
     (formData.accessories_cost || 0) +
-    (formData.print_embroidery_cost || 0);
+    totalPrintEmbroidery;
 
   const adminCost = baseCost * ((formData.admin_overhead_pct || 0) / 100);
   
@@ -62,8 +67,12 @@ export function CostCalculations({ calculations, formData }: CostCalculationsPro
               <span>{(formData.accessories_cost || 0).toLocaleString('ru-RU')} ₽</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Вышивка/Принт</span>
-              <span>{(formData.print_embroidery_cost || 0).toLocaleString('ru-RU')} ₽</span>
+              <span className="text-muted-foreground">Вышивка/Принт (работа)</span>
+              <span>{printEmbroideryWorkCost.toLocaleString('ru-RU')} ₽</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Вышивка/Принт (материалы)</span>
+              <span>{printEmbroideryMaterialsCost.toLocaleString('ru-RU')} ₽</span>
             </div>
             <div className="flex justify-between border-t pt-1">
               <span className="text-muted-foreground">База</span>

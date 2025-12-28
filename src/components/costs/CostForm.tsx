@@ -169,10 +169,15 @@ export function CostForm({ formData, onChange, isNew }: CostFormProps) {
     const sewingCost = formData.sewing_cost || 0;
     const cuttingCost = formData.cutting_cost || 0;
     const accessoriesCost = formData.accessories_cost || 0;
+    const printEmbroideryWorkCost = formData.print_embroidery_work_cost || 0;
+    const printEmbroideryMaterialsCost = formData.print_embroidery_materials_cost || 0;
     const printEmbroideryCost = formData.print_embroidery_cost || 0;
     const adminOverheadPct = formData.admin_overhead_pct || 0;
     
-    const baseCost = fabricCostTotal + sewingCost + cuttingCost + accessoriesCost + printEmbroideryCost;
+    // Use new split fields if available, otherwise fall back to legacy field
+    const totalPrintEmbroidery = (printEmbroideryWorkCost + printEmbroideryMaterialsCost) || printEmbroideryCost;
+    
+    const baseCost = fabricCostTotal + sewingCost + cuttingCost + accessoriesCost + totalPrintEmbroidery;
     const unitCostReal = baseCost * (1 + adminOverheadPct / 100);
     
     // Investment = units_shipped * unit cost
@@ -325,9 +330,15 @@ export function CostForm({ formData, onChange, isNew }: CostFormProps) {
                   suffix="₽"
                 />
                 <NumberInput
-                  label="Вышивка/Принт, ₽/шт"
-                  value={formData.print_embroidery_cost}
-                  onChange={(v) => onChange({ ...formData, print_embroidery_cost: v })}
+                  label="Вышивка/Принт (работа), ₽/шт"
+                  value={formData.print_embroidery_work_cost}
+                  onChange={(v) => onChange({ ...formData, print_embroidery_work_cost: v })}
+                  suffix="₽"
+                />
+                <NumberInput
+                  label="Вышивка/Принт (материалы), ₽/шт"
+                  value={formData.print_embroidery_materials_cost}
+                  onChange={(v) => onChange({ ...formData, print_embroidery_materials_cost: v })}
                   suffix="₽"
                 />
               </div>
@@ -357,6 +368,50 @@ export function CostForm({ formData, onChange, isNew }: CostFormProps) {
                   suffix="%"
                 />
               </div>
+              
+              {/* Tax in cost section - only shown when WB is not enabled */}
+              {!formData.sell_on_wb && (
+                <div className="mt-4 pt-4 border-t">
+                  <Label className="font-medium mb-3 block">Налоги (в себестоимости)</Label>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Режим</Label>
+                      <Select
+                        value={formData.tax_mode}
+                        onValueChange={(v) => onChange({ ...formData, tax_mode: v as any })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TAX_MODES.map((mode) => (
+                            <SelectItem key={mode.value} value={mode.value}>
+                              {mode.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <NumberInput
+                      label="УСН, %"
+                      value={formData.usn_tax_pct}
+                      onChange={(v) => onChange({ ...formData, usn_tax_pct: v })}
+                      suffix="%"
+                    />
+                    {formData.tax_mode === 'income_expenses_vat' && (
+                      <NumberInput
+                        label="НДС, %"
+                        value={formData.vat_pct}
+                        onChange={(v) => onChange({ ...formData, vat_pct: v })}
+                        suffix="%"
+                      />
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Налог учитывается в себестоимости. При включении продаж на ВБ — налог считается в блоке Wildberries.
+                  </p>
+                </div>
+              )}
             </AccordionContent>
           </AccordionItem>
 
