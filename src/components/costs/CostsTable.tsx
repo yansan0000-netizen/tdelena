@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { UnitEconInput } from '@/hooks/useCosts';
-import { ExternalLink, CheckCircle, AlertCircle } from 'lucide-react';
+import { ExternalLink, RefreshCw } from 'lucide-react';
+import { format } from 'date-fns';
+import { ru } from 'date-fns/locale';
 
 interface CostsTableProps {
   costs: UnitEconInput[];
@@ -56,8 +58,9 @@ export function CostsTable({ costs, loading }: CostsTableProps) {
                 <TableHead>Категория</TableHead>
                 <TableHead className="text-right">Себестоимость</TableHead>
                 <TableHead className="text-right">Опт</TableHead>
-                <TableHead className="text-right">Розница</TableHead>
-                <TableHead className="text-center">Статус</TableHead>
+                <TableHead className="text-right">Маржа, %</TableHead>
+                <TableHead className="text-right">Прибыль/шт</TableHead>
+                <TableHead className="text-center">Обновлено</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
@@ -96,15 +99,24 @@ export function CostsTable({ costs, loading }: CostsTableProps) {
                       : '-'}
                   </TableCell>
                   <TableCell className="text-right font-mono">
-                    {cost.retail_price_rub !== null
-                      ? `${cost.retail_price_rub.toLocaleString('ru-RU')} ₽`
-                      : '-'}
+                    {(() => {
+                      if (!cost.unit_cost_real_rub || !cost.wholesale_price_rub) return '-';
+                      const profit = cost.wholesale_price_rub - cost.unit_cost_real_rub;
+                      const margin = (profit / cost.wholesale_price_rub) * 100;
+                      return `${margin.toFixed(1)}%`;
+                    })()}
                   </TableCell>
-                  <TableCell className="text-center">
-                    {cost.unit_cost_real_rub !== null ? (
-                      <CheckCircle className="h-5 w-5 text-success mx-auto" />
-                    ) : (
-                      <AlertCircle className="h-5 w-5 text-muted-foreground mx-auto" />
+                  <TableCell className="text-right font-mono">
+                    {(() => {
+                      if (!cost.unit_cost_real_rub || !cost.wholesale_price_rub) return '-';
+                      const profit = cost.wholesale_price_rub - cost.unit_cost_real_rub;
+                      return `${profit.toLocaleString('ru-RU')} ₽`;
+                    })()}
+                  </TableCell>
+                  <TableCell className="text-center text-xs text-muted-foreground">
+                    {cost.updated_at ? format(new Date(cost.updated_at), 'dd.MM.yy', { locale: ru }) : '-'}
+                    {(cost as any).is_recalculation && (
+                      <RefreshCw className="h-3 w-3 inline ml-1 text-warning" />
                     )}
                   </TableCell>
                   <TableCell>
