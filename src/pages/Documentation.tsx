@@ -626,10 +626,28 @@ export default function Documentation() {
                       <li>• 0.8 = падение 20%</li>
                       <li>• 1.2 = рост 20%</li>
                     </ul>
-                    <div className="bg-background/80 backdrop-blur-sm rounded-lg px-4 py-3 border border-border/50">
+                    <div className="bg-background/80 backdrop-blur-sm rounded-lg px-4 py-3 border border-border/50 mb-3">
                       <code className="text-sm font-mono font-medium text-foreground">
                         forecast = base × trend_coef × global_trend
                       </code>
+                    </div>
+                    <div className="grid gap-2 text-xs">
+                      <div className="flex items-start gap-2">
+                        <code className="bg-muted px-2 py-0.5 rounded font-mono font-medium shrink-0">forecast</code>
+                        <span className="text-muted-foreground">— итоговый прогноз продаж на период</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <code className="bg-muted px-2 py-0.5 rounded font-mono font-medium shrink-0">base</code>
+                        <span className="text-muted-foreground">— базовый расчёт (средние продажи за период)</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <code className="bg-muted px-2 py-0.5 rounded font-mono font-medium shrink-0">trend_coef</code>
+                        <span className="text-muted-foreground">— коэффициент тренда товара (рассчитывается автоматически по истории)</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <code className="bg-muted px-2 py-0.5 rounded font-mono font-medium shrink-0">global_trend</code>
+                        <span className="text-muted-foreground">— глобальный тренд рынка (задаётся вручную в настройках)</span>
+                      </div>
                     </div>
                   </div>
                 </div>
