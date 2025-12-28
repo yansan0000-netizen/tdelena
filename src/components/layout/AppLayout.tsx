@@ -28,38 +28,44 @@ export function AppLayout({ children }: AppLayoutProps) {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 glass border-b border-border">
+    <div className="min-h-screen bg-background gradient-mesh">
+      {/* Header - Liquid Glass */}
+      <header className="sticky top-0 z-50 glass border-b-0">
         <div className="container flex h-16 items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-lg gradient-primary flex items-center justify-center">
+          <Link to="/" className="flex items-center gap-3 group">
+            <div className="h-10 w-10 rounded-2xl gradient-primary flex items-center justify-center shadow-glass transition-transform group-hover:scale-105">
               <FileSpreadsheet className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="font-semibold text-lg">Sales Planner</span>
           </Link>
 
-          <nav className="flex items-center gap-1">
+          <nav className="flex items-center gap-1 glass-card px-2 py-1.5">
             {navItems.map((item) => (
               <Link key={item.path} to={item.path}>
                 <Button
-                  variant={location.pathname === item.path ? 'secondary' : 'ghost'}
+                  variant="ghost"
                   size="sm"
                   className={cn(
-                    'gap-2',
-                    location.pathname === item.path && 'bg-secondary'
+                    'gap-2 rounded-xl transition-all duration-200',
+                    location.pathname === item.path 
+                      ? 'bg-primary/10 text-primary font-medium shadow-sm' 
+                      : 'hover:bg-muted/50'
                   )}
                 >
                   <item.icon className="h-4 w-4" />
-                  {item.label}
+                  <span className="hidden sm:inline">{item.label}</span>
                 </Button>
               </Link>
             ))}
           </nav>
 
           <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground">{user?.email}</span>
-            <Button variant="ghost" size="sm" onClick={handleSignOut}>
+            <span className="text-sm text-muted-foreground hidden sm:block">{user?.email}</span>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleSignOut}
+              className="rounded-xl glass-button"
+            >
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
