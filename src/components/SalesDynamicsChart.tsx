@@ -31,7 +31,7 @@ import {
   Cell,
 } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, TrendingUp, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
+import { Loader2, TrendingUp, BarChart3, PieChart as PieChartIcon, GitCompare } from 'lucide-react';
 
 interface SalesDynamicsChartProps {
   runId: string;
@@ -79,6 +79,7 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
   const [chartType, setChartType] = useState<'line' | 'bar' | 'area'>('area');
   const [dataType, setDataType] = useState<'revenue' | 'quantity'>('revenue');
   const [topN, setTopN] = useState<number>(10);
+  const [compareMode, setCompareMode] = useState<'none' | 'yoy' | 'mom'>('none');
 
   // Load data
   useEffect(() => {
@@ -210,6 +211,94 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
     
     return { data: result, articles: topArticles };
   }, [rawData, filteredArticles, topN, dataType]);
+
+  // Period comparison data (YoY / MoM)
+  const comparisonData = useMemo(() => {
+    if (compareMode === 'none') return null;
+    
+    const sortedPeriods = filteredPeriodData.map(p => p.period).sort();
+    
+    if (compareMode === 'yoy') {
+      // Year over Year comparison
+      // Parse periods like "2024-01" to get year and month
+      const periodsByMonth = new Map<string, { current: number; previous: number; currentPeriod: string; previousPeriod: string }>();
+      
+      filteredPeriodData.forEach((p) => {
+        const [year, month] = p.period.split('-');
+        const prevYear = String(Number(year) - 1);
+        const prevPeriod = `${prevYear}-${month}`;
+        
+        // Find previous year data
+        const prevData = filteredPeriodData.find(pd => pd.period === prevPeriod);
+        const value = dataType === 'revenue' ? p.revenue : p.quantity;
+        const prevValue = prevData ? (dataType === 'revenue' ? prevData.revenue : prevData.quantity) : 0;
+        
+        if (prevData || value > 0) {
+          periodsByMonth.set(month, {
+            current: value,
+            previous: prevValue,
+            currentPeriod: p.period,
+            previousPeriod: prevPeriod,
+          });
+        }
+      });
+      
+      // Get unique years
+      const years = [...new Set(filteredPeriodData.map(p => p.period.split('-')[0]))].sort();
+      if (years.length < 2) return null;
+      
+      const currentYear = years[years.length - 1];
+      const previousYear = years[years.length - 2];
+      
+      // Build comparison data
+      const result = filteredPeriodData
+        .filter(p => p.period.startsWith(currentYear))
+        .map((p) => {
+          const month = p.period.split('-')[1];
+          const monthName = new Date(2024, Number(month) - 1).toLocaleString('ru', { month: 'short' });
+          const prevPeriod = `${previousYear}-${month}`;
+          const prevData = filteredPeriodData.find(pd => pd.period === prevPeriod);
+          
+          const currentValue = dataType === 'revenue' ? p.revenue : p.quantity;
+          const previousValue = prevData ? (dataType === 'revenue' ? prevData.revenue : prevData.quantity) : 0;
+          const change = previousValue > 0 ? ((currentValue - previousValue) / previousValue) * 100 : 0;
+          
+          return {
+            month: monthName,
+            [`${currentYear}`]: currentValue,
+            [`${previousYear}`]: previousValue,
+            change: Math.round(change),
+          };
+        });
+      
+      return {
+        data: result,
+        labels: [currentYear, previousYear],
+        type: 'yoy' as const,
+      };
+    } else {
+      // Month over Month comparison
+      const result = filteredPeriodData.slice(1).map((p, idx) => {
+        const prevP = filteredPeriodData[idx];
+        const currentValue = dataType === 'revenue' ? p.revenue : p.quantity;
+        const previousValue = dataType === 'revenue' ? prevP.revenue : prevP.quantity;
+        const change = previousValue > 0 ? ((currentValue - previousValue) / previousValue) * 100 : 0;
+        
+        return {
+          period: p.period,
+          current: currentValue,
+          previous: previousValue,
+          change: Math.round(change),
+        };
+      });
+      
+      return {
+        data: result,
+        labels: ['Текущий', 'Предыдущий'],
+        type: 'mom' as const,
+      };
+    }
+  }, [filteredPeriodData, compareMode, dataType]);
 
   // Category breakdown
   const categoryBreakdown = useMemo(() => {
@@ -391,6 +480,20 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Сравнение:</Label>
+              <Select value={compareMode} onValueChange={(v) => setCompareMode(v as any)}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Без сравнения</SelectItem>
+                  <SelectItem value="yoy">Год к году</SelectItem>
+                  <SelectItem value="mom">Месяц к месяцу</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -402,9 +505,15 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
             <TrendingUp className="h-4 w-4" />
             Динамика
           </TabsTrigger>
+          {compareMode !== 'none' && (
+            <TabsTrigger value="period-compare" className="gap-2">
+              <GitCompare className="h-4 w-4" />
+              {compareMode === 'yoy' ? 'Год к году' : 'Месяц к месяцу'}
+            </TabsTrigger>
+          )}
           <TabsTrigger value="comparison" className="gap-2">
             <BarChart3 className="h-4 w-4" />
-            Сравнение
+            Топ артикулов
           </TabsTrigger>
           <TabsTrigger value="structure" className="gap-2">
             <PieChartIcon className="h-4 w-4" />
@@ -492,6 +601,154 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Period Comparison (YoY / MoM) */}
+        {compareMode !== 'none' && comparisonData && (
+          <TabsContent value="period-compare">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  {compareMode === 'yoy' 
+                    ? `Сравнение год к году (${comparisonData.labels[0]} vs ${comparisonData.labels[1]})`
+                    : 'Изменение месяц к месяцу'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Comparison Chart */}
+                <div className="h-[350px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    {compareMode === 'yoy' ? (
+                      <BarChart data={comparisonData.data}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis dataKey="month" className="text-xs" />
+                        <YAxis tickFormatter={formatValue} className="text-xs" />
+                        <Tooltip
+                          formatter={(value: number, name: string) => [
+                            dataType === 'revenue'
+                              ? `${value.toLocaleString('ru-RU')} ₽`
+                              : `${value.toLocaleString('ru-RU')} шт`,
+                            name,
+                          ]}
+                        />
+                        <Legend />
+                        <Bar 
+                          dataKey={comparisonData.labels[0]} 
+                          fill="hsl(var(--primary))" 
+                          radius={[4, 4, 0, 0]}
+                          name={`${comparisonData.labels[0]} год`}
+                        />
+                        <Bar 
+                          dataKey={comparisonData.labels[1]} 
+                          fill="hsl(var(--muted-foreground))" 
+                          radius={[4, 4, 0, 0]}
+                          name={`${comparisonData.labels[1]} год`}
+                        />
+                      </BarChart>
+                    ) : (
+                      <BarChart data={comparisonData.data}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis dataKey="period" className="text-xs" />
+                        <YAxis tickFormatter={formatValue} className="text-xs" />
+                        <Tooltip
+                          formatter={(value: number, name: string) => [
+                            dataType === 'revenue'
+                              ? `${value.toLocaleString('ru-RU')} ₽`
+                              : `${value.toLocaleString('ru-RU')} шт`,
+                            name === 'current' ? 'Текущий' : 'Предыдущий',
+                          ]}
+                        />
+                        <Legend />
+                        <Bar 
+                          dataKey="current" 
+                          fill="hsl(var(--primary))" 
+                          radius={[4, 4, 0, 0]}
+                          name="Текущий период"
+                        />
+                        <Bar 
+                          dataKey="previous" 
+                          fill="hsl(var(--muted-foreground))" 
+                          radius={[4, 4, 0, 0]}
+                          name="Предыдущий период"
+                        />
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Change indicators */}
+                <div>
+                  <h4 className="text-sm font-medium mb-3">Изменение по периодам</h4>
+                  <div className="grid grid-cols-3 md:grid-cols-6 lg:grid-cols-12 gap-2">
+                    {comparisonData.data.map((item: any, idx: number) => {
+                      const change = item.change;
+                      const isPositive = change > 0;
+                      const isNegative = change < 0;
+                      
+                      return (
+                        <div 
+                          key={idx}
+                          className={`p-2 rounded-lg text-center text-xs ${
+                            isPositive 
+                              ? 'bg-success/10 text-success' 
+                              : isNegative 
+                              ? 'bg-destructive/10 text-destructive'
+                              : 'bg-muted text-muted-foreground'
+                          }`}
+                        >
+                          <div className="font-medium">
+                            {compareMode === 'yoy' ? item.month : item.period}
+                          </div>
+                          <div className="font-bold">
+                            {isPositive ? '+' : ''}{change}%
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Summary stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
+                  {(() => {
+                    const changes = comparisonData.data.map((d: any) => d.change);
+                    const avgChange = changes.reduce((a: number, b: number) => a + b, 0) / changes.length;
+                    const positive = changes.filter((c: number) => c > 0).length;
+                    const negative = changes.filter((c: number) => c < 0).length;
+                    const maxGrowth = Math.max(...changes);
+                    const maxDrop = Math.min(...changes);
+                    
+                    return (
+                      <>
+                        <div className="text-center p-3 bg-muted rounded-lg">
+                          <p className={`text-xl font-bold ${avgChange >= 0 ? 'text-success' : 'text-destructive'}`}>
+                            {avgChange >= 0 ? '+' : ''}{avgChange.toFixed(1)}%
+                          </p>
+                          <p className="text-xs text-muted-foreground">Среднее изменение</p>
+                        </div>
+                        <div className="text-center p-3 bg-muted rounded-lg">
+                          <p className="text-xl font-bold text-success">{positive}</p>
+                          <p className="text-xs text-muted-foreground">Периодов с ростом</p>
+                        </div>
+                        <div className="text-center p-3 bg-muted rounded-lg">
+                          <p className="text-xl font-bold text-destructive">{negative}</p>
+                          <p className="text-xs text-muted-foreground">Периодов с падением</p>
+                        </div>
+                        <div className="text-center p-3 bg-muted rounded-lg">
+                          <p className="text-xl font-bold">
+                            <span className="text-success">+{maxGrowth}%</span>
+                            {' / '}
+                            <span className="text-destructive">{maxDrop}%</span>
+                          </p>
+                          <p className="text-xs text-muted-foreground">Макс. рост / падение</p>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         {/* Comparison */}
         <TabsContent value="comparison">
