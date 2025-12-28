@@ -6,6 +6,7 @@ export interface UnitEconFormData {
   category: string;
   product_url: string;
   is_new: boolean;
+  is_recalculation: boolean;
   
   // Production
   units_in_cut: number | null;
@@ -44,19 +45,35 @@ export interface UnitEconFormData {
   admin_overhead_pct: number | null;
   wholesale_markup_pct: number | null;
   
-  // WB
-  buyer_price_with_spp: number | null;
+  // WB toggle
+  sell_on_wb: boolean;
+  
+  // WB pricing
+  price_no_spp: number | null;
   spp_pct: number | null;
+  // Removed: buyer_price_with_spp (now calculated), retail_before_discount, approved_discount_pct
+  planned_sales_month_qty: number | null;
+  wb_commission_pct: number | null;
+  
+  // WB logistics with returns
+  buyout_pct: number | null;
+  logistics_to_client: number | null;
+  logistics_return_fixed: number | null;
+  acceptance_rub: number | null;
+  
+  // Tax
+  tax_mode: 'income_expenses' | 'income_expenses_vat';
+  usn_tax_pct: number | null;
+  vat_pct: number | null;
+  
+  // Legacy fields (kept for compatibility)
+  delivery_rub: number | null;
+  non_purchase_pct: number | null;
+  investments_rub: number | null;
+  buyer_price_with_spp: number | null;
   planned_retail_after_discount: number | null;
   retail_before_discount: number | null;
   approved_discount_pct: number | null;
-  planned_sales_month_qty: number | null;
-  wb_commission_pct: number | null;
-  delivery_rub: number | null;
-  acceptance_rub: number | null;
-  non_purchase_pct: number | null;
-  usn_tax_pct: number | null;
-  investments_rub: number | null;
   
   // Scenarios
   scenario_min_price: number | null;
@@ -69,6 +86,7 @@ export interface UnitEconFormData {
   // Competitor
   competitor_url: string;
   competitor_price: number | null;
+  competitor_comment: string;
 }
 
 export const defaultFormData: UnitEconFormData = {
@@ -77,6 +95,7 @@ export const defaultFormData: UnitEconFormData = {
   category: '',
   product_url: '',
   is_new: false,
+  is_recalculation: false,
   units_in_cut: null,
   fabric1_name: '',
   fabric1_weight_cut_kg: null,
@@ -102,20 +121,27 @@ export const defaultFormData: UnitEconFormData = {
   accessories_cost: null,
   print_embroidery_cost: null,
   fx_rate: 90,
-  admin_overhead_pct: 0,
-  wholesale_markup_pct: 0,
-  buyer_price_with_spp: null,
+  admin_overhead_pct: 15,
+  wholesale_markup_pct: 35,
+  sell_on_wb: false,
+  price_no_spp: null,
   spp_pct: null,
+  planned_sales_month_qty: null,
+  wb_commission_pct: null,
+  buyout_pct: 90,
+  logistics_to_client: 50,
+  logistics_return_fixed: 50,
+  acceptance_rub: 50,
+  tax_mode: 'income_expenses',
+  usn_tax_pct: 7,
+  vat_pct: 0,
+  delivery_rub: null,
+  non_purchase_pct: null,
+  investments_rub: null,
+  buyer_price_with_spp: null,
   planned_retail_after_discount: null,
   retail_before_discount: null,
   approved_discount_pct: null,
-  planned_sales_month_qty: null,
-  wb_commission_pct: null,
-  delivery_rub: null,
-  acceptance_rub: null,
-  non_purchase_pct: null,
-  usn_tax_pct: null,
-  investments_rub: null,
   scenario_min_price: null,
   scenario_min_profit: null,
   scenario_plan_price: null,
@@ -124,6 +150,7 @@ export const defaultFormData: UnitEconFormData = {
   scenario_desired_price: null,
   competitor_url: '',
   competitor_price: null,
+  competitor_comment: '',
 };
 
 // Excel column mapping for import

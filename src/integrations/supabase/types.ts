@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      product_change_log: {
+        Row: {
+          changed_at: string
+          field_name: string
+          id: string
+          new_value: string | null
+          old_value: string | null
+          product_id: string
+          user_id: string
+        }
+        Insert: {
+          changed_at?: string
+          field_name: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          product_id: string
+          user_id: string
+        }
+        Update: {
+          changed_at?: string
+          field_name?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          product_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_change_log_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "unit_econ_inputs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -308,17 +346,22 @@ export type Database = {
       unit_econ_inputs: {
         Row: {
           acceptance_rub: number | null
+          acceptance_total_calculated: number | null
           accessories_cost: number | null
           admin_overhead_pct: number | null
           approved_discount_pct: number | null
           article: string
           buyer_price_with_spp: number | null
+          buyout_pct: number | null
           calculation_date: string | null
           category: string | null
+          competitor_comment: string | null
           competitor_price: number | null
           competitor_url: string | null
           created_at: string | null
           cutting_cost: number | null
+          delivery_cost_total_calculated: number | null
+          delivery_per_unit_calculated: number | null
           delivery_rub: number | null
           fabric_cost_total: number | null
           fabric1_cost_rub_per_unit: number | null
@@ -341,14 +384,22 @@ export type Database = {
           fabric3_weight_cut_kg: number | null
           fx_rate: number | null
           id: string
+          investment_total_calculated: number | null
           investments_rub: number | null
           is_new: boolean | null
+          is_recalculation: boolean | null
+          logistics_return_fixed: number | null
+          logistics_to_client: number | null
+          margin_pct: number | null
           name: string | null
           non_purchase_pct: number | null
           planned_retail_after_discount: number | null
           planned_sales_month_qty: number | null
+          price_no_spp: number | null
+          price_with_spp_calculated: number | null
           print_embroidery_cost: number | null
           product_url: string | null
+          profit_per_unit: number | null
           retail_before_discount: number | null
           retail_price_rub: number | null
           scenario_desired_price: number | null
@@ -357,30 +408,40 @@ export type Database = {
           scenario_plan_price: number | null
           scenario_plan_profit: number | null
           scenario_recommended_price: number | null
+          sell_on_wb: boolean | null
           sewing_cost: number | null
           spp_pct: number | null
+          tax_mode: string | null
           unit_cost_real_rub: number | null
           units_in_cut: number | null
+          units_return_calculated: number | null
+          units_shipped_calculated: number | null
           updated_at: string | null
           user_id: string
           usn_tax_pct: number | null
+          vat_pct: number | null
           wb_commission_pct: number | null
           wholesale_markup_pct: number | null
           wholesale_price_rub: number | null
         }
         Insert: {
           acceptance_rub?: number | null
+          acceptance_total_calculated?: number | null
           accessories_cost?: number | null
           admin_overhead_pct?: number | null
           approved_discount_pct?: number | null
           article: string
           buyer_price_with_spp?: number | null
+          buyout_pct?: number | null
           calculation_date?: string | null
           category?: string | null
+          competitor_comment?: string | null
           competitor_price?: number | null
           competitor_url?: string | null
           created_at?: string | null
           cutting_cost?: number | null
+          delivery_cost_total_calculated?: number | null
+          delivery_per_unit_calculated?: number | null
           delivery_rub?: number | null
           fabric_cost_total?: number | null
           fabric1_cost_rub_per_unit?: number | null
@@ -403,14 +464,22 @@ export type Database = {
           fabric3_weight_cut_kg?: number | null
           fx_rate?: number | null
           id?: string
+          investment_total_calculated?: number | null
           investments_rub?: number | null
           is_new?: boolean | null
+          is_recalculation?: boolean | null
+          logistics_return_fixed?: number | null
+          logistics_to_client?: number | null
+          margin_pct?: number | null
           name?: string | null
           non_purchase_pct?: number | null
           planned_retail_after_discount?: number | null
           planned_sales_month_qty?: number | null
+          price_no_spp?: number | null
+          price_with_spp_calculated?: number | null
           print_embroidery_cost?: number | null
           product_url?: string | null
+          profit_per_unit?: number | null
           retail_before_discount?: number | null
           retail_price_rub?: number | null
           scenario_desired_price?: number | null
@@ -419,30 +488,40 @@ export type Database = {
           scenario_plan_price?: number | null
           scenario_plan_profit?: number | null
           scenario_recommended_price?: number | null
+          sell_on_wb?: boolean | null
           sewing_cost?: number | null
           spp_pct?: number | null
+          tax_mode?: string | null
           unit_cost_real_rub?: number | null
           units_in_cut?: number | null
+          units_return_calculated?: number | null
+          units_shipped_calculated?: number | null
           updated_at?: string | null
           user_id: string
           usn_tax_pct?: number | null
+          vat_pct?: number | null
           wb_commission_pct?: number | null
           wholesale_markup_pct?: number | null
           wholesale_price_rub?: number | null
         }
         Update: {
           acceptance_rub?: number | null
+          acceptance_total_calculated?: number | null
           accessories_cost?: number | null
           admin_overhead_pct?: number | null
           approved_discount_pct?: number | null
           article?: string
           buyer_price_with_spp?: number | null
+          buyout_pct?: number | null
           calculation_date?: string | null
           category?: string | null
+          competitor_comment?: string | null
           competitor_price?: number | null
           competitor_url?: string | null
           created_at?: string | null
           cutting_cost?: number | null
+          delivery_cost_total_calculated?: number | null
+          delivery_per_unit_calculated?: number | null
           delivery_rub?: number | null
           fabric_cost_total?: number | null
           fabric1_cost_rub_per_unit?: number | null
@@ -465,14 +544,22 @@ export type Database = {
           fabric3_weight_cut_kg?: number | null
           fx_rate?: number | null
           id?: string
+          investment_total_calculated?: number | null
           investments_rub?: number | null
           is_new?: boolean | null
+          is_recalculation?: boolean | null
+          logistics_return_fixed?: number | null
+          logistics_to_client?: number | null
+          margin_pct?: number | null
           name?: string | null
           non_purchase_pct?: number | null
           planned_retail_after_discount?: number | null
           planned_sales_month_qty?: number | null
+          price_no_spp?: number | null
+          price_with_spp_calculated?: number | null
           print_embroidery_cost?: number | null
           product_url?: string | null
+          profit_per_unit?: number | null
           retail_before_discount?: number | null
           retail_price_rub?: number | null
           scenario_desired_price?: number | null
@@ -481,16 +568,84 @@ export type Database = {
           scenario_plan_price?: number | null
           scenario_plan_profit?: number | null
           scenario_recommended_price?: number | null
+          sell_on_wb?: boolean | null
           sewing_cost?: number | null
           spp_pct?: number | null
+          tax_mode?: string | null
           unit_cost_real_rub?: number | null
           units_in_cut?: number | null
+          units_return_calculated?: number | null
+          units_shipped_calculated?: number | null
           updated_at?: string | null
           user_id?: string
           usn_tax_pct?: number | null
+          vat_pct?: number | null
           wb_commission_pct?: number | null
           wholesale_markup_pct?: number | null
           wholesale_price_rub?: number | null
+        }
+        Relationships: []
+      }
+      user_settings: {
+        Row: {
+          admin_overhead_pct: number | null
+          created_at: string
+          default_acceptance_fee: number | null
+          default_buyout_pct: number | null
+          default_logistics_return: number | null
+          default_logistics_to_client: number | null
+          fx_rate: number | null
+          global_trend_coef: number | null
+          global_trend_manual: boolean | null
+          id: string
+          tax_mode: string | null
+          updated_at: string
+          user_id: string
+          usn_tax_pct: number | null
+          vat_pct: number | null
+          wholesale_markup_pct: number | null
+          xyz_threshold_x: number | null
+          xyz_threshold_y: number | null
+        }
+        Insert: {
+          admin_overhead_pct?: number | null
+          created_at?: string
+          default_acceptance_fee?: number | null
+          default_buyout_pct?: number | null
+          default_logistics_return?: number | null
+          default_logistics_to_client?: number | null
+          fx_rate?: number | null
+          global_trend_coef?: number | null
+          global_trend_manual?: boolean | null
+          id?: string
+          tax_mode?: string | null
+          updated_at?: string
+          user_id: string
+          usn_tax_pct?: number | null
+          vat_pct?: number | null
+          wholesale_markup_pct?: number | null
+          xyz_threshold_x?: number | null
+          xyz_threshold_y?: number | null
+        }
+        Update: {
+          admin_overhead_pct?: number | null
+          created_at?: string
+          default_acceptance_fee?: number | null
+          default_buyout_pct?: number | null
+          default_logistics_return?: number | null
+          default_logistics_to_client?: number | null
+          fx_rate?: number | null
+          global_trend_coef?: number | null
+          global_trend_manual?: boolean | null
+          id?: string
+          tax_mode?: string | null
+          updated_at?: string
+          user_id?: string
+          usn_tax_pct?: number | null
+          vat_pct?: number | null
+          wholesale_markup_pct?: number | null
+          xyz_threshold_x?: number | null
+          xyz_threshold_y?: number | null
         }
         Relationships: []
       }
