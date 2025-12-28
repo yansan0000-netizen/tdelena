@@ -3,14 +3,16 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { CostForm } from '@/components/costs/CostForm';
 import { CostCalculations } from '@/components/costs/CostCalculations';
+import { ProductChangeLog } from '@/components/costs/ProductChangeLog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCosts, UnitEconInput, calculateDerivedFields } from '@/hooks/useCosts';
+import { useUserSettings } from '@/hooks/useUserSettings';
 import { useRuns } from '@/hooks/useRuns';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { ArrowLeft, Loader2, Save, Trash2, BarChart3 } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, Trash2, BarChart3, Clock } from 'lucide-react';
 import { UnitEconFormData, defaultFormData } from '@/lib/unitEconTypes';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -22,10 +24,12 @@ export default function UnitEconomicsDetail() {
   const isNew = article === 'new';
   
   const { getCostByArticle, upsertCost, deleteCost } = useCosts();
+  const { settings } = useUserSettings();
   const { runs } = useRuns();
   
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [productId, setProductId] = useState<string | null>(null);
   const [formData, setFormData] = useState<UnitEconFormData>(defaultFormData);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [salesFacts, setSalesFacts] = useState<{
@@ -35,16 +39,38 @@ export default function UnitEconomicsDetail() {
     current_stock: number;
   } | null>(null);
 
-  // Load existing data
+  // Load existing data or apply defaults from settings for new items
   useEffect(() => {
     const loadData = async () => {
-      if (isNew || !article) {
+      if (isNew) {
+        // Apply defaults from user settings for new items
+        if (settings) {
+          setFormData(prev => ({
+            ...prev,
+            fx_rate: settings.fx_rate,
+            admin_overhead_pct: settings.admin_overhead_pct,
+            wholesale_markup_pct: settings.wholesale_markup_pct,
+            usn_tax_pct: settings.usn_tax_pct,
+            vat_pct: settings.vat_pct,
+            tax_mode: settings.tax_mode,
+            buyout_pct: settings.default_buyout_pct,
+            logistics_to_client: settings.default_logistics_to_client,
+            logistics_return_fixed: settings.default_logistics_return,
+            acceptance_rub: settings.default_acceptance_fee,
+          }));
+        }
+        setLoading(false);
+        return;
+      }
+      
+      if (!article) {
         setLoading(false);
         return;
       }
       
       const data = await getCostByArticle(decodeURIComponent(article));
       if (data) {
+        setProductId(data.id);
         setFormData({
           article: data.article,
           name: data.name || '',
@@ -113,7 +139,7 @@ export default function UnitEconomicsDetail() {
     };
     
     loadData();
-  }, [article, isNew, getCostByArticle]);
+  }, [article, isNew, getCostByArticle, settings]);
 
   // Load sales facts for selected run
   useEffect(() => {
@@ -211,6 +237,9 @@ export default function UnitEconomicsDetail() {
             </p>
           </div>
           <div className="flex gap-2">
+            {!isNew && productId && (
+              <ProductChangeLog productId={productId} />
+            )}
             {!isNew && (
               <Button variant="outline" onClick={handleDelete} className="gap-2 text-destructive">
                 <Trash2 className="h-4 w-4" />
