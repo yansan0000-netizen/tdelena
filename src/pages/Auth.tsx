@@ -6,18 +6,37 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { FileSpreadsheet, Loader2 } from 'lucide-react';
+import { FileSpreadsheet, Loader2, Eye, EyeOff } from 'lucide-react';
 import { z } from 'zod';
 
-const authSchema = z.object({
+const REGISTRATION_CODE = 'planner_CVb428';
+
+const loginSchema = z.object({
   email: z.string().email('Некорректный email'),
   password: z.string().min(6, 'Пароль должен быть не менее 6 символов'),
+});
+
+const signupSchema = z.object({
+  email: z.string().email('Некорректный email'),
+  password: z.string().min(6, 'Пароль должен быть не менее 6 символов'),
+  fullName: z.string().min(2, 'Введите ФИО').max(100, 'ФИО слишком длинное'),
+  phone: z.string().min(10, 'Введите корректный номер телефона').max(20, 'Номер слишком длинный'),
+  position: z.string().min(2, 'Введите должность').max(100, 'Должность слишком длинная'),
+  registrationCode: z.literal(REGISTRATION_CODE, {
+    errorMap: () => ({ message: 'Неверный код регистрации' }),
+  }),
 });
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [position, setPosition] = useState('');
+  const [registrationCode, setRegistrationCode] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showCode, setShowCode] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signIn, signUp, user } = useAuth();
   const navigate = useNavigate();
@@ -32,44 +51,79 @@ export default function Auth() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const validation = authSchema.safeParse({ email, password });
-    if (!validation.success) {
-      toast({
-        title: 'Ошибка валидации',
-        description: validation.error.errors[0].message,
-        variant: 'destructive',
+    if (isLogin) {
+      const validation = loginSchema.safeParse({ email, password });
+      if (!validation.success) {
+        toast({
+          title: 'Ошибка валидации',
+          description: validation.error.errors[0].message,
+          variant: 'destructive',
+        });
+        return;
+      }
+    } else {
+      const validation = signupSchema.safeParse({ 
+        email, 
+        password, 
+        fullName, 
+        phone, 
+        position,
+        registrationCode 
       });
-      return;
+      if (!validation.success) {
+        toast({
+          title: 'Ошибка валидации',
+          description: validation.error.errors[0].message,
+          variant: 'destructive',
+        });
+        return;
+      }
     }
 
     setLoading(true);
     
     try {
-      const { error } = isLogin 
-        ? await signIn(email, password)
-        : await signUp(email, password);
-
-      if (error) {
-        let message = error.message;
-        if (error.message.includes('Invalid login credentials')) {
-          message = 'Неверный email или пароль';
-        } else if (error.message.includes('User already registered')) {
-          message = 'Пользователь уже зарегистрирован';
-        }
-        toast({
-          title: 'Ошибка',
-          description: message,
-          variant: 'destructive',
-        });
-      } else {
-        if (isLogin) {
+      if (isLogin) {
+        const { error } = await signIn(email, password);
+        if (error) {
+          let message = error.message;
+          if (error.message.includes('Invalid login credentials')) {
+            message = 'Неверный email или пароль';
+          }
+          toast({
+            title: 'Ошибка',
+            description: message,
+            variant: 'destructive',
+          });
+        } else {
           navigate('/new');
+        }
+      } else {
+        const { error } = await signUp({
+          email,
+          password,
+          fullName,
+          phone,
+          position,
+        });
+        if (error) {
+          let message = error.message;
+          if (error.message.includes('User already registered')) {
+            message = 'Пользователь уже зарегистрирован';
+          }
+          toast({
+            title: 'Ошибка',
+            description: message,
+            variant: 'destructive',
+          });
         } else {
           toast({
             title: 'Успешно!',
             description: 'Вы успешно зарегистрированы. Входите в систему.',
           });
           setIsLogin(true);
+          setPassword('');
+          setRegistrationCode('');
         }
       }
     } finally {
@@ -99,8 +153,74 @@ export default function Auth() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {!isLogin && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="registrationCode">Код регистрации *</Label>
+                    <div className="relative">
+                      <Input
+                        id="registrationCode"
+                        type={showCode ? 'text' : 'password'}
+                        placeholder="Введите код регистрации"
+                        value={registrationCode}
+                        onChange={(e) => setRegistrationCode(e.target.value)}
+                        required
+                        disabled={loading}
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCode(!showCode)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showCode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="fullName">ФИО *</Label>
+                    <Input
+                      id="fullName"
+                      type="text"
+                      placeholder="Иванов Иван Иванович"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      required
+                      disabled={loading}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Телефон *</Label>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="+7 (999) 123-45-67"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      required
+                      disabled={loading}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="position">Должность *</Label>
+                    <Input
+                      id="position"
+                      type="text"
+                      placeholder="Менеджер по продажам"
+                      value={position}
+                      onChange={(e) => setPosition(e.target.value)}
+                      required
+                      disabled={loading}
+                    />
+                  </div>
+                </>
+              )}
+
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Email *</Label>
                 <Input
                   id="email"
                   type="email"
@@ -111,18 +231,30 @@ export default function Auth() {
                   disabled={loading}
                 />
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="password">Пароль</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  disabled={loading}
-                />
+                <Label htmlFor="password">Пароль *</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    disabled={loading}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
+
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {isLogin ? 'Войти' : 'Зарегистрироваться'}
