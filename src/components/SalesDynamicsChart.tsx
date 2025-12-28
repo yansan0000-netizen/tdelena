@@ -82,6 +82,7 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
   const [compareMode, setCompareMode] = useState<'none' | 'yoy' | 'mom'>('none');
   const [forecastPeriods, setForecastPeriods] = useState<number>(3);
   const [useSeasonalAdjustment, setUseSeasonalAdjustment] = useState<boolean>(true);
+  const [forecastMethod, setForecastMethod] = useState<'linear' | 'exponential' | 'moving_average'>('linear');
 
   // Load data
   useEffect(() => {
@@ -341,27 +342,13 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
     return coefficients;
   }, [filteredPeriodData, dataType]);
 
-  // Linear regression for trend forecast with seasonal adjustment
+  // Forecast with multiple methods
   const forecastData = useMemo(() => {
     if (filteredPeriodData.length < 2) return null;
 
     const values = filteredPeriodData.map((p) => (dataType === 'revenue' ? p.revenue : p.quantity));
     const n = values.length;
-
-    // Calculate linear regression: y = mx + b
-    const sumX = (n * (n - 1)) / 2;
-    const sumY = values.reduce((a, b) => a + b, 0);
-    const sumXY = values.reduce((sum, y, x) => sum + x * y, 0);
-    const sumX2 = Array.from({ length: n }, (_, i) => i * i).reduce((a, b) => a + b, 0);
-
-    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-    const intercept = (sumY - slope * sumX) / n;
-
-    // Calculate R² (coefficient of determination)
-    const meanY = sumY / n;
-    const ssTotal = values.reduce((sum, y) => sum + Math.pow(y - meanY, 2), 0);
-    const ssResidual = values.reduce((sum, y, x) => sum + Math.pow(y - (slope * x + intercept), 2), 0);
-    const rSquared = ssTotal > 0 ? 1 - ssResidual / ssTotal : 0;
+    const meanY = values.reduce((a, b) => a + b, 0) / n;
 
     // Generate forecast periods
     const lastPeriod = filteredPeriodData[n - 1].period;
@@ -385,10 +372,86 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
       return coef ? coef.coefficient : 1;
     };
 
-    // Calculate trend line and forecast values with seasonal adjustment
+    let slope = 0;
+    let intercept = 0;
+    let rSquared = 0;
+    let trendValues: number[] = [];
+    let forecastBaseValues: number[] = [];
+    let methodName = '';
+
+    if (forecastMethod === 'linear') {
+      // Linear regression: y = mx + b
+      methodName = 'Линейная регрессия';
+      const sumX = (n * (n - 1)) / 2;
+      const sumY = values.reduce((a, b) => a + b, 0);
+      const sumXY = values.reduce((sum, y, x) => sum + x * y, 0);
+      const sumX2 = Array.from({ length: n }, (_, i) => i * i).reduce((a, b) => a + b, 0);
+
+      slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+      intercept = (sumY - slope * sumX) / n;
+
+      trendValues = values.map((_, idx) => slope * idx + intercept);
+      forecastBaseValues = forecastPeriodsList.map((_, idx) => slope * (n + idx) + intercept);
+
+      // R²
+      const ssTotal = values.reduce((sum, y) => sum + Math.pow(y - meanY, 2), 0);
+      const ssResidual = values.reduce((sum, y, x) => sum + Math.pow(y - trendValues[x], 2), 0);
+      rSquared = ssTotal > 0 ? 1 - ssResidual / ssTotal : 0;
+    } else if (forecastMethod === 'exponential') {
+      // Exponential smoothing (Holt's method)
+      methodName = 'Экспоненциальное сглаживание';
+      const alpha = 0.3; // Smoothing factor for level
+      const beta = 0.1;  // Smoothing factor for trend
+
+      let level = values[0];
+      let trend = values.length > 1 ? values[1] - values[0] : 0;
+      const smoothed: number[] = [level];
+
+      for (let i = 1; i < n; i++) {
+        const prevLevel = level;
+        level = alpha * values[i] + (1 - alpha) * (prevLevel + trend);
+        trend = beta * (level - prevLevel) + (1 - beta) * trend;
+        smoothed.push(level);
+      }
+
+      trendValues = smoothed;
+      forecastBaseValues = forecastPeriodsList.map((_, idx) => level + trend * (idx + 1));
+
+      // R²
+      const ssTotal = values.reduce((sum, y) => sum + Math.pow(y - meanY, 2), 0);
+      const ssResidual = values.reduce((sum, y, x) => sum + Math.pow(y - smoothed[x], 2), 0);
+      rSquared = ssTotal > 0 ? 1 - ssResidual / ssTotal : 0;
+    } else {
+      // Moving average
+      methodName = 'Скользящее среднее';
+      const windowSize = Math.min(3, n);
+      const movingAvg: number[] = [];
+
+      for (let i = 0; i < n; i++) {
+        if (i < windowSize - 1) {
+          movingAvg.push(values.slice(0, i + 1).reduce((a, b) => a + b, 0) / (i + 1));
+        } else {
+          movingAvg.push(values.slice(i - windowSize + 1, i + 1).reduce((a, b) => a + b, 0) / windowSize);
+        }
+      }
+
+      trendValues = movingAvg;
+      
+      // For forecast, use the last moving average and apply a simple trend
+      const lastMA = movingAvg[n - 1];
+      const maGrowth = n > windowSize ? (movingAvg[n - 1] - movingAvg[n - windowSize]) / windowSize : 0;
+      forecastBaseValues = forecastPeriodsList.map((_, idx) => lastMA + maGrowth * (idx + 1));
+
+      // R²
+      const ssTotal = values.reduce((sum, y) => sum + Math.pow(y - meanY, 2), 0);
+      const ssResidual = values.reduce((sum, y, x) => sum + Math.pow(y - movingAvg[x], 2), 0);
+      rSquared = ssTotal > 0 ? 1 - ssResidual / ssTotal : 0;
+    }
+
+    // Build trend line with seasonal adjustment
     const trendLine = filteredPeriodData.map((p, idx) => {
       const month = parseInt(p.period.split('-')[1]);
-      const baseTrend = slope * idx + intercept;
+      const baseTrend = trendValues[idx];
       const seasonalCoef = getSeasonalCoef(month);
       return {
         period: p.period,
@@ -400,9 +463,10 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
       };
     });
 
+    // Build forecast values with seasonal adjustment
     const forecastValues = forecastPeriodsList.map((period, idx) => {
       const month = parseInt(period.split('-')[1]);
-      const baseTrend = slope * (n + idx) + intercept;
+      const baseTrend = forecastBaseValues[idx];
       const seasonalCoef = getSeasonalCoef(month);
       return {
         period,
@@ -423,7 +487,7 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
     // Predicted value at end of forecast (with seasonal adjustment if enabled)
     const lastForecastMonth = parseInt(forecastPeriodsList[forecastPeriodsList.length - 1].split('-')[1]);
     const lastForecastSeasonalCoef = getSeasonalCoef(lastForecastMonth);
-    const forecastEndValueBase = slope * (n + forecastPeriods - 1) + intercept;
+    const forecastEndValueBase = forecastBaseValues[forecastBaseValues.length - 1];
     const forecastEndValue = useSeasonalAdjustment && seasonalCoefficients 
       ? forecastEndValueBase * lastForecastSeasonalCoef 
       : forecastEndValueBase;
@@ -432,10 +496,11 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
     // Calculate R² for seasonal model
     let rSquaredSeasonal = rSquared;
     if (useSeasonalAdjustment && seasonalCoefficients) {
+      const ssTotal = values.reduce((sum, y) => sum + Math.pow(y - meanY, 2), 0);
       const ssResidualSeasonal = filteredPeriodData.reduce((sum, p, idx) => {
         const month = parseInt(p.period.split('-')[1]);
         const actual = dataType === 'revenue' ? p.revenue : p.quantity;
-        const predicted = (slope * idx + intercept) * getSeasonalCoef(month);
+        const predicted = trendValues[idx] * getSeasonalCoef(month);
         return sum + Math.pow(actual - predicted, 2);
       }, 0);
       rSquaredSeasonal = ssTotal > 0 ? 1 - ssResidualSeasonal / ssTotal : 0;
@@ -455,8 +520,9 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
       lastActualValue: lastValue,
       forecastPeriodsList,
       hasSeasonalData: !!seasonalCoefficients,
+      methodName,
     };
-  }, [filteredPeriodData, dataType, forecastPeriods, useSeasonalAdjustment, seasonalCoefficients]);
+  }, [filteredPeriodData, dataType, forecastPeriods, useSeasonalAdjustment, seasonalCoefficients, forecastMethod]);
 
   // Category breakdown
   const categoryBreakdown = useMemo(() => {
@@ -649,6 +715,20 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
                   <SelectItem value="none">Без сравнения</SelectItem>
                   <SelectItem value="yoy">Год к году</SelectItem>
                   <SelectItem value="mom">Месяц к месяцу</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Метод:</Label>
+              <Select value={forecastMethod} onValueChange={(v) => setForecastMethod(v as any)}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="linear">Линейная регрессия</SelectItem>
+                  <SelectItem value="exponential">Экспон. сглаживание</SelectItem>
+                  <SelectItem value="moving_average">Скользящее среднее</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1062,11 +1142,12 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
         <TabsContent value="forecast">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
+              <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                 <Sparkles className="h-5 w-5 text-primary" />
                 Прогноз {dataType === 'revenue' ? 'выручки' : 'продаж'} на {forecastPeriods} {forecastPeriods === 1 ? 'месяц' : forecastPeriods < 5 ? 'месяца' : 'месяцев'}
+                <Badge variant="secondary" className="text-xs">{forecastData?.methodName || 'Линейная регрессия'}</Badge>
                 {useSeasonalAdjustment && forecastData?.hasSeasonalData && (
-                  <Badge variant="outline" className="ml-2 text-xs">С сезонностью</Badge>
+                  <Badge variant="outline" className="text-xs">С сезонностью</Badge>
                 )}
               </CardTitle>
             </CardHeader>
@@ -1113,7 +1194,7 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
                               ? `${value.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ₽`
                               : `${value.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} шт`;
                             const label = name === 'actual' ? 'Факт' : 
-                                          name === 'trendSeasonal' ? 'С сезонностью' : 'Линейный тренд';
+                                          name === 'trendSeasonal' ? 'С сезонностью' : forecastData.methodName;
                             return [formatted, label];
                           }}
                           labelFormatter={(label) => {
@@ -1129,7 +1210,7 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
                           formatter={(value) => {
                             if (value === 'actual') return 'Факт';
                             if (value === 'trendSeasonal') return 'Прогноз (сезонный)';
-                            return 'Линейный тренд';
+                            return forecastData.methodName;
                           }}
                         />
                         <Area
