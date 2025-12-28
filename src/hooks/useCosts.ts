@@ -258,6 +258,8 @@ export function useCosts() {
     current_stock: number;
     abc_group: string;
     xyz_group: string;
+    sales_velocity_day: number | null;
+    days_until_stockout: number | null;
     has_cost_data: boolean;
   }[]> => {
     if (!user) return [];
@@ -265,7 +267,7 @@ export function useCosts() {
     // Fetch analytics for this run
     const { data: analyticsData, error: analyticsError } = await supabase
       .from('sales_analytics')
-      .select('article, total_quantity, total_revenue, current_stock, avg_price, abc_group, xyz_group')
+      .select('article, total_quantity, total_revenue, current_stock, avg_price, abc_group, xyz_group, sales_velocity_day, days_until_stockout')
       .eq('run_id', runId);
     
     if (analyticsError) {
@@ -299,6 +301,8 @@ export function useCosts() {
       avg_price: number;
       abc_group: string;
       xyz_group: string;
+      sales_velocity_day: number | null;
+      days_until_stockout: number | null;
     }) => {
       const unitCost = costsMap.get(a.article) || null;
       const avgPriceActual = a.total_quantity > 0 ? a.total_revenue / a.total_quantity : a.avg_price;
@@ -331,6 +335,8 @@ export function useCosts() {
         current_stock: a.current_stock,
         abc_group: a.abc_group,
         xyz_group: a.xyz_group,
+        sales_velocity_day: a.sales_velocity_day,
+        days_until_stockout: a.days_until_stockout,
         has_cost_data: unitCost !== null,
       };
     });

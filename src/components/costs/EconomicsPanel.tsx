@@ -194,11 +194,12 @@ export function EconomicsPanel({ runId }: EconomicsPanelProps) {
                   <TableHead>Артикул</TableHead>
                   <TableHead className="text-center">ABC</TableHead>
                   <TableHead className="text-center">XYZ</TableHead>
-                  <TableHead className="text-right">Себестоимость</TableHead>
-                  <TableHead className="text-right">Факт ср. цена</TableHead>
+                  <TableHead className="text-right">Кол-во</TableHead>
+                  <TableHead className="text-right">Остаток</TableHead>
+                  <TableHead className="text-right">Скорость/день</TableHead>
+                  <TableHead className="text-right">Дней до 0</TableHead>
                   <TableHead className="text-right">Маржа %</TableHead>
                   <TableHead className="text-right">Прибыль</TableHead>
-                  <TableHead className="text-right">Капитализация</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
@@ -212,15 +213,27 @@ export function EconomicsPanel({ runId }: EconomicsPanelProps) {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge variant="outline">{row.xyz_group}</Badge>
+                      <Badge variant="outline">{(row.xyz_group || '').trim()}</Badge>
                     </TableCell>
                     <TableCell className="text-right font-mono">
-                      {row.unit_cost_real_rub !== null
-                        ? `${row.unit_cost_real_rub.toLocaleString('ru-RU')} ₽`
+                      {row.total_quantity.toLocaleString('ru-RU')}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {row.current_stock.toLocaleString('ru-RU')}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {row.sales_velocity_day !== null
+                        ? row.sales_velocity_day.toFixed(2)
                         : <span className="text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell className="text-right font-mono">
-                      {row.avg_price_actual.toLocaleString('ru-RU')} ₽
+                      {row.days_until_stockout !== null ? (
+                        <span className={row.days_until_stockout <= 14 ? 'text-destructive font-medium' : row.days_until_stockout <= 30 ? 'text-warning' : ''}>
+                          {row.days_until_stockout >= 999 ? '∞' : row.days_until_stockout}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       {row.gross_margin_pct !== null ? (
@@ -239,11 +252,6 @@ export function EconomicsPanel({ runId }: EconomicsPanelProps) {
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {row.capitalization !== null
-                        ? `${row.capitalization.toLocaleString('ru-RU')} ₽`
-                        : <span className="text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell>
                       {!row.has_cost_data && (

@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { CategorySelect } from '@/components/ui/category-select';
 import { useCosts } from '@/hooks/useCosts';
+import { PRODUCT_CATEGORIES } from '@/lib/categories';
 import { Plus, Upload, Search, Calculator, TrendingUp, Package } from 'lucide-react';
 
 export default function UnitEconomics() {
@@ -29,9 +31,6 @@ export default function UnitEconomics() {
     
     return matchesSearch && matchesCategory && matchesFilled;
   });
-
-  // Get unique categories
-  const categories = [...new Set(costs.map(c => c.category).filter(Boolean))];
 
   // Stats
   const filledCount = costs.filter(c => c.unit_cost_real_rub !== null).length;
@@ -136,16 +135,15 @@ export default function UnitEconomics() {
                   className="pl-9"
                 />
               </div>
-              <select
+              <CategorySelect
                 value={categoryFilter || ''}
-                onChange={(e) => setCategoryFilter(e.target.value || null)}
-                className="h-10 px-3 rounded-md border border-input bg-background text-sm"
-              >
-                <option value="">Все категории</option>
-                {categories.map(cat => (
-                  <option key={cat} value={cat!}>{cat}</option>
-                ))}
-              </select>
+                onValueChange={(v) => setCategoryFilter(v || null)}
+                categories={PRODUCT_CATEGORIES}
+                placeholder="Все категории"
+                searchPlaceholder="Поиск категории..."
+                emptyText="Категория не найдена"
+                className="w-[200px]"
+              />
               <Button
                 variant={showFilledOnly ? 'secondary' : 'outline'}
                 onClick={() => setShowFilledOnly(!showFilledOnly)}
