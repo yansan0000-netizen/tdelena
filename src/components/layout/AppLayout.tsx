@@ -30,41 +30,48 @@ export function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="min-h-screen bg-background gradient-mesh">
       {/* Header - Liquid Glass */}
-      <header className="sticky top-0 z-50 glass border-b-0">
-        <div className="container flex h-16 items-center justify-between">
-          <Link to="/" className="flex items-center gap-3 group">
+      <header className="sticky top-0 z-50 bg-background/70 backdrop-blur-xl border-b border-border/30">
+        <div className="container flex h-16 items-center gap-4">
+          {/* Logo */}
+          <Link to="/" className="flex-shrink-0 group">
             <div className="h-10 w-10 rounded-2xl gradient-primary flex items-center justify-center shadow-glass transition-transform group-hover:scale-105">
               <FileSpreadsheet className="h-5 w-5 text-primary-foreground" />
             </div>
           </Link>
 
-          <nav className="flex items-center gap-1 glass-card px-2 py-1.5">
-            {navItems.map((item) => (
-              <Link key={item.path} to={item.path}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    'gap-2 rounded-xl transition-all duration-200',
-                    location.pathname === item.path 
-                      ? 'bg-primary/10 text-primary font-medium shadow-sm' 
-                      : 'hover:bg-muted/50'
-                  )}
-                >
-                  <item.icon className="h-4 w-4" />
-                  <span className="hidden sm:inline">{item.label}</span>
-                </Button>
-              </Link>
-            ))}
+          {/* Navigation - centered */}
+          <nav className="flex-1 flex items-center justify-center">
+            <div className="inline-flex items-center gap-1 bg-muted/40 backdrop-blur-sm rounded-2xl px-2 py-1.5 border border-border/30">
+              {navItems.map((item) => (
+                <Link key={item.path} to={item.path}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      'gap-2 rounded-xl transition-all duration-200 h-9 px-3',
+                      location.pathname === item.path 
+                        ? 'bg-background text-primary font-medium shadow-sm border border-border/50' 
+                        : 'hover:bg-background/50 text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <item.icon className="h-4 w-4 flex-shrink-0" />
+                    <span className="hidden lg:inline text-sm">{item.label}</span>
+                  </Button>
+                </Link>
+              ))}
+            </div>
           </nav>
 
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground hidden sm:block">{user?.email}</span>
+          {/* User section */}
+          <div className="flex-shrink-0 flex items-center gap-2">
+            <span className="text-sm text-muted-foreground hidden md:block max-w-[180px] truncate">
+              {user?.email}
+            </span>
             <Button 
               variant="ghost" 
-              size="sm" 
+              size="icon"
               onClick={handleSignOut}
-              className="rounded-xl glass-button"
+              className="rounded-xl h-9 w-9 hover:bg-muted/50"
             >
               <LogOut className="h-4 w-4" />
             </Button>
