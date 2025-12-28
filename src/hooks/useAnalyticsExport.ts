@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import {
   AnalyticsRow,
   UnitEconData,
+  PeriodSalesData,
   generateAnalyticsReport,
   generateProductionPlanReport,
   downloadBlob,
@@ -24,6 +25,7 @@ export function useAnalyticsExport(runId: string | undefined) {
   const [progress, setProgress] = useState<ExportProgress>({ loaded: 0, total: null, percent: 0 });
   const [analyticsData, setAnalyticsData] = useState<AnalyticsRow[] | null>(null);
   const [costsData, setCostsData] = useState<UnitEconData[] | null>(null);
+  const [periodSalesData, setPeriodSalesData] = useState<PeriodSalesData[] | null>(null);
 
   const fetchAnalyticsData = useCallback(async (): Promise<AnalyticsRow[] | null> => {
     if (!runId) return null;
@@ -100,12 +102,52 @@ export function useAnalyticsExport(runId: string | undefined) {
     return costs;
   }, [user, costsData]);
 
+  const fetchPeriodSalesData = useCallback(async (): Promise<PeriodSalesData[] | null> => {
+    if (!runId) return null;
+
+    // Return cached data if available
+    if (periodSalesData) return periodSalesData;
+
+    const all: PeriodSalesData[] = [];
+    let from = 0;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('sales_data_raw')
+        .select('article, period, quantity, revenue')
+        .eq('run_id', runId)
+        .order('period', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1);
+
+      if (error) {
+        console.error('Error fetching period sales:', error);
+        return null;
+      }
+
+      const page = (data ?? []).map(row => ({
+        article: row.article,
+        period: row.period,
+        quantity: row.quantity || 0,
+        revenue: row.revenue || 0,
+      }));
+      
+      all.push(...page);
+
+      if (page.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+
+    setPeriodSalesData(all);
+    return all;
+  }, [runId, periodSalesData]);
+
   const downloadReport = useCallback(async () => {
     setLoading(true);
     try {
-      const [data, costs] = await Promise.all([
+      const [data, costs, periodSales] = await Promise.all([
         fetchAnalyticsData(),
-        fetchCostsData()
+        fetchCostsData(),
+        fetchPeriodSalesData(),
       ]);
       
       if (!data || data.length === 0) {
@@ -113,7 +155,7 @@ export function useAnalyticsExport(runId: string | undefined) {
         return;
       }
 
-      const blob = generateAnalyticsReport(data, costs || undefined);
+      const blob = generateAnalyticsReport(data, costs || undefined, periodSales || undefined);
       downloadBlob(blob, `Отчёт_ABC_XYZ_${runId?.slice(0, 8)}.xlsx`);
       toast.success(`Отчёт скачан (${data.length.toLocaleString('ru-RU')} строк)`);
     } catch (err) {
@@ -122,7 +164,7 @@ export function useAnalyticsExport(runId: string | undefined) {
     } finally {
       setLoading(false);
     }
-  }, [fetchAnalyticsData, fetchCostsData, runId]);
+  }, [fetchAnalyticsData, fetchCostsData, fetchPeriodSalesData, runId]);
 
   const downloadProductionPlan = useCallback(async () => {
     setLoading(true);
