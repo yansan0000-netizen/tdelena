@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
@@ -10,6 +10,7 @@ import {
   generateProductionPlanReport,
   downloadBlob,
 } from '@/lib/excel/analyticsExport';
+import { ExportFilters, FilterOptions, defaultFilters } from '@/components/ExportFilters';
 
 const PAGE_SIZE = 1000;
 
@@ -26,6 +27,7 @@ export function useAnalyticsExport(runId: string | undefined) {
   const [analyticsData, setAnalyticsData] = useState<AnalyticsRow[] | null>(null);
   const [costsData, setCostsData] = useState<UnitEconData[] | null>(null);
   const [periodSalesData, setPeriodSalesData] = useState<PeriodSalesData[] | null>(null);
+  const [filters, setFilters] = useState<ExportFilters>(defaultFilters);
 
   const fetchAnalyticsData = useCallback(async (): Promise<AnalyticsRow[] | null> => {
     if (!runId) return null;
@@ -141,6 +143,111 @@ export function useAnalyticsExport(runId: string | undefined) {
     return all;
   }, [runId, periodSalesData]);
 
+  // Filter options derived from data
+  const filterOptions = useMemo((): FilterOptions => {
+    if (!analyticsData) {
+      return {
+        periods: [],
+        categories: [],
+        abcGroups: [],
+        xyzGroups: [],
+        productGroups: [],
+      };
+    }
+
+    const categories = new Set<string>();
+    const abcGroups = new Set<string>();
+    const xyzGroups = new Set<string>();
+    const productGroups = new Set<string>();
+
+    analyticsData.forEach((row) => {
+      if (row.category) categories.add(row.category);
+      if (row.abc_group) abcGroups.add(row.abc_group);
+      if (row.xyz_group) xyzGroups.add(row.xyz_group);
+      if (row.product_group) productGroups.add(row.product_group);
+    });
+
+    // Get periods from period sales data
+    const periods = new Set<string>();
+    if (periodSalesData) {
+      periodSalesData.forEach((row) => {
+        if (row.period) periods.add(row.period);
+      });
+    }
+
+    return {
+      periods: Array.from(periods).sort(),
+      categories: Array.from(categories).sort(),
+      abcGroups: Array.from(abcGroups).sort(),
+      xyzGroups: Array.from(xyzGroups).sort(),
+      productGroups: Array.from(productGroups).sort(),
+    };
+  }, [analyticsData, periodSalesData]);
+
+  // Apply filters to data
+  const applyFilters = useCallback(
+    (data: AnalyticsRow[], periodSales: PeriodSalesData[] | null): { analytics: AnalyticsRow[]; periodSales: PeriodSalesData[] | null } => {
+      let filteredAnalytics = data;
+      let filteredPeriodSales = periodSales;
+
+      // Filter by category
+      if (filters.categories.length > 0) {
+        filteredAnalytics = filteredAnalytics.filter((row) =>
+          filters.categories.includes(row.category || '')
+        );
+      }
+
+      // Filter by ABC group
+      if (filters.abcGroups.length > 0) {
+        filteredAnalytics = filteredAnalytics.filter((row) =>
+          filters.abcGroups.includes(row.abc_group || '')
+        );
+      }
+
+      // Filter by XYZ group
+      if (filters.xyzGroups.length > 0) {
+        filteredAnalytics = filteredAnalytics.filter((row) =>
+          filters.xyzGroups.includes(row.xyz_group || '')
+        );
+      }
+
+      // Filter by product group
+      if (filters.productGroups.length > 0) {
+        filteredAnalytics = filteredAnalytics.filter((row) =>
+          filters.productGroups.includes(row.product_group || '')
+        );
+      }
+
+      // Filter by stock
+      if (filters.hasStock === true) {
+        filteredAnalytics = filteredAnalytics.filter((row) => (row.current_stock ?? 0) > 0);
+      } else if (filters.hasStock === false) {
+        filteredAnalytics = filteredAnalytics.filter((row) => (row.current_stock ?? 0) === 0);
+      }
+
+      // Filter period sales by selected periods and matching articles
+      if (filteredPeriodSales) {
+        const validArticles = new Set(filteredAnalytics.map((r) => r.article));
+        
+        filteredPeriodSales = filteredPeriodSales.filter((row) => {
+          const articleMatch = validArticles.has(row.article);
+          const periodMatch = filters.periods.length === 0 || filters.periods.includes(row.period);
+          return articleMatch && periodMatch;
+        });
+      }
+
+      return { analytics: filteredAnalytics, periodSales: filteredPeriodSales };
+    },
+    [filters]
+  );
+
+  // Filtered counts
+  const filteredCount = useMemo(() => {
+    if (!analyticsData) return 0;
+    const { analytics } = applyFilters(analyticsData, null);
+    return analytics.length;
+  }, [analyticsData, applyFilters]);
+
   const downloadReport = useCallback(async () => {
     setLoading(true);
     try {
@@ -155,16 +262,24 @@ export function useAnalyticsExport(runId: string | undefined) {
         return;
       }
 
-      const blob = generateAnalyticsReport(data, costs || undefined, periodSales || undefined);
+      // Apply filters
+      const { analytics: filteredData, periodSales: filteredPeriodSales } = applyFilters(data, periodSales);
+
+      if (filteredData.length === 0) {
+        toast.error('Нет данных, соответствующих фильтрам');
+        return;
+      }
+
+      const blob = generateAnalyticsReport(filteredData, costs || undefined, filteredPeriodSales || undefined);
       downloadBlob(blob, `Отчёт_ABC_XYZ_${runId?.slice(0, 8)}.xlsx`);
-      toast.success(`Отчёт скачан (${data.length.toLocaleString('ru-RU')} строк)`);
+      toast.success(`Отчёт скачан (${filteredData.length.toLocaleString('ru-RU')} строк)`);
     } catch (err) {
       console.error('Error generating report:', err);
       toast.error('Ошибка генерации отчёта');
     } finally {
       setLoading(false);
     }
-  }, [fetchAnalyticsData, fetchCostsData, fetchPeriodSalesData, runId]);
+  }, [fetchAnalyticsData, fetchCostsData, fetchPeriodSalesData, applyFilters, runId]);
 
   const downloadProductionPlan = useCallback(async () => {
     setLoading(true);
@@ -179,7 +294,15 @@ export function useAnalyticsExport(runId: string | undefined) {
         return;
       }
 
-      const blob = generateProductionPlanReport(data, costs || undefined);
+      // Apply filters (without period sales filtering)
+      const { analytics: filteredData } = applyFilters(data, null);
+
+      if (filteredData.length === 0) {
+        toast.error('Нет данных, соответствующих фильтрам');
+        return;
+      }
+
+      const blob = generateProductionPlanReport(filteredData, costs || undefined);
       downloadBlob(blob, `План_Производства_${runId?.slice(0, 8)}.xlsx`);
       toast.success('План производства скачан');
     } catch (err) {
@@ -188,13 +311,27 @@ export function useAnalyticsExport(runId: string | undefined) {
     } finally {
       setLoading(false);
     }
-  }, [fetchAnalyticsData, fetchCostsData, runId]);
+  }, [fetchAnalyticsData, fetchCostsData, applyFilters, runId]);
+
+  // Load data on mount for filter options
+  const loadDataForFilters = useCallback(async () => {
+    if (analyticsData) return;
+    setLoading(true);
+    await Promise.all([fetchAnalyticsData(), fetchPeriodSalesData()]);
+    setLoading(false);
+  }, [analyticsData, fetchAnalyticsData, fetchPeriodSalesData]);
 
   return {
     loading,
     progress,
+    filters,
+    setFilters,
+    filterOptions,
+    filteredCount,
+    totalCount: analyticsData?.length ?? 0,
     downloadReport,
     downloadProductionPlan,
+    loadDataForFilters,
     hasData: !!analyticsData && analyticsData.length > 0,
   };
 }
