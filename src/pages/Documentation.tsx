@@ -613,19 +613,24 @@ export default function Documentation() {
                     </p>
                   </div>
                   
-                  <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                    <h4 className="font-medium mb-2">🌍 Глобальный тренд</h4>
-                    <p className="text-sm text-muted-foreground">
+                  <div className="p-4 bg-gradient-to-br from-primary/5 to-primary/10 border border-primary/20 rounded-xl">
+                    <h4 className="font-semibold mb-2 flex items-center gap-2">
+                      <span className="text-lg">🌍</span>
+                      Глобальный тренд
+                    </h4>
+                    <p className="text-sm text-muted-foreground mb-3">
                       Коэффициент для корректировки прогнозов с учётом общего тренда рынка.
                     </p>
-                    <ul className="mt-2 text-xs text-muted-foreground space-y-1">
+                    <ul className="text-sm text-muted-foreground space-y-1 mb-4">
                       <li>• 1.0 = без изменений</li>
                       <li>• 0.8 = падение 20%</li>
                       <li>• 1.2 = рост 20%</li>
                     </ul>
-                    <p className="mt-2 text-xs">
-                      <code>forecast = base × trend_coef × global_trend</code>
-                    </p>
+                    <div className="bg-background/80 backdrop-blur-sm rounded-lg px-4 py-3 border border-border/50">
+                      <code className="text-sm font-mono font-medium text-foreground">
+                        forecast = base × trend_coef × global_trend
+                      </code>
+                    </div>
                   </div>
                 </div>
               </CardContent>
