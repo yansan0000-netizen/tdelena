@@ -5,6 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
 import {
   Collapsible,
   CollapsibleContent,
@@ -17,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ChevronDown, Filter, X, Download, Loader2 } from 'lucide-react';
+import { ChevronDown, Filter, X, Download, Loader2, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface ExportFilters {
@@ -26,6 +27,7 @@ export interface ExportFilters {
   abcGroups: string[];
   xyzGroups: string[];
   productGroups: string[];
+  articles: string[];
   minRevenue: number | null;
   maxRevenue: number | null;
   hasStock: boolean | null;
@@ -37,6 +39,7 @@ export interface FilterOptions {
   abcGroups: string[];
   xyzGroups: string[];
   productGroups: string[];
+  articles: string[];
 }
 
 interface ExportFiltersProps {
@@ -55,6 +58,7 @@ const defaultFilters: ExportFilters = {
   abcGroups: [],
   xyzGroups: [],
   productGroups: [],
+  articles: [],
   minRevenue: null,
   maxRevenue: null,
   hasStock: null,
@@ -77,6 +81,7 @@ export function ExportFiltersPanel({
     filters.abcGroups.length > 0 ||
     filters.xyzGroups.length > 0 ||
     filters.productGroups.length > 0 ||
+    filters.articles.length > 0 ||
     filters.minRevenue !== null ||
     filters.maxRevenue !== null ||
     filters.hasStock !== null;
@@ -86,7 +91,7 @@ export function ExportFiltersPanel({
   };
 
   const toggleArrayFilter = (
-    key: keyof Pick<ExportFilters, 'periods' | 'categories' | 'abcGroups' | 'xyzGroups' | 'productGroups'>,
+    key: keyof Pick<ExportFilters, 'periods' | 'categories' | 'abcGroups' | 'xyzGroups' | 'productGroups' | 'articles'>,
     value: string
   ) => {
     const current = filters[key];
@@ -95,6 +100,8 @@ export function ExportFiltersPanel({
       : [...current, value];
     onFiltersChange({ ...filters, [key]: updated });
   };
+
+  const [articleSearch, setArticleSearch] = useState('');
 
   return (
     <Card>
@@ -257,6 +264,73 @@ export function ExportFiltersPanel({
                 ))}
               </div>
             </ScrollArea>
+          </FilterSection>
+        )}
+
+        {/* Articles filter */}
+        {options.articles.length > 0 && (
+          <FilterSection
+            title="Артикулы"
+            count={filters.articles.length}
+            total={options.articles.length}
+          >
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Поиск артикула..."
+                  value={articleSearch}
+                  onChange={(e) => setArticleSearch(e.target.value)}
+                  className="pl-8 h-9"
+                />
+              </div>
+              <ScrollArea className="h-[150px]">
+                <div className="space-y-2">
+                  {options.articles
+                    .filter((article) => 
+                      articleSearch === '' || 
+                      article.toLowerCase().includes(articleSearch.toLowerCase())
+                    )
+                    .slice(0, 100)
+                    .map((article) => (
+                      <div key={article} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`art-${article}`}
+                          checked={filters.articles.includes(article)}
+                          onCheckedChange={() => toggleArrayFilter('articles', article)}
+                        />
+                        <Label htmlFor={`art-${article}`} className="text-sm cursor-pointer font-mono">
+                          {article}
+                        </Label>
+                      </div>
+                    ))}
+                  {options.articles.filter((a) => 
+                    articleSearch === '' || a.toLowerCase().includes(articleSearch.toLowerCase())
+                  ).length > 100 && (
+                    <p className="text-xs text-muted-foreground pt-2">
+                      Показано 100 из {options.articles.filter((a) => 
+                        articleSearch === '' || a.toLowerCase().includes(articleSearch.toLowerCase())
+                      ).length}. Используйте поиск.
+                    </p>
+                  )}
+                </div>
+              </ScrollArea>
+              {filters.articles.length > 0 && (
+                <div className="flex flex-wrap gap-1 pt-2 border-t">
+                  {filters.articles.map((article) => (
+                    <Badge
+                      key={article}
+                      variant="secondary"
+                      className="text-xs cursor-pointer"
+                      onClick={() => toggleArrayFilter('articles', article)}
+                    >
+                      {article}
+                      <X className="h-3 w-3 ml-1" />
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
           </FilterSection>
         )}
 

@@ -706,9 +706,9 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
             </div>
 
             <div className="flex items-center gap-2">
-              <Label className="text-sm">Сравнение:</Label>
+              <Label className="text-sm whitespace-nowrap">Сравнение:</Label>
               <Select value={compareMode} onValueChange={(v) => setCompareMode(v as any)}>
-                <SelectTrigger className="w-[140px]">
+                <SelectTrigger className="w-[160px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -720,23 +720,23 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
             </div>
 
             <div className="flex items-center gap-2">
-              <Label className="text-sm">Метод:</Label>
+              <Label className="text-sm whitespace-nowrap">Метод:</Label>
               <Select value={forecastMethod} onValueChange={(v) => setForecastMethod(v as any)}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-[220px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="linear">Линейная регрессия</SelectItem>
-                  <SelectItem value="exponential">Экспон. сглаживание</SelectItem>
+                  <SelectItem value="exponential">Экспоненциальное сглаживание</SelectItem>
                   <SelectItem value="moving_average">Скользящее среднее</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="flex items-center gap-2">
-              <Label className="text-sm">Прогноз:</Label>
+              <Label className="text-sm whitespace-nowrap">Прогноз:</Label>
               <Select value={String(forecastPeriods)} onValueChange={(v) => setForecastPeriods(Number(v))}>
-                <SelectTrigger className="w-[100px]">
+                <SelectTrigger className="w-[120px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
