@@ -1,0 +1,646 @@
+import { useState, useMemo, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from 'recharts';
+import { supabase } from '@/integrations/supabase/client';
+import { Loader2, TrendingUp, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
+
+interface SalesDynamicsChartProps {
+  runId: string;
+}
+
+interface PeriodData {
+  period: string;
+  quantity: number;
+  revenue: number;
+}
+
+interface ArticleData {
+  article: string;
+  category: string | null;
+  abc_group: string | null;
+  xyz_group: string | null;
+  product_group: string | null;
+  total_revenue: number;
+}
+
+const COLORS = [
+  'hsl(var(--chart-1))',
+  'hsl(var(--chart-2))',
+  'hsl(var(--chart-3))',
+  'hsl(var(--chart-4))',
+  'hsl(var(--chart-5))',
+  '#8884d8',
+  '#82ca9d',
+  '#ffc658',
+  '#ff7300',
+  '#a4de6c',
+];
+
+export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
+  const [loading, setLoading] = useState(true);
+  const [periodData, setPeriodData] = useState<PeriodData[]>([]);
+  const [articleData, setArticleData] = useState<ArticleData[]>([]);
+  const [rawData, setRawData] = useState<any[]>([]);
+  
+  // Filters
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedAbcGroups, setSelectedAbcGroups] = useState<string[]>([]);
+  const [selectedXyzGroups, setSelectedXyzGroups] = useState<string[]>([]);
+  const [selectedArticles, setSelectedArticles] = useState<string[]>([]);
+  const [chartType, setChartType] = useState<'line' | 'bar' | 'area'>('area');
+  const [dataType, setDataType] = useState<'revenue' | 'quantity'>('revenue');
+  const [topN, setTopN] = useState<number>(10);
+
+  // Load data
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      
+      // Load analytics data for filter options
+      const { data: analytics } = await supabase
+        .from('sales_analytics')
+        .select('article, category, abc_group, xyz_group, product_group, total_revenue')
+        .eq('run_id', runId)
+        .order('total_revenue', { ascending: false });
+      
+      if (analytics) {
+        setArticleData(analytics);
+      }
+
+      // Load raw period data
+      const allRaw: any[] = [];
+      let from = 0;
+      const PAGE_SIZE = 1000;
+      
+      while (true) {
+        const { data } = await supabase
+          .from('sales_data_raw')
+          .select('article, period, quantity, revenue, category, product_group')
+          .eq('run_id', runId)
+          .neq('period', '1970-01')
+          .order('period', { ascending: true })
+          .range(from, from + PAGE_SIZE - 1);
+        
+        if (!data || data.length === 0) break;
+        allRaw.push(...data);
+        if (data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+      }
+      
+      setRawData(allRaw);
+      
+      // Aggregate by period
+      const periodMap = new Map<string, { quantity: number; revenue: number }>();
+      allRaw.forEach((row) => {
+        const existing = periodMap.get(row.period) || { quantity: 0, revenue: 0 };
+        periodMap.set(row.period, {
+          quantity: existing.quantity + (row.quantity || 0),
+          revenue: existing.revenue + (row.revenue || 0),
+        });
+      });
+      
+      const periods = Array.from(periodMap.entries())
+        .map(([period, data]) => ({ period, ...data }))
+        .sort((a, b) => a.period.localeCompare(b.period));
+      
+      setPeriodData(periods);
+      setLoading(false);
+    };
+
+    loadData();
+  }, [runId]);
+
+  // Filter options
+  const filterOptions = useMemo(() => {
+    const categories = new Set<string>();
+    const abcGroups = new Set<string>();
+    const xyzGroups = new Set<string>();
+    
+    articleData.forEach((row) => {
+      if (row.category) categories.add(row.category);
+      if (row.abc_group) abcGroups.add(row.abc_group);
+      if (row.xyz_group) xyzGroups.add(row.xyz_group);
+    });
+
+    return {
+      categories: Array.from(categories).sort(),
+      abcGroups: Array.from(abcGroups).sort(),
+      xyzGroups: Array.from(xyzGroups).sort(),
+    };
+  }, [articleData]);
+
+  // Filtered articles
+  const filteredArticles = useMemo(() => {
+    return articleData.filter((a) => {
+      if (selectedCategories.length > 0 && !selectedCategories.includes(a.category || '')) return false;
+      if (selectedAbcGroups.length > 0 && !selectedAbcGroups.includes(a.abc_group || '')) return false;
+      if (selectedXyzGroups.length > 0 && !selectedXyzGroups.includes(a.xyz_group || '')) return false;
+      return true;
+    });
+  }, [articleData, selectedCategories, selectedAbcGroups, selectedXyzGroups]);
+
+  // Filtered period data
+  const filteredPeriodData = useMemo(() => {
+    const validArticles = new Set(filteredArticles.map((a) => a.article));
+    
+    const periodMap = new Map<string, { quantity: number; revenue: number }>();
+    rawData.forEach((row) => {
+      if (!validArticles.has(row.article)) return;
+      
+      const existing = periodMap.get(row.period) || { quantity: 0, revenue: 0 };
+      periodMap.set(row.period, {
+        quantity: existing.quantity + (row.quantity || 0),
+        revenue: existing.revenue + (row.revenue || 0),
+      });
+    });
+    
+    return Array.from(periodMap.entries())
+      .map(([period, data]) => ({ period, ...data }))
+      .sort((a, b) => a.period.localeCompare(b.period));
+  }, [rawData, filteredArticles]);
+
+  // Top articles data for comparison
+  const topArticlesData = useMemo(() => {
+    const topArticles = filteredArticles.slice(0, topN);
+    const articleSet = new Set(topArticles.map((a) => a.article));
+    
+    // Get all periods
+    const allPeriods = [...new Set(rawData.map((r) => r.period))].filter(p => p !== '1970-01').sort();
+    
+    // Group by period and article
+    const result = allPeriods.map((period) => {
+      const row: any = { period };
+      topArticles.forEach((art) => {
+        const sales = rawData
+          .filter((r) => r.article === art.article && r.period === period)
+          .reduce((sum, r) => sum + (dataType === 'revenue' ? (r.revenue || 0) : (r.quantity || 0)), 0);
+        row[art.article] = sales;
+      });
+      return row;
+    });
+    
+    return { data: result, articles: topArticles };
+  }, [rawData, filteredArticles, topN, dataType]);
+
+  // Category breakdown
+  const categoryBreakdown = useMemo(() => {
+    const catMap = new Map<string, number>();
+    filteredArticles.forEach((a) => {
+      const cat = a.category || 'Без категории';
+      catMap.set(cat, (catMap.get(cat) || 0) + a.total_revenue);
+    });
+    
+    return Array.from(catMap.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [filteredArticles]);
+
+  // ABC breakdown
+  const abcBreakdown = useMemo(() => {
+    const abcMap = new Map<string, number>();
+    filteredArticles.forEach((a) => {
+      const abc = a.abc_group || 'N/A';
+      abcMap.set(abc, (abcMap.get(abc) || 0) + a.total_revenue);
+    });
+    
+    return Array.from(abcMap.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => {
+        const order = ['A', 'B', 'C'];
+        return order.indexOf(a.name) - order.indexOf(b.name);
+      });
+  }, [filteredArticles]);
+
+  const toggleFilter = (
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    current: string[],
+    value: string
+  ) => {
+    if (current.includes(value)) {
+      setter(current.filter((v) => v !== value));
+    } else {
+      setter([...current, value]);
+    }
+  };
+
+  const clearFilters = () => {
+    setSelectedCategories([]);
+    setSelectedAbcGroups([]);
+    setSelectedXyzGroups([]);
+  };
+
+  const hasFilters = selectedCategories.length > 0 || selectedAbcGroups.length > 0 || selectedXyzGroups.length > 0;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const formatValue = (value: number) => {
+    if (dataType === 'revenue') {
+      return value >= 1000000
+        ? `${(value / 1000000).toFixed(1)}M`
+        : value >= 1000
+        ? `${(value / 1000).toFixed(0)}K`
+        : value.toFixed(0);
+    }
+    return value.toLocaleString('ru-RU');
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Filters */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Фильтры</CardTitle>
+            {hasFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                Сбросить
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* ABC filter */}
+            <div>
+              <Label className="text-sm font-medium mb-2 block">ABC группы</Label>
+              <div className="flex flex-wrap gap-2">
+                {filterOptions.abcGroups.map((group) => (
+                  <Badge
+                    key={group}
+                    variant={selectedAbcGroups.includes(group) ? 'default' : 'outline'}
+                    className="cursor-pointer"
+                    onClick={() => toggleFilter(setSelectedAbcGroups, selectedAbcGroups, group)}
+                  >
+                    {group}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+
+            {/* XYZ filter */}
+            <div>
+              <Label className="text-sm font-medium mb-2 block">XYZ группы</Label>
+              <div className="flex flex-wrap gap-2">
+                {filterOptions.xyzGroups.map((group) => (
+                  <Badge
+                    key={group}
+                    variant={selectedXyzGroups.includes(group) ? 'default' : 'outline'}
+                    className="cursor-pointer"
+                    onClick={() => toggleFilter(setSelectedXyzGroups, selectedXyzGroups, group)}
+                  >
+                    {group}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+
+            {/* Categories filter */}
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Категории</Label>
+              <ScrollArea className="h-[80px]">
+                <div className="flex flex-wrap gap-2">
+                  {filterOptions.categories.map((cat) => (
+                    <Badge
+                      key={cat}
+                      variant={selectedCategories.includes(cat) ? 'default' : 'outline'}
+                      className="cursor-pointer text-xs"
+                      onClick={() => toggleFilter(setSelectedCategories, selectedCategories, cat)}
+                    >
+                      {cat}
+                    </Badge>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          </div>
+
+          {/* Chart settings */}
+          <div className="flex flex-wrap gap-4 pt-2 border-t">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Тип графика:</Label>
+              <Select value={chartType} onValueChange={(v) => setChartType(v as any)}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="area">Область</SelectItem>
+                  <SelectItem value="line">Линия</SelectItem>
+                  <SelectItem value="bar">Столбцы</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Показатель:</Label>
+              <Select value={dataType} onValueChange={(v) => setDataType(v as any)}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="revenue">Выручка</SelectItem>
+                  <SelectItem value="quantity">Количество</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Топ артикулов:</Label>
+              <Select value={String(topN)} onValueChange={(v) => setTopN(Number(v))}>
+                <SelectTrigger className="w-[80px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">5</SelectItem>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Charts */}
+      <Tabs defaultValue="dynamics" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="dynamics" className="gap-2">
+            <TrendingUp className="h-4 w-4" />
+            Динамика
+          </TabsTrigger>
+          <TabsTrigger value="comparison" className="gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Сравнение
+          </TabsTrigger>
+          <TabsTrigger value="structure" className="gap-2">
+            <PieChartIcon className="h-4 w-4" />
+            Структура
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Dynamics */}
+        <TabsContent value="dynamics">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">
+                Динамика {dataType === 'revenue' ? 'выручки' : 'продаж'} по периодам
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[400px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  {chartType === 'area' ? (
+                    <AreaChart data={filteredPeriodData}>
+                      <defs>
+                        <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="period" className="text-xs" />
+                      <YAxis tickFormatter={formatValue} className="text-xs" />
+                      <Tooltip
+                        formatter={(value: number) => [
+                          dataType === 'revenue'
+                            ? `${value.toLocaleString('ru-RU')} ₽`
+                            : `${value.toLocaleString('ru-RU')} шт`,
+                          dataType === 'revenue' ? 'Выручка' : 'Количество',
+                        ]}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey={dataType}
+                        stroke="hsl(var(--primary))"
+                        fill="url(#colorValue)"
+                        strokeWidth={2}
+                      />
+                    </AreaChart>
+                  ) : chartType === 'line' ? (
+                    <LineChart data={filteredPeriodData}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="period" className="text-xs" />
+                      <YAxis tickFormatter={formatValue} className="text-xs" />
+                      <Tooltip
+                        formatter={(value: number) => [
+                          dataType === 'revenue'
+                            ? `${value.toLocaleString('ru-RU')} ₽`
+                            : `${value.toLocaleString('ru-RU')} шт`,
+                          dataType === 'revenue' ? 'Выручка' : 'Количество',
+                        ]}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey={dataType}
+                        stroke="hsl(var(--primary))"
+                        strokeWidth={2}
+                        dot={{ fill: 'hsl(var(--primary))' }}
+                      />
+                    </LineChart>
+                  ) : (
+                    <BarChart data={filteredPeriodData}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="period" className="text-xs" />
+                      <YAxis tickFormatter={formatValue} className="text-xs" />
+                      <Tooltip
+                        formatter={(value: number) => [
+                          dataType === 'revenue'
+                            ? `${value.toLocaleString('ru-RU')} ₽`
+                            : `${value.toLocaleString('ru-RU')} шт`,
+                          dataType === 'revenue' ? 'Выручка' : 'Количество',
+                        ]}
+                      />
+                      <Bar dataKey={dataType} fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  )}
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Comparison */}
+        <TabsContent value="comparison">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">
+                Топ-{topN} артикулов по периодам
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[400px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={topArticlesData.data}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="period" className="text-xs" />
+                    <YAxis tickFormatter={formatValue} className="text-xs" />
+                    <Tooltip
+                      formatter={(value: number, name: string) => [
+                        dataType === 'revenue'
+                          ? `${value.toLocaleString('ru-RU')} ₽`
+                          : `${value.toLocaleString('ru-RU')} шт`,
+                        name,
+                      ]}
+                    />
+                    <Legend />
+                    {topArticlesData.articles.map((art, idx) => (
+                      <Line
+                        key={art.article}
+                        type="monotone"
+                        dataKey={art.article}
+                        stroke={COLORS[idx % COLORS.length]}
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Structure */}
+        <TabsContent value="structure">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* By Category */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Выручка по категориям</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={categoryBreakdown}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        label={({ name, percent }) =>
+                          `${name.slice(0, 10)}${name.length > 10 ? '…' : ''} ${(percent * 100).toFixed(0)}%`
+                        }
+                        labelLine={false}
+                      >
+                        {categoryBreakdown.map((_, idx) => (
+                          <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: number) => [`${value.toLocaleString('ru-RU')} ₽`, 'Выручка']}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* By ABC */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Выручка по ABC-группам</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={abcBreakdown}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      >
+                        {abcBreakdown.map((entry, idx) => (
+                          <Cell
+                            key={idx}
+                            fill={
+                              entry.name === 'A'
+                                ? 'hsl(var(--success))'
+                                : entry.name === 'B'
+                                ? 'hsl(var(--warning))'
+                                : 'hsl(var(--destructive))'
+                            }
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: number) => [`${value.toLocaleString('ru-RU')} ₽`, 'Выручка']}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      {/* Summary stats */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+            <div className="p-3 bg-muted rounded-lg">
+              <p className="text-2xl font-bold">{filteredArticles.length.toLocaleString('ru-RU')}</p>
+              <p className="text-xs text-muted-foreground">Артикулов</p>
+            </div>
+            <div className="p-3 bg-muted rounded-lg">
+              <p className="text-2xl font-bold">{filteredPeriodData.length}</p>
+              <p className="text-xs text-muted-foreground">Периодов</p>
+            </div>
+            <div className="p-3 bg-muted rounded-lg">
+              <p className="text-2xl font-bold">
+                {(filteredPeriodData.reduce((s, p) => s + p.revenue, 0) / 1000000).toFixed(1)}M
+              </p>
+              <p className="text-xs text-muted-foreground">Общая выручка</p>
+            </div>
+            <div className="p-3 bg-muted rounded-lg">
+              <p className="text-2xl font-bold">
+                {filteredPeriodData.reduce((s, p) => s + p.quantity, 0).toLocaleString('ru-RU')}
+              </p>
+              <p className="text-xs text-muted-foreground">Всего продаж</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
