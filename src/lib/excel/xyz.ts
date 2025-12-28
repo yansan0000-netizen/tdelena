@@ -5,6 +5,13 @@
 
 import { RowData } from './types';
 import { parseMonthYear } from './utils';
+import { 
+  getABCXYZRecommendation as getRecommendationBase,
+  getRecommendationText,
+  getRecommendationPriority,
+  getRecommendationAction,
+  ArticleData,
+} from '../recommendations';
 
 export interface XYZResult {
   article: string;
@@ -143,22 +150,39 @@ export function calculateXYZByArticles(
 }
 
 /**
- * Get XYZ recommendation based on ABC and XYZ classification
+ * Get XYZ recommendation based on ABC and XYZ classification (legacy)
  */
 export function getABCXYZRecommendation(abc: string, xyz: string): string {
-  const key = `${abc}${xyz}`;
-  
-  const recommendations: Record<string, string> = {
-    'AX': 'Высокий приоритет, стабильный спрос - поддерживать наличие',
-    'AY': 'Высокий приоритет, средняя вариация - контролировать запас',
-    'AZ': 'Высокий приоритет, нестабильный спрос - под заказ',
-    'BX': 'Средний приоритет, стабильный спрос - умеренный запас',
-    'BY': 'Средний приоритет, средняя вариация - гибкое планирование',
-    'BZ': 'Средний приоритет, нестабильный спрос - минимальный запас',
-    'CX': 'Низкий приоритет, стабильный спрос - редкие закупки',
-    'CY': 'Низкий приоритет, средняя вариация - по необходимости',
-    'CZ': 'Низкий приоритет, нестабильный спрос - рассмотреть вывод',
+  return getRecommendationBase(abc, xyz);
+}
+
+/**
+ * Get enhanced recommendation with specific numbers
+ */
+export function getEnhancedRecommendation(data: {
+  abc: string;
+  xyz: string;
+  daysUntilStockout: number;
+  currentStock: number;
+  avgMonthlyQty: number;
+  plan1m: number;
+  cv: number;
+  revenueShare?: number;
+}): { priority: string; action: string; text: string } {
+  const articleData: ArticleData = {
+    abc: data.abc,
+    xyz: data.xyz,
+    daysUntilStockout: data.daysUntilStockout,
+    currentStock: data.currentStock,
+    avgMonthlyQty: data.avgMonthlyQty,
+    plan1m: data.plan1m,
+    cv: data.cv,
+    revenueShare: data.revenueShare || 0,
   };
 
-  return recommendations[key] || 'Требуется анализ';
+  return {
+    priority: getRecommendationPriority(articleData),
+    action: getRecommendationAction(articleData),
+    text: getRecommendationText(articleData),
+  };
 }
