@@ -145,6 +145,20 @@ export function CostForm({ formData, onChange, isNew }: CostFormProps) {
     // Acceptance
     const acceptanceTotal = acceptanceFee * unitsShipped;
     
+    // Calculate unit cost for investment
+    const fabricCostTotal = formData.fabric_cost_total || 0;
+    const sewingCost = formData.sewing_cost || 0;
+    const cuttingCost = formData.cutting_cost || 0;
+    const accessoriesCost = formData.accessories_cost || 0;
+    const printEmbroideryCost = formData.print_embroidery_cost || 0;
+    const adminOverheadPct = formData.admin_overhead_pct || 0;
+    
+    const baseCost = fabricCostTotal + sewingCost + cuttingCost + accessoriesCost + printEmbroideryCost;
+    const unitCostReal = baseCost * (1 + adminOverheadPct / 100);
+    
+    // Investment = units_shipped * unit cost
+    const investmentTotal = unitsShipped * unitCostReal;
+    
     return {
       priceWithSpp: Math.round(priceWithSpp * 100) / 100,
       unitsShipped,
@@ -152,6 +166,8 @@ export function CostForm({ formData, onChange, isNew }: CostFormProps) {
       deliveryCostTotal: Math.round(deliveryCostTotal * 100) / 100,
       deliveryPerUnit: Math.round(deliveryPerUnit * 100) / 100,
       acceptanceTotal: Math.round(acceptanceTotal * 100) / 100,
+      investmentTotal: Math.round(investmentTotal * 100) / 100,
+      unitCostReal: Math.round(unitCostReal * 100) / 100,
     };
   }, [formData]);
 
@@ -422,7 +438,7 @@ export function CostForm({ formData, onChange, isNew }: CostFormProps) {
                     
                     {/* Calculated values */}
                     {wbCalculations && formData.planned_sales_month_qty && formData.planned_sales_month_qty > 0 && (
-                      <div className="grid grid-cols-3 gap-4 p-3 bg-muted/50 rounded-lg">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-3 bg-muted/50 rounded-lg">
                         <div>
                           <p className="text-xs text-muted-foreground">Отгрузка</p>
                           <p className="font-medium">{wbCalculations.unitsShipped} шт</p>
@@ -434,6 +450,10 @@ export function CostForm({ formData, onChange, isNew }: CostFormProps) {
                         <div>
                           <p className="text-xs text-muted-foreground">Доставка/выкуп</p>
                           <p className="font-medium">{wbCalculations.deliveryPerUnit} ₽</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Инвестиции</p>
+                          <p className="font-medium text-primary">{wbCalculations.investmentTotal.toLocaleString('ru-RU')} ₽</p>
                         </div>
                       </div>
                     )}
