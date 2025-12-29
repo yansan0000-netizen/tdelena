@@ -453,9 +453,11 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
       const month = parseInt(p.period.split('-')[1]);
       const baseTrend = trendValues[idx];
       const seasonalCoef = getSeasonalCoef(month);
+      const actualValue = dataType === 'revenue' ? p.revenue : p.quantity;
       return {
         period: p.period,
-        actual: dataType === 'revenue' ? p.revenue : p.quantity,
+        actual: actualValue,
+        forecast: null as number | null,
         trend: Math.max(0, baseTrend),
         trendSeasonal: Math.max(0, baseTrend * seasonalCoef),
         seasonalCoef,
@@ -464,19 +466,42 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
     });
 
     // Build forecast values with seasonal adjustment
+    // Include last actual point to connect the lines
+    const lastActual = filteredPeriodData[n - 1];
+    const lastActualValue = dataType === 'revenue' ? lastActual.revenue : lastActual.quantity;
+    const lastActualMonth = parseInt(lastActual.period.split('-')[1]);
+    
     const forecastValues = forecastPeriodsList.map((period, idx) => {
       const month = parseInt(period.split('-')[1]);
       const baseTrend = forecastBaseValues[idx];
       const seasonalCoef = getSeasonalCoef(month);
+      const forecastValue = useSeasonalAdjustment && seasonalCoefficients 
+        ? Math.max(0, baseTrend * seasonalCoef)
+        : Math.max(0, baseTrend);
       return {
         period,
         actual: null as number | null,
+        forecast: forecastValue,
         trend: Math.max(0, baseTrend),
         trendSeasonal: Math.max(0, baseTrend * seasonalCoef),
         seasonalCoef,
         isForecast: true,
       };
     });
+
+    // Add bridge point - last actual period with forecast value to connect lines
+    const bridgePoint = {
+      period: lastActual.period,
+      actual: lastActualValue,
+      forecast: lastActualValue, // Start forecast from last actual
+      trend: trendValues[n - 1],
+      trendSeasonal: trendValues[n - 1] * getSeasonalCoef(lastActualMonth),
+      seasonalCoef: getSeasonalCoef(lastActualMonth),
+      isForecast: false,
+    };
+
+    // Replace last trendLine item with bridge point
+    const combinedData = [...trendLine.slice(0, -1), bridgePoint, ...forecastValues];
 
     // Calculate growth metrics
     const firstValue = values[0];
@@ -507,7 +532,7 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
     }
 
     return {
-      combined: [...trendLine, ...forecastValues],
+      combined: combinedData,
       slope,
       intercept,
       rSquared,
@@ -1164,8 +1189,8 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
                             <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                           </linearGradient>
                           <linearGradient id="colorForecast" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0} />
+                            <stop offset="5%" stopColor="hsl(var(--success))" stopOpacity={0.4} />
+                            <stop offset="95%" stopColor="hsl(var(--success))" stopOpacity={0.1} />
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -1194,7 +1219,7 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
                               ? `${value.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ₽`
                               : `${value.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} шт`;
                             const label = name === 'actual' ? 'Факт' : 
-                                          name === 'trendSeasonal' ? 'С сезонностью' : forecastData.methodName;
+                                          name === 'forecast' ? 'Прогноз' : name;
                             return [formatted, label];
                           }}
                           labelFormatter={(label) => {
@@ -1203,69 +1228,50 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
                             const seasonalInfo = dataPoint && useSeasonalAdjustment && forecastData.hasSeasonalData
                               ? ` (сезон. коэф: ${dataPoint.seasonalCoef.toFixed(2)})`
                               : '';
-                            return `${label}${isForecast ? ' (прогноз)' : ''}${seasonalInfo}`;
+                            return `${label}${isForecast ? ' — ПРОГНОЗ' : ''}${seasonalInfo}`;
                           }}
                         />
                         <Legend 
                           formatter={(value) => {
                             if (value === 'actual') return 'Факт';
-                            if (value === 'trendSeasonal') return 'Прогноз (сезонный)';
-                            return forecastData.methodName;
+                            if (value === 'forecast') return 'Прогноз';
+                            return value;
                           }}
                         />
                         <Area
                           type="monotone"
                           dataKey="actual"
+                          name="actual"
                           stroke="hsl(var(--primary))"
                           fill="url(#colorActual)"
                           strokeWidth={2}
                           dot={{ fill: 'hsl(var(--primary))', r: 3 }}
                           connectNulls={false}
                         />
-                        {useSeasonalAdjustment && forecastData.hasSeasonalData ? (
-                          <>
-                            <Line
-                              type="monotone"
-                              dataKey="trendSeasonal"
-                              name="trendSeasonal"
-                              stroke="hsl(var(--chart-2))"
-                              strokeWidth={2}
-                              dot={(props) => {
-                                const { cx, cy, payload } = props;
-                                if (!payload?.isForecast) return <circle cx={cx} cy={cy} r={0} />;
-                                return <circle cx={cx} cy={cy} r={5} fill="hsl(var(--chart-2))" stroke="white" strokeWidth={2} />;
-                              }}
-                              activeDot={{ r: 6, fill: 'hsl(var(--chart-2))' }}
-                              connectNulls={true}
-                            />
-                            <Line
-                              type="monotone"
-                              dataKey="trend"
-                              name="trend"
-                              stroke="hsl(var(--muted-foreground))"
-                              strokeWidth={1}
-                              strokeDasharray="5 5"
-                              dot={false}
-                              legendType="none"
-                            />
-                          </>
-                        ) : (
-                          <Line
-                            type="monotone"
-                            dataKey="trend"
-                            name="trend"
-                            stroke="hsl(var(--chart-2))"
-                            strokeWidth={2}
-                            strokeDasharray="5 5"
-                            dot={(props) => {
-                              const { cx, cy, payload } = props;
-                              if (!payload?.isForecast) return <circle cx={cx} cy={cy} r={0} />;
-                              return <circle cx={cx} cy={cy} r={4} fill="hsl(var(--chart-2))" />;
-                            }}
-                            activeDot={{ r: 6, fill: 'hsl(var(--chart-2))' }}
-                            connectNulls={true}
-                          />
-                        )}
+                        <Area
+                          type="monotone"
+                          dataKey="forecast"
+                          name="forecast"
+                          stroke="hsl(var(--success))"
+                          fill="url(#colorForecast)"
+                          strokeWidth={3}
+                          strokeDasharray="5 5"
+                          dot={(props) => {
+                            const { cx, cy, payload } = props;
+                            if (!payload?.isForecast) return <circle cx={cx} cy={cy} r={0} />;
+                            return (
+                              <circle 
+                                cx={cx} 
+                                cy={cy} 
+                                r={6} 
+                                fill="hsl(var(--success))" 
+                                stroke="white" 
+                                strokeWidth={2} 
+                              />
+                            );
+                          }}
+                          connectNulls={true}
+                        />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
