@@ -1440,13 +1440,13 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
               <p className="text-2xl font-bold">
                 {(filteredPeriodData.reduce((s, p) => s + p.revenue, 0) / 1000000).toFixed(1)}M
               </p>
-              <p className="text-xs text-muted-foreground">Общая выручка</p>
+              <p className="text-xs text-muted-foreground">Общая выручка, ₽</p>
             </div>
             <div className="p-3 bg-muted rounded-lg">
               <p className="text-2xl font-bold">
                 {filteredPeriodData.reduce((s, p) => s + p.quantity, 0).toLocaleString('ru-RU')}
               </p>
-              <p className="text-xs text-muted-foreground">Всего продаж</p>
+              <p className="text-xs text-muted-foreground">Всего продаж, шт</p>
             </div>
           </div>
         </CardContent>

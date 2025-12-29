@@ -46,19 +46,30 @@ export function useDataQuality(runId: string | undefined) {
       
       const uniqueArticles = new Set(articlesData?.map(r => r.article) || []).size;
 
-      // Get unique periods count from raw data
+      // Get unique periods count from raw data (excluding 1970-01)
       const { data: periodsData } = await supabase
         .from('sales_data_raw')
         .select('period')
-        .eq('run_id', runId);
+        .eq('run_id', runId)
+        .neq('period', '1970-01');
       
       const uniquePeriods = new Set(periodsData?.map(r => r.period) || []).size;
+
+      // Get unique article+size combinations from analytics
+      const { data: articleSizeData } = await supabase
+        .from('sales_analytics')
+        .select('article, size')
+        .eq('run_id', runId);
+      
+      const uniqueArticleSizes = new Set(
+        articleSizeData?.map(r => `${r.article}|${r.size || ''}`) || []
+      ).size;
 
       setStats({
         rawRows: rawCount || 0,
         analyticsRows: analyticsCount || 0,
         uniqueArticles,
-        uniqueArticleSizes: analyticsCount || 0, // Each analytics row is unique article+size
+        uniqueArticleSizes,
         periodsCount: uniquePeriods,
         loading: false,
       });

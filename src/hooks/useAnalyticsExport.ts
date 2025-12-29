@@ -170,11 +170,11 @@ export function useAnalyticsExport(runId: string | undefined) {
       if (row.article) articles.add(row.article);
     });
 
-    // Get periods from period sales data
+    // Get periods from period sales data (excluding 1970-01)
     const periods = new Set<string>();
     if (periodSalesData) {
       periodSalesData.forEach((row) => {
-        if (row.period) periods.add(row.period);
+        if (row.period && row.period !== '1970-01') periods.add(row.period);
       });
     }
 
