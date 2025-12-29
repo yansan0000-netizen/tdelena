@@ -1227,35 +1227,43 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
                             <Line
                               type="monotone"
                               dataKey="trendSeasonal"
+                              name="trendSeasonal"
                               stroke="hsl(var(--chart-2))"
                               strokeWidth={2}
                               dot={(props) => {
                                 const { cx, cy, payload } = props;
-                                if (!payload.isForecast) return <circle cx={cx} cy={cy} r={0} />;
+                                if (!payload?.isForecast) return <circle cx={cx} cy={cy} r={0} />;
                                 return <circle cx={cx} cy={cy} r={5} fill="hsl(var(--chart-2))" stroke="white" strokeWidth={2} />;
                               }}
+                              activeDot={{ r: 6, fill: 'hsl(var(--chart-2))' }}
+                              connectNulls={true}
                             />
                             <Line
                               type="monotone"
                               dataKey="trend"
+                              name="trend"
                               stroke="hsl(var(--muted-foreground))"
                               strokeWidth={1}
                               strokeDasharray="5 5"
                               dot={false}
+                              legendType="none"
                             />
                           </>
                         ) : (
                           <Line
                             type="monotone"
                             dataKey="trend"
+                            name="trend"
                             stroke="hsl(var(--chart-2))"
                             strokeWidth={2}
                             strokeDasharray="5 5"
                             dot={(props) => {
                               const { cx, cy, payload } = props;
-                              if (!payload.isForecast) return <circle cx={cx} cy={cy} r={0} />;
+                              if (!payload?.isForecast) return <circle cx={cx} cy={cy} r={0} />;
                               return <circle cx={cx} cy={cy} r={4} fill="hsl(var(--chart-2))" />;
                             }}
+                            activeDot={{ r: 6, fill: 'hsl(var(--chart-2))' }}
+                            connectNulls={true}
                           />
                         )}
                       </AreaChart>
