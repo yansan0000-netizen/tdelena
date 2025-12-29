@@ -380,7 +380,7 @@ export default function RunDetails() {
                   </div>
                   <div className="text-center p-3 bg-muted rounded-lg">
                     <Package className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
-                    <p className="text-2xl font-bold">{qualityStats.analyticsRows.toLocaleString('ru-RU')}</p>
+                    <p className="text-2xl font-bold">{qualityStats.uniqueArticleSizes.toLocaleString('ru-RU')}</p>
                     <div className="flex items-center justify-center gap-1">
                       <p className="text-xs text-muted-foreground">Артикул+размер</p>
                       <TooltipProvider>
@@ -389,8 +389,11 @@ export default function RunDetails() {
                             <Info className="h-3 w-3 text-muted-foreground cursor-help" />
                           </TooltipTrigger>
                           <TooltipContent className="max-w-xs">
-                            <p>Количество уникальных комбинаций артикул+размер в итоговой аналитике.</p>
+                            <p>Количество уникальных комбинаций артикул×размер (без учёта периода) в сырых данных.</p>
                           </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                         </Tooltip>
                       </TooltipProvider>
                     </div>

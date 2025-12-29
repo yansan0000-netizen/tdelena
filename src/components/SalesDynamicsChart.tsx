@@ -304,16 +304,20 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
   }, [filteredPeriodData, compareMode, dataType]);
 
   // Calculate seasonal coefficients based on historical data
+  // Use the maximum available history up to 24 months (if we have 24+ months, recompute on the latest 24)
   const seasonalCoefficients = useMemo(() => {
     if (filteredPeriodData.length < 12) return null;
 
-    const values = filteredPeriodData.map((p) => (dataType === 'revenue' ? p.revenue : p.quantity));
+    const windowSize = Math.min(filteredPeriodData.length, 24);
+    const windowData = filteredPeriodData.slice(-windowSize);
+
+    const values = windowData.map((p) => (dataType === 'revenue' ? p.revenue : p.quantity));
     const avgValue = values.reduce((a, b) => a + b, 0) / values.length;
     if (avgValue === 0) return null;
 
     // Group values by month
     const monthlyValues = new Map<number, number[]>();
-    filteredPeriodData.forEach((p) => {
+    windowData.forEach((p) => {
       const month = parseInt(p.period.split('-')[1]);
       const value = dataType === 'revenue' ? p.revenue : p.quantity;
       if (!monthlyValues.has(month)) {

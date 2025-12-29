@@ -26,45 +26,52 @@ export function useDataQuality(runId: string | undefined) {
     setStats(prev => ({ ...prev, loading: true }));
 
     try {
-      // Get raw rows count
+      // Get raw rows count (excluding 1970-01)
       const { count: rawCount } = await supabase
         .from('sales_data_raw')
         .select('*', { count: 'exact', head: true })
-        .eq('run_id', runId);
+        .eq('run_id', runId)
+        .neq('period', '1970-01');
 
-      // Get analytics rows count  
+      // Get analytics rows count
       const { count: analyticsCount } = await supabase
         .from('sales_analytics')
         .select('*', { count: 'exact', head: true })
         .eq('run_id', runId);
 
-      // Get unique articles count (without size)
-      const { data: articlesData } = await supabase
-        .from('sales_analytics')
-        .select('article')
-        .eq('run_id', runId);
-      
-      // Count unique articles only (ignoring size)
-      const uniqueArticles = new Set(articlesData?.map(r => r.article) || []).size;
+      // Compute DISTINCT counts from raw data with pagination (avoids 1000-row limit)
+      const PAGE_SIZE = 5000;
+      let from = 0;
 
-      // Get unique periods count from raw data (excluding 1970-01)
-      const { data: periodsData } = await supabase
-        .from('sales_data_raw')
-        .select('period')
-        .eq('run_id', runId)
-        .neq('period', '1970-01');
-      
-      const uniquePeriods = new Set(periodsData?.map(r => r.period) || []).size;
+      const uniqueArticlesSet = new Set<string>();
+      const uniqueArticleSizesSet = new Set<string>();
+      const uniquePeriodsSet = new Set<string>();
 
-      // Get unique article+size combinations from analytics
-      const { data: articleSizeData } = await supabase
-        .from('sales_analytics')
-        .select('article, size')
-        .eq('run_id', runId);
-      
-      const uniqueArticleSizes = new Set(
-        articleSizeData?.map(r => `${r.article}|${r.size || ''}`) || []
-      ).size;
+      while (true) {
+        const { data, error } = await supabase
+          .from('sales_data_raw')
+          .select('article, size, period')
+          .eq('run_id', runId)
+          .neq('period', '1970-01')
+          .order('period', { ascending: true })
+          .range(from, from + PAGE_SIZE - 1);
+
+        if (error) throw error;
+
+        const rows = data ?? [];
+        rows.forEach((r) => {
+          uniqueArticlesSet.add(r.article);
+          uniqueArticleSizesSet.add(`${r.article}|${r.size || ''}`);
+          uniquePeriodsSet.add(r.period);
+        });
+
+        if (rows.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+      }
+
+      const uniqueArticles = uniqueArticlesSet.size;
+      const uniqueArticleSizes = uniqueArticleSizesSet.size;
+      const uniquePeriods = uniquePeriodsSet.size;
 
       setStats({
         rawRows: rawCount || 0,
