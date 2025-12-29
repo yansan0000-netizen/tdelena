@@ -394,9 +394,6 @@ export default function RunDetails() {
                         </Tooltip>
                       </TooltipProvider>
                     </div>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
                   </div>
                   <div className="text-center p-3 bg-primary/10 border border-primary/20 rounded-lg">
                     <CheckCircle className="h-5 w-5 mx-auto mb-1 text-primary" />
