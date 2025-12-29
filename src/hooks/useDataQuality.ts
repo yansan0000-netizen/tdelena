@@ -38,12 +38,13 @@ export function useDataQuality(runId: string | undefined) {
         .select('*', { count: 'exact', head: true })
         .eq('run_id', runId);
 
-      // Get unique articles count
+      // Get unique articles count (without size)
       const { data: articlesData } = await supabase
         .from('sales_analytics')
         .select('article')
         .eq('run_id', runId);
       
+      // Count unique articles only (ignoring size)
       const uniqueArticles = new Set(articlesData?.map(r => r.article) || []).size;
 
       // Get unique periods count from raw data (excluding 1970-01)

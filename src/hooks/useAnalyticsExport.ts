@@ -153,6 +153,7 @@ export function useAnalyticsExport(runId: string | undefined) {
         xyzGroups: [],
         productGroups: [],
         articles: [],
+        sizes: [],
       };
     }
 
@@ -161,6 +162,7 @@ export function useAnalyticsExport(runId: string | undefined) {
     const xyzGroups = new Set<string>();
     const productGroups = new Set<string>();
     const articles = new Set<string>();
+    const sizes = new Set<string>();
 
     analyticsData.forEach((row) => {
       if (row.category) categories.add(row.category);
@@ -168,6 +170,7 @@ export function useAnalyticsExport(runId: string | undefined) {
       if (row.xyz_group) xyzGroups.add(row.xyz_group);
       if (row.product_group) productGroups.add(row.product_group);
       if (row.article) articles.add(row.article);
+      if (row.size) sizes.add(row.size);
     });
 
     // Get periods from period sales data (excluding 1970-01)
@@ -185,6 +188,7 @@ export function useAnalyticsExport(runId: string | undefined) {
       xyzGroups: Array.from(xyzGroups).sort(),
       productGroups: Array.from(productGroups).sort(),
       articles: Array.from(articles).sort(),
+      sizes: Array.from(sizes).sort(),
     };
   }, [analyticsData, periodSalesData]);
 
@@ -226,6 +230,13 @@ export function useAnalyticsExport(runId: string | undefined) {
       if (filters.articles.length > 0) {
         filteredAnalytics = filteredAnalytics.filter((row) =>
           filters.articles.includes(row.article)
+        );
+      }
+
+      // Filter by sizes
+      if (filters.sizes.length > 0) {
+        filteredAnalytics = filteredAnalytics.filter((row) =>
+          filters.sizes.includes(row.size || '')
         );
       }
 

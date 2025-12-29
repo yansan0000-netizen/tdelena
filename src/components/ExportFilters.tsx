@@ -28,6 +28,7 @@ export interface ExportFilters {
   xyzGroups: string[];
   productGroups: string[];
   articles: string[];
+  sizes: string[];
   minRevenue: number | null;
   maxRevenue: number | null;
   hasStock: boolean | null;
@@ -40,6 +41,7 @@ export interface FilterOptions {
   xyzGroups: string[];
   productGroups: string[];
   articles: string[];
+  sizes: string[];
 }
 
 interface ExportFiltersProps {
@@ -59,6 +61,7 @@ const defaultFilters: ExportFilters = {
   xyzGroups: [],
   productGroups: [],
   articles: [],
+  sizes: [],
   minRevenue: null,
   maxRevenue: null,
   hasStock: null,
@@ -82,6 +85,7 @@ export function ExportFiltersPanel({
     filters.xyzGroups.length > 0 ||
     filters.productGroups.length > 0 ||
     filters.articles.length > 0 ||
+    filters.sizes.length > 0 ||
     filters.minRevenue !== null ||
     filters.maxRevenue !== null ||
     filters.hasStock !== null;
@@ -91,7 +95,7 @@ export function ExportFiltersPanel({
   };
 
   const toggleArrayFilter = (
-    key: keyof Pick<ExportFilters, 'periods' | 'categories' | 'abcGroups' | 'xyzGroups' | 'productGroups' | 'articles'>,
+    key: keyof Pick<ExportFilters, 'periods' | 'categories' | 'abcGroups' | 'xyzGroups' | 'productGroups' | 'articles' | 'sizes'>,
     value: string
   ) => {
     const current = filters[key];
@@ -330,6 +334,28 @@ export function ExportFiltersPanel({
                   ))}
                 </div>
               )}
+            </div>
+          </FilterSection>
+        )}
+
+        {/* Sizes filter */}
+        {options.sizes.length > 0 && (
+          <FilterSection
+            title="Размеры"
+            count={filters.sizes.length}
+            total={options.sizes.length}
+          >
+            <div className="flex flex-wrap gap-2">
+              {options.sizes.map((size) => (
+                <Badge
+                  key={size}
+                  variant={filters.sizes.includes(size) ? 'default' : 'outline'}
+                  className="cursor-pointer"
+                  onClick={() => toggleArrayFilter('sizes', size)}
+                >
+                  {size || '(без размера)'}
+                </Badge>
+              ))}
             </div>
           </FilterSection>
         )}
