@@ -1,25 +1,6 @@
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 
-// Simple transliteration for PDF (jspdf doesn't support Cyrillic out of the box)
-const transliterate = (text: string): string => {
-  const map: Record<string, string> = {
-    'А': 'A', 'Б': 'B', 'В': 'V', 'Г': 'G', 'Д': 'D', 'Е': 'E', 'Ё': 'E',
-    'Ж': 'Zh', 'З': 'Z', 'И': 'I', 'Й': 'Y', 'К': 'K', 'Л': 'L', 'М': 'M',
-    'Н': 'N', 'О': 'O', 'П': 'P', 'Р': 'R', 'С': 'S', 'Т': 'T', 'У': 'U',
-    'Ф': 'F', 'Х': 'H', 'Ц': 'Ts', 'Ч': 'Ch', 'Ш': 'Sh', 'Щ': 'Sch',
-    'Ъ': '', 'Ы': 'Y', 'Ь': '', 'Э': 'E', 'Ю': 'Yu', 'Я': 'Ya',
-    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
-    'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
-    'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
-    'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch',
-    'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
-    '—': '-', '«': '"', '»': '"', '≤': '<=', '≥': '>='
-  };
-  
-  return text.split('').map(char => map[char] !== undefined ? map[char] : char).join('');
-};
-
 interface DocSection {
   title: string;
   content: string[];
@@ -27,194 +8,194 @@ interface DocSection {
 
 const documentationContent: DocSection[] = [
   {
-    title: "1. OVERVIEW - What the system does",
+    title: "1. OBZOR - Chto delaet sistema",
     content: [
-      "The system analyzes 1C sales exports over several months and generates:",
-      "- ABC Analysis: Product classification by revenue contribution (A=80%, B=15%, C=5%)",
-      "- XYZ Analysis: Classification by demand stability with configurable thresholds",
-      "- Production Plan: Calculation for 1, 3, and 6 months considering global trend",
-      "- Recommendations: Automatic inventory management recommendations",
-      "- Unit Economics: Cost, margin, profit, and WB scenario calculations",
-      "- Change History: Tracking all product card changes",
-      "- Forecasting: Linear regression, exponential smoothing, moving average with seasonal adjustment"
+      "Sistema analiziruet eksport prodazh iz 1S za neskolko mesyatsev i generiruet:",
+      "- ABC Analiz: Klassifikatsiya tovarov po vkladu v vyruchku (A=80%, B=15%, C=5%)",
+      "- XYZ Analiz: Klassifikatsiya po stabilnosti sprosa s nastraivaemymi porogami",
+      "- Plan proizvodstva: Raschet na 1, 3 i 6 mesyatsev s uchetom globalnogo trenda",
+      "- Rekomendatsii: Avtomaticheskie rekomendatsii po upravleniyu zapasami",
+      "- Yunit-ekonomika: Raschet sebestoimosti, marzhi, pribyli i stsenariev WB",
+      "- Istoriya izmeneniy: Otslezhivanie vsekh izmeneniy v kartochkakh tovarov",
+      "- Prognozirovanie: Lineynaya regressiya, eksponentsialnoe sglazhivanie, skolzyashchaya srednyaya"
     ]
   },
   {
-    title: "2. HOW TO USE",
+    title: "2. KAK POLZOVATSYA",
     content: [
-      "Step 1: Configure parameters - currency rate, markups, XYZ thresholds, global trend",
-      "Step 2: Upload file - export report from 1C to Excel and upload to system",
-      "Step 3: Wait for processing - system automatically recognizes structure and processes data",
-      "Step 4: Fill in costs - go to 'Unit Economics' section and add data",
-      "Step 5: Download results - get ready reports with analysis and economics"
+      "Shag 1: Nastroyka parametrov - kurs valyuty, natsenki, porogi XYZ, globalnyy trend",
+      "Shag 2: Zagruzka fayla - eksportiruyte otchet iz 1S v Excel i zagruzite v sistemu",
+      "Shag 3: Ozhidanie obrabotki - sistema avtomaticheski raspoznaet strukturu i obrabatyvaet dannye",
+      "Shag 4: Zapolnenie sebestoimosti - pereydite v razdel 'Yunit-ekonomika' i dobavte dannye",
+      "Shag 5: Skachivanie rezultatov - poluchite gotovye otchety s analizom i ekonomikoy"
     ]
   },
   {
-    title: "3. FILE FORMAT FROM 1C",
+    title: "3. FORMAT FAYLA IZ 1S",
     content: [
-      "File structure requirements:",
-      "- Header with 3 rows (dates, metrics, technical fields)",
-      "- Periods in format 'December 2024' or 'DD.MM.YYYY'",
-      "- For each period 3 columns: Quantity, Amount, Stock",
-      "- Article column ('Nomenclature.Article' or similar)",
-      "- Optional: category column",
+      "Trebovaniya k strukture fayla:",
+      "- Shapka s 3 strokami (daty, metriki, tekhnicheskie polya)",
+      "- Periody v formate 'Dekabr 2024' ili 'DD.MM.GGGG'",
+      "- Dlya kazhdogo perioda 3 stolbtsa: Kolichestvo, Summa, Ostatok",
+      "- Stolbets s artikulom ('Nomenklatura.Artikul' ili podobnyy)",
+      "- Optsionalno: stolbets s kategoriyey",
       "",
-      "Note: 'Total' columns are automatically skipped. File size: up to 50 MB, 100,000+ rows."
+      "Primechanie: Stolbtsy 'Itogo' avtomaticheski propuskayutsya. Razmer fayla: do 50 MB, 100 000+ strok."
     ]
   },
   {
-    title: "4. ABC ANALYSIS",
+    title: "4. ABC ANALIZ",
     content: [
-      "Classification by revenue contribution:",
+      "Klassifikatsiya po vkladu v vyruchku:",
       "",
-      "Category A - first 80% of revenue",
-      "  Key products requiring maximum inventory attention",
+      "Kategoriya A - pervye 80% vyruchki",
+      "  Klyuchevye tovary, trebuyushchie maksimalnogo vnimaniya k zapasam",
       "",
-      "Category B - next 15% of revenue", 
-      "  Medium importance products, standard management",
+      "Kategoriya B - sleduyushchie 15% vyruchki", 
+      "  Tovary sredney vazhnosti, standartnoe upravlenie",
       "",
-      "Category C - remaining 5% of revenue",
-      "  Least significant products, optimization candidates"
+      "Kategoriya C - ostavshiesya 5% vyruchki",
+      "  Naimeneye znachimye tovary, kandidaty na optimizatsiyu"
     ]
   },
   {
-    title: "5. XYZ ANALYSIS",
+    title: "5. XYZ ANALIZ",
     content: [
-      "Classification by demand stability (coefficient of variation):",
-      "Thresholds are configurable in Settings. Default: X <= 30%, Y <= 60%.",
+      "Klassifikatsiya po stabilnosti sprosa (koeffitsient variatsii):",
+      "Porogi nastraivayutsya v Nastroykakh. Po umolchaniyu: X <= 30%, Y <= 60%.",
       "",
-      "Category X - CV <= threshold X%",
-      "  Stable demand, easily predictable",
+      "Kategoriya X - CV <= porog X%",
+      "  Stabilnyy spros, legko prognoziruetsya",
       "",
-      "Category Y - CV between X and Y thresholds",
-      "  Moderate fluctuations, safety stock required",
+      "Kategoriya Y - CV mezhdu porogami X i Y",
+      "  Umerennye kolebaniya, trebuetsya strakhovoy zapas",
       "",
-      "Category Z - CV > threshold Y%",
-      "  Unstable demand, individual analysis required"
+      "Kategoriya Z - CV > porog Y%",
+      "  Nestabilnyy spros, trebuetsya individualnyy analiz"
     ]
   },
   {
-    title: "6. ABC-XYZ RECOMMENDATION MATRIX",
+    title: "6. MATRITSA REKOMENDATSIY ABC-XYZ",
     content: [
       "       |    X           |    Y              |    Z",
       "-------|----------------|-------------------|------------------",
-      "   A   | Max control    | Regular replenish | Analyze causes",
-      "   B   | Regular orders | Safety stock      | Reduce stock",
-      "   C   | Min orders     | Reduce assortment | Discontinue"
+      "   A   | Maks kontrol   | Regulyar popolnen | Analizirovat",
+      "   B   | Regulyar zakaz | Strakhovoy zapas  | Sokratit zapas",
+      "   C   | Min zakazy     | Sokratit assort   | Prekratit"
     ]
   },
   {
-    title: "7. PRODUCTION PLAN CALCULATION",
+    title: "7. RASCHET PLANA PROIZVODSTVA",
     content: [
-      "Formulas:",
-      "- Average monthly sales = Total quantity / Number of periods",
-      "- Daily velocity = Avg monthly * Global trend / 30",
-      "- Days until stockout = Current stock / Daily velocity",
-      "- Plan 1M = max(0, Avg monthly * Trend * 1 - Stock)",
-      "- Plan 3M = max(0, Avg monthly * Trend * 3 - Stock)",
-      "- Plan 6M = max(0, Avg monthly * Trend * 6 - Stock)",
+      "Formuly:",
+      "- Srednie mesyachnye prodazhi = Obshchee kolichestvo / Chislo periodov",
+      "- Dnevnaya skorost = Sr. mesyachnye * Globalnyy trend / 30",
+      "- Dney do istoshcheniya = Tekushchiy ostatok / Dnevnaya skorost",
+      "- Plan 1M = max(0, Sr. mesyachnye * Trend * 1 - Ostatok)",
+      "- Plan 3M = max(0, Sr. mesyachnye * Trend * 3 - Ostatok)",
+      "- Plan 6M = max(0, Sr. mesyachnye * Trend * 6 - Ostatok)",
       "",
-      "Global Trend Coefficient:",
-      "- Set in Settings (default 1.0 = no change)",
-      "- > 1.0 = expect growth (e.g., 1.2 = +20%)",
-      "- < 1.0 = expect decline (e.g., 0.8 = -20%)"
+      "Koeffitsient globalnogo trenda:",
+      "- Ustanavlivaetsya v Nastroykakh (po umolchaniyu 1.0 = bez izmeneniy)",
+      "- > 1.0 = ozhidaetsya rost (napr., 1.2 = +20%)",
+      "- < 1.0 = ozhidaetsya padenie (napr., 0.8 = -20%)"
     ]
   },
   {
-    title: "8. FORECASTING METHODS",
+    title: "8. METODY PROGNOZIROVANIYA",
     content: [
-      "Linear Regression:",
-      "  Calculates trend line based on historical data",
-      "  y = a + b*x, where b = trend coefficient",
+      "Lineynaya regressiya:",
+      "  Vychislyaet liniyu trenda na osnove istoricheskikh dannykh",
+      "  y = a + b*x, gde b = koeffitsient trenda",
       "",
-      "Exponential Smoothing:",
-      "  Recent observations have more weight",
+      "Eksponentsialnoe sglazhivanie:",
+      "  Nedavnie nablyudeniya imeyut bolshiy ves",
       "  F(t+1) = alpha * Y(t) + (1-alpha) * F(t)",
       "",
-      "Moving Average:",
-      "  Average of last N periods with seasonal adjustment",
-      "  Seasonal index = Average for month / Overall average"
+      "Skolzyashchaya srednyaya:",
+      "  Sredneye za poslednie N periodov s sezonnoy korrektirovkoy",
+      "  Sezonnyy indeks = Sredneye za mesyats / Obshchee sredneye"
     ]
   },
   {
-    title: "9. UNIT ECONOMICS",
+    title: "9. YUNIT-EKONOMIKA",
     content: [
-      "Cost Structure:",
-      "- Fabric costs (up to 3 types): USD price * FX rate * kg per unit",
-      "- Production: sewing + cutting + accessories + print/embroidery",
-      "- Overhead: admin overhead % of production costs",
+      "Struktura sebestoimosti:",
+      "- Zatratyi na tkan (do 3 tipov): Tsena USD * Kurs * kg na edinitsu",
+      "- Proizvodstvo: poshiv + kroy + furnitura + pechat/vyshivka",
+      "- Nakladnye: admin nakladnye % ot proizvodstvennykh zatrat",
       "",
-      "Pricing:",
-      "- Wholesale = Cost * (1 + markup%)",
-      "- Retail = Wholesale * (1 + retail markup%)",
+      "Tsenoobrazovanie:",
+      "- Opt = Sebestoimost * (1 + natsenka%)",
+      "- Roznitsa = Opt * (1 + roznichnaya natsenka%)",
       "",
-      "WB Calculations:",
-      "- Units shipped = Plan * Buyout%",
-      "- Returns = Plan - Shipped",
-      "- Logistics = (Shipped * to_client) + (Returns * return_fee)",
-      "- Acceptance = Shipped * acceptance_fee",
-      "- Commission = Revenue * commission%",
-      "- Tax = Revenue * tax% (USN or VAT)",
-      "- Profit = Revenue - All costs"
+      "Raschety WB:",
+      "- Otpravleno = Plan * Vykup%",
+      "- Vozvraty = Plan - Otpravleno",
+      "- Logistika = (Otpravleno * k_klientu) + (Vozvraty * stoimost_vozvrata)",
+      "- Priemka = Otpravleno * stoimost_priemki",
+      "- Komissiya = Vyruchka * komissiya%",
+      "- Nalog = Vyruchka * nalog% (USN ili NDS)",
+      "- Pribyl = Vyruchka - Vse zatraty"
     ]
   },
   {
-    title: "10. EXPORT OPTIONS",
+    title: "10. VARIANTY EKSPORTA",
     content: [
-      "Available exports:",
-      "- ABC/XYZ Analytics Report (Excel) - Full analysis with all metrics",
-      "- Production Plan (Excel) - Prioritized manufacturing plan",
-      "- Analytics Report (PDF) - Printable report with color coding",
-      "- Production Plan (PDF) - Printable manufacturing plan",
+      "Dostupnye eksporty:",
+      "- Otchet ABC/XYZ analitiki (Excel) - Polnyy analiz so vsemi metrikami",
+      "- Plan proizvodstva (Excel) - Prioritetnyy plan proizvodstva",
+      "- Otchet analitiki (PDF) - Pechatnyy otchet s tsvetovoy kodirovkoy",
+      "- Plan proizvodstva (PDF) - Pechatnyy plan proizvodstva",
       "",
-      "Filters available:",
-      "- By period (select specific months)",
-      "- By category (product categories)",
-      "- By ABC/XYZ groups",
-      "- By product groups",
-      "- By specific articles",
-      "- By stock availability"
+      "Dostupnye filtry:",
+      "- Po periodu (vybor konkretnyh mesyatsev)",
+      "- Po kategorii (kategorii tovarov)",
+      "- Po gruppam ABC/XYZ",
+      "- Po gruppam tovarov",
+      "- Po konkretnym artikulam",
+      "- Po nalichyu na sklade"
     ]
   },
   {
-    title: "11. SETTINGS",
+    title: "11. NASTROYKI",
     content: [
-      "Global Settings:",
-      "- FX Rate: USD to RUB exchange rate",
-      "- Admin Overhead %: Overhead percentage on production costs",
-      "- Wholesale Markup %: Markup for wholesale price",
-      "- Tax Mode: USN (simplified) or VAT",
-      "- USN Tax %: Simplified tax rate (default 7%)",
-      "- VAT %: Value added tax rate (if applicable)",
+      "Globalnye nastroyki:",
+      "- Kurs valyuty: Kurs USD k RUB",
+      "- Admin nakladnye %: Protsent nakladnykh ot proizvodstvennykh zatrat",
+      "- Optovaya natsenka %: Natsenka dlya optovoy tseny",
+      "- Rezhim nalogov: USN (uproshenka) ili NDS",
+      "- USN Nalog %: Stavka uproshenki (po umolchaniyu 7%)",
+      "- NDS %: Stavka NDS (esli primenyaetsya)",
       "",
-      "XYZ Thresholds:",
-      "- X Threshold: Maximum CV for stable demand (default 30%)",
-      "- Y Threshold: Maximum CV for moderate demand (default 60%)",
+      "Porogi XYZ:",
+      "- Porog X: Maksimalnyy CV dlya stabilnogo sprosa (po umolchaniyu 30%)",
+      "- Porog Y: Maksimalnyy CV dlya umerennogo sprosa (po umolchaniyu 60%)",
       "",
-      "WB Logistics Defaults:",
-      "- Logistics to client (default 50 RUB)",
-      "- Return logistics (default 50 RUB)",
-      "- Acceptance fee (default 50 RUB)",
-      "- Buyout percentage (default 90%)",
+      "Parametry logistiki WB po umolchaniyu:",
+      "- Logistika k klientu (po umolchaniyu 50 RUB)",
+      "- Logistika vozvrata (po umolchaniyu 50 RUB)",
+      "- Stoimost priemki (po umolchaniyu 50 RUB)",
+      "- Protsent vykupa (po umolchaniyu 90%)",
       "",
-      "Global Trend:",
-      "- Manual mode: Set fixed coefficient",
-      "- Auto mode: Calculate from historical data"
+      "Globalnyy trend:",
+      "- Ruchnoy rezhim: Ustanovit fiksirovannyy koeffitsient",
+      "- Avto rezhim: Raschitat iz istoricheskikh dannykh"
     ]
   },
   {
-    title: "12. DATA QUALITY CONTROL",
+    title: "12. KONTROL KACHESTVA DANNYKH",
     content: [
-      "Metrics displayed after processing:",
-      "- Raw rows: Total records in database (article x size x period)",
-      "- Unique articles: Count without sizes",
-      "- Article+size combinations: Unique pairs",
-      "- Compression ratio: Shows data aggregation efficiency",
+      "Metriki otobrazhaemye posle obrabotki:",
+      "- Syrye stroki: Vsego zapisey v baze (artikul x razmer x period)",
+      "- Unikalnyye artikuly: Kolichestvo bez razmerov",
+      "- Kombinatsii artikul+razmer: Unikalnyye pary",
+      "- Koeffitsient szhatiya: Pokazyvaet effektivnost agregatsii dannykh",
       "",
-      "Quality checks:",
-      "- Periods validation (no future dates)",
-      "- Numeric data validation",
-      "- Article format consistency"
+      "Proverki kachestva:",
+      "- Validatsiya periodov (net budushchikh dat)",
+      "- Validatsiya chislovykh dannykh",
+      "- Proverka formata artikulov"
     ]
   }
 ];
@@ -239,14 +220,14 @@ export function exportDocumentationToPDF(): void {
   
   doc.setFontSize(16);
   doc.setFont('helvetica', 'normal');
-  doc.text('System Documentation', pageWidth / 2, 75, { align: 'center' });
+  doc.text('Dokumentatsiya sistemy', pageWidth / 2, 75, { align: 'center' });
   
   doc.setFontSize(12);
   doc.setTextColor(100);
-  doc.text('ABC/XYZ Analysis, Production Planning & Unit Economics', pageWidth / 2, 90, { align: 'center' });
+  doc.text('ABC/XYZ Analiz, Planirovanie proizvodstva & Yunit-ekonomika', pageWidth / 2, 90, { align: 'center' });
   
   doc.setFontSize(10);
-  doc.text(`Generated: ${format(new Date(), 'dd.MM.yyyy HH:mm')}`, pageWidth / 2, 110, { align: 'center' });
+  doc.text(`Sgenerirovano: ${format(new Date(), 'dd.MM.yyyy HH:mm')}`, pageWidth / 2, 110, { align: 'center' });
 
   // Table of contents
   doc.addPage();
@@ -255,13 +236,13 @@ export function exportDocumentationToPDF(): void {
   doc.setFontSize(18);
   doc.setTextColor(0);
   doc.setFont('helvetica', 'bold');
-  doc.text('Table of Contents', margin, currentY);
+  doc.text('Soderzhanie', margin, currentY);
   currentY += 15;
 
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   
-  documentationContent.forEach((section, index) => {
+  documentationContent.forEach((section) => {
     doc.text(`${section.title}`, margin, currentY);
     currentY += 7;
   });
@@ -291,7 +272,7 @@ export function exportDocumentationToPDF(): void {
         currentY = margin;
       }
 
-      const textLines = doc.splitTextToSize(transliterate(line), contentWidth);
+      const textLines = doc.splitTextToSize(line, contentWidth);
       doc.text(textLines, margin, currentY);
       currentY += textLines.length * 5 + 2;
     });
@@ -304,19 +285,19 @@ export function exportDocumentationToPDF(): void {
     doc.setFontSize(8);
     doc.setTextColor(150);
     doc.text(
-      `Page ${i - 1} of ${pageCount - 1}`,
+      `Stranitsa ${i - 1} iz ${pageCount - 1}`,
       pageWidth / 2,
       pageHeight - 10,
       { align: 'center' }
     );
     doc.text(
-      'Sales & Production Planner Documentation',
+      'Sales & Production Planner - Dokumentatsiya',
       margin,
       pageHeight - 10
     );
   }
 
   // Download
-  const filename = `documentation_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
+  const filename = `dokumentatsiya_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
   doc.save(filename);
 }
