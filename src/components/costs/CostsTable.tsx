@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { UnitEconInput } from '@/hooks/useCosts';
-import { ExternalLink, RefreshCw, AlertCircle } from 'lucide-react';
+import { useUserRole } from '@/hooks/useUserRole';
+import { ExternalLink, RefreshCw, AlertCircle, EyeOff } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
@@ -15,6 +16,8 @@ interface CostsTableProps {
 }
 
 export function CostsTable({ costs, loading }: CostsTableProps) {
+  const { shouldHideCost } = useUserRole();
+
   if (loading) {
     return (
       <Card>
@@ -56,10 +59,14 @@ export function CostsTable({ costs, loading }: CostsTableProps) {
                 <TableHead className="min-w-[180px]">Артикул</TableHead>
                 <TableHead>Наименование</TableHead>
                 <TableHead>Категория</TableHead>
-                <TableHead className="text-right">Себестоимость</TableHead>
+                {!shouldHideCost && (
+                  <TableHead className="text-right">Себестоимость</TableHead>
+                )}
                 <TableHead className="text-right">Опт</TableHead>
                 <TableHead className="text-right">Маржа, %</TableHead>
-                <TableHead className="text-right">Прибыль/шт</TableHead>
+                {!shouldHideCost && (
+                  <TableHead className="text-right">Прибыль/шт</TableHead>
+                )}
                 <TableHead className="text-center">Обновлено</TableHead>
                 <TableHead></TableHead>
               </TableRow>
@@ -88,11 +95,13 @@ export function CostsTable({ costs, loading }: CostsTableProps) {
                       <Badge variant="outline">{cost.category}</Badge>
                     ) : '-'}
                   </TableCell>
-                  <TableCell className="text-right font-mono">
-                    {cost.unit_cost_real_rub !== null 
-                      ? `${cost.unit_cost_real_rub.toLocaleString('ru-RU')} ₽`
-                      : '-'}
-                  </TableCell>
+                  {!shouldHideCost && (
+                    <TableCell className="text-right font-mono">
+                      {cost.unit_cost_real_rub !== null 
+                        ? `${cost.unit_cost_real_rub.toLocaleString('ru-RU')} ₽`
+                        : '-'}
+                    </TableCell>
+                  )}
                   <TableCell className="text-right font-mono">
                     {cost.wholesale_price_rub !== null
                       ? `${cost.wholesale_price_rub.toLocaleString('ru-RU')} ₽`
@@ -106,13 +115,15 @@ export function CostsTable({ costs, loading }: CostsTableProps) {
                       return `${margin.toFixed(1)}%`;
                     })()}
                   </TableCell>
-                  <TableCell className="text-right font-mono">
-                    {(() => {
-                      if (!cost.unit_cost_real_rub || !cost.wholesale_price_rub) return '-';
-                      const profit = cost.wholesale_price_rub - cost.unit_cost_real_rub;
-                      return `${profit.toLocaleString('ru-RU')} ₽`;
-                    })()}
-                  </TableCell>
+                  {!shouldHideCost && (
+                    <TableCell className="text-right font-mono">
+                      {(() => {
+                        if (!cost.unit_cost_real_rub || !cost.wholesale_price_rub) return '-';
+                        const profit = cost.wholesale_price_rub - cost.unit_cost_real_rub;
+                        return `${profit.toLocaleString('ru-RU')} ₽`;
+                      })()}
+                    </TableCell>
+                  )}
                   <TableCell className="text-center text-xs text-muted-foreground">
                     {cost.updated_at ? format(new Date(cost.updated_at), 'dd.MM.yy', { locale: ru }) : '-'}
                     {(cost as any).is_recalculation && (
