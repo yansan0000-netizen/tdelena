@@ -10,8 +10,8 @@ import {
   generateProductionPlanReport,
   downloadBlob,
 } from '@/lib/excel/analyticsExport';
+import { exportAnalyticsToPDF, exportProductionPlanToPDF } from '@/lib/excel/pdfExport';
 import { ExportFilters, FilterOptions, defaultFilters } from '@/components/ExportFilters';
-
 const PAGE_SIZE = 1000;
 
 export interface ExportProgress {
@@ -335,6 +335,64 @@ export function useAnalyticsExport(runId: string | undefined) {
     }
   }, [fetchAnalyticsData, fetchCostsData, applyFilters, runId]);
 
+  // PDF export functions
+  const downloadReportPDF = useCallback(async (runInfo: { input_filename: string; created_at: string; period_start?: string | null; period_end?: string | null }) => {
+    setLoading(true);
+    try {
+      const data = await fetchAnalyticsData();
+      
+      if (!data || data.length === 0) {
+        toast.error('Нет данных для отчёта');
+        return;
+      }
+
+      const { analytics: filteredData } = applyFilters(data, null);
+
+      if (filteredData.length === 0) {
+        toast.error('Нет данных, соответствующих фильтрам');
+        return;
+      }
+
+      await exportAnalyticsToPDF(filteredData, runInfo, {
+        title: 'ABC/XYZ Аналитический отчёт',
+        includeRecommendations: true,
+      });
+      toast.success(`PDF отчёт скачан (${filteredData.length.toLocaleString('ru-RU')} строк)`);
+    } catch (err) {
+      console.error('Error generating PDF report:', err);
+      toast.error('Ошибка генерации PDF отчёта');
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchAnalyticsData, applyFilters]);
+
+  const downloadProductionPlanPDF = useCallback(async (runInfo: { input_filename: string; created_at: string; period_start?: string | null; period_end?: string | null }) => {
+    setLoading(true);
+    try {
+      const data = await fetchAnalyticsData();
+      
+      if (!data || data.length === 0) {
+        toast.error('Нет данных для плана');
+        return;
+      }
+
+      const { analytics: filteredData } = applyFilters(data, null);
+
+      if (filteredData.length === 0) {
+        toast.error('Нет данных, соответствующих фильтрам');
+        return;
+      }
+
+      await exportProductionPlanToPDF(filteredData, runInfo);
+      toast.success('PDF план производства скачан');
+    } catch (err) {
+      console.error('Error generating PDF production plan:', err);
+      toast.error('Ошибка генерации PDF плана');
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchAnalyticsData, applyFilters]);
+
   // Load data on mount for filter options
   const loadDataForFilters = useCallback(async () => {
     if (analyticsData) return;
@@ -353,6 +411,8 @@ export function useAnalyticsExport(runId: string | undefined) {
     totalCount: analyticsData?.length ?? 0,
     downloadReport,
     downloadProductionPlan,
+    downloadReportPDF,
+    downloadProductionPlanPDF,
     loadDataForFilters,
     hasData: !!analyticsData && analyticsData.length > 0,
   };

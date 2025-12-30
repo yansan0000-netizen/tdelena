@@ -38,7 +38,8 @@ import {
   Hash,
   Package,
   X,
-  TrendingUp
+  TrendingUp,
+  FileText
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -70,6 +71,8 @@ export default function RunDetails() {
     totalCount,
     downloadReport, 
     downloadProductionPlan,
+    downloadReportPDF,
+    downloadProductionPlanPDF,
     loadDataForFilters,
   } = useAnalyticsExport(id);
   const { stats: qualityStats } = useDataQuality(id);
@@ -489,6 +492,45 @@ export default function RunDetails() {
                         <span className="text-sm">План производства</span>
                       </>
                     )}
+                  </Button>
+                  
+                  {/* PDF Export Button */}
+                  <Button
+                    variant="outline"
+                    className="h-auto py-4 flex-col gap-2 border-primary/50 hover:bg-primary/5"
+                    onClick={() => downloadReportPDF({
+                      input_filename: run.input_filename,
+                      created_at: run.created_at,
+                      period_start: run.period_start,
+                      period_end: run.period_end,
+                    })}
+                    disabled={exportLoading}
+                  >
+                    {exportLoading ? (
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                      <FileText className="h-6 w-6 text-primary" />
+                    )}
+                    <span className="text-sm">Отчёт PDF</span>
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    className="h-auto py-4 flex-col gap-2"
+                    onClick={() => downloadProductionPlanPDF({
+                      input_filename: run.input_filename,
+                      created_at: run.created_at,
+                      period_start: run.period_start,
+                      period_end: run.period_end,
+                    })}
+                    disabled={exportLoading}
+                  >
+                    {exportLoading ? (
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                      <FileText className="h-6 w-6" />
+                    )}
+                    <span className="text-sm">План PDF</span>
                   </Button>
                 </>
               )}
