@@ -1,8 +1,8 @@
-import { ReactNode, useState, useEffect } from 'react';
+import { ReactNode, useState, useEffect, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Clock } from 'lucide-react';
+import { Loader2, Clock, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -14,40 +14,46 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, loading, signOut } = useAuth();
   const [approvalStatus, setApprovalStatus] = useState<string | null>(null);
   const [checkingApproval, setCheckingApproval] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    async function checkApprovalStatus() {
-      if (!user) {
-        setCheckingApproval(false);
-        return;
-      }
-
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('approval_status')
-          .eq('user_id', user.id)
-          .single();
-
-        if (error) {
-          console.error('Error checking approval status:', error);
-          // If profile not found, treat as pending
-          setApprovalStatus('pending');
-        } else {
-          setApprovalStatus(data?.approval_status || 'pending');
-        }
-      } catch (error) {
-        console.error('Error checking approval:', error);
-        setApprovalStatus('pending');
-      } finally {
-        setCheckingApproval(false);
-      }
+  const checkApprovalStatus = useCallback(async () => {
+    if (!user) {
+      setCheckingApproval(false);
+      return;
     }
 
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('approval_status')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error checking approval status:', error);
+        setApprovalStatus('pending');
+      } else {
+        setApprovalStatus(data?.approval_status || 'pending');
+      }
+    } catch (error) {
+      console.error('Error checking approval:', error);
+      setApprovalStatus('pending');
+    } finally {
+      setCheckingApproval(false);
+      setRefreshing(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
     if (!loading) {
       checkApprovalStatus();
     }
-  }, [user, loading]);
+  }, [user, loading, checkApprovalStatus]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await checkApprovalStatus();
+  };
 
   if (loading || checkingApproval) {
     return (
@@ -80,6 +86,19 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
             <p className="text-sm text-muted-foreground text-center">
               Вы получите доступ к системе после того, как администратор одобрит вашу заявку и назначит роль.
             </p>
+            <Button 
+              variant="default" 
+              className="w-full" 
+              onClick={handleRefresh}
+              disabled={refreshing}
+            >
+              {refreshing ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Проверить статус
+            </Button>
             <Button 
               variant="outline" 
               className="w-full" 
