@@ -2,7 +2,8 @@ import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
-import { FileSpreadsheet, History, Plus, LogOut, BookOpen, Calculator, Settings } from 'lucide-react';
+import { useUserRole } from '@/hooks/useUserRole';
+import { FileSpreadsheet, History, Plus, LogOut, BookOpen, Calculator, Settings, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -12,6 +13,7 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const { user, signOut } = useAuth();
+  const { isAdmin } = useUserRole();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -26,6 +28,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     { path: '/unit-economics', label: 'Юнит-экономика', icon: Calculator },
     { path: '/settings', label: 'Настройки', icon: Settings },
     { path: '/docs', label: 'Документация', icon: BookOpen },
+    ...(isAdmin ? [{ path: '/admin', label: 'Админ', icon: Shield }] : []),
   ];
 
   return (

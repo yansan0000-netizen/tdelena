@@ -14,6 +14,7 @@ import Documentation from "./pages/Documentation";
 import UnitEconomics from "./pages/UnitEconomics";
 import UnitEconomicsDetail from "./pages/UnitEconomicsDetail";
 import Settings from "./pages/Settings";
+import AdminPanel from "./pages/AdminPanel";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -74,6 +75,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Settings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute>
+                  <AdminPanel />
                 </ProtectedRoute>
               }
             />
