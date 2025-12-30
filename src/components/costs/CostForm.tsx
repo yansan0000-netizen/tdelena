@@ -9,7 +9,8 @@ import { CategorySelect } from '@/components/ui/category-select';
 import { UnitEconFormData } from '@/lib/unitEconTypes';
 import { PRODUCT_CATEGORIES, MATERIAL_CATEGORIES, TAX_MODES } from '@/lib/categories';
 import { useUserSettings } from '@/hooks/useUserSettings';
-import { Package, Scissors, DollarSign, ShoppingCart, Users, Store } from 'lucide-react';
+import { useUserRole } from '@/hooks/useUserRole';
+import { Package, Scissors, DollarSign, ShoppingCart, Users, Store, EyeOff } from 'lucide-react';
 import { useMemo } from 'react';
 
 interface CostFormProps {
@@ -126,6 +127,7 @@ function FabricSection({
 
 export function CostForm({ formData, onChange, isNew }: CostFormProps) {
   const { settings, addCustomCategory } = useUserSettings();
+  const { shouldHideCost } = useUserRole();
   
   const customProductCategories = settings?.custom_product_categories || [];
   const customMaterialCategories = settings?.custom_material_categories || [];
@@ -271,149 +273,170 @@ export function CostForm({ formData, onChange, isNew }: CostFormProps) {
             </AccordionContent>
           </AccordionItem>
 
-          {/* Materials section */}
-          <AccordionItem value="materials" className="border rounded-lg px-4">
-            <AccordionTrigger className="hover:no-underline">
-              <div className="flex items-center gap-2">
-                <Scissors className="h-4 w-4" />
-                <span>Материалы (ткани)</span>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="pt-4 pb-6 space-y-4">
-              <FabricSection index={1} formData={formData} onChange={onChange} customMaterialCategories={customMaterialCategories} onAddMaterialCategory={handleAddMaterialCategory} />
-              <FabricSection index={2} formData={formData} onChange={onChange} customMaterialCategories={customMaterialCategories} onAddMaterialCategory={handleAddMaterialCategory} />
-              <FabricSection index={3} formData={formData} onChange={onChange} customMaterialCategories={customMaterialCategories} onAddMaterialCategory={handleAddMaterialCategory} />
-              
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                <NumberInput
-                  label="Курс USD/RUB"
-                  value={formData.fx_rate}
-                  onChange={(v) => onChange({ ...formData, fx_rate: v })}
-                  suffix="₽"
-                />
-                <NumberInput
-                  label="Итого затраты на ткань"
-                  value={formData.fabric_cost_total}
-                  onChange={(v) => onChange({ ...formData, fabric_cost_total: v })}
-                  suffix="₽"
-                />
-              </div>
-            </AccordionContent>
-          </AccordionItem>
+          {/* Materials section - hidden for hidden_cost role */}
+          {!shouldHideCost ? (
+            <AccordionItem value="materials" className="border rounded-lg px-4">
+              <AccordionTrigger className="hover:no-underline">
+                <div className="flex items-center gap-2">
+                  <Scissors className="h-4 w-4" />
+                  <span>Материалы (ткани)</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="pt-4 pb-6 space-y-4">
+                <FabricSection index={1} formData={formData} onChange={onChange} customMaterialCategories={customMaterialCategories} onAddMaterialCategory={handleAddMaterialCategory} />
+                <FabricSection index={2} formData={formData} onChange={onChange} customMaterialCategories={customMaterialCategories} onAddMaterialCategory={handleAddMaterialCategory} />
+                <FabricSection index={3} formData={formData} onChange={onChange} customMaterialCategories={customMaterialCategories} onAddMaterialCategory={handleAddMaterialCategory} />
+                
+                <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                  <NumberInput
+                    label="Курс USD/RUB"
+                    value={formData.fx_rate}
+                    onChange={(v) => onChange({ ...formData, fx_rate: v })}
+                    suffix="₽"
+                  />
+                  <NumberInput
+                    label="Итого затраты на ткань"
+                    value={formData.fabric_cost_total}
+                    onChange={(v) => onChange({ ...formData, fabric_cost_total: v })}
+                    suffix="₽"
+                  />
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          ) : (
+            <div className="border rounded-lg px-4 py-4 flex items-center gap-3 text-muted-foreground">
+              <EyeOff className="h-4 w-4" />
+              <span>Материалы (ткани) — скрыто</span>
+            </div>
+          )}
 
-          {/* Production costs section */}
-          <AccordionItem value="costs" className="border rounded-lg px-4">
-            <AccordionTrigger className="hover:no-underline">
-              <div className="flex items-center gap-2">
-                <DollarSign className="h-4 w-4" />
-                <span>Производственные затраты</span>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="pt-4 pb-6">
-              <div className="grid grid-cols-2 gap-4">
-                <NumberInput
-                  label="Работа швейный, ₽/шт"
-                  value={formData.sewing_cost}
-                  onChange={(v) => onChange({ ...formData, sewing_cost: v })}
-                  suffix="₽"
-                />
-                <NumberInput
-                  label="Работа закройный, ₽/шт"
-                  value={formData.cutting_cost}
-                  onChange={(v) => onChange({ ...formData, cutting_cost: v })}
-                  suffix="₽"
-                />
-                <NumberInput
-                  label="Фурнитура, ₽/шт"
-                  value={formData.accessories_cost}
-                  onChange={(v) => onChange({ ...formData, accessories_cost: v })}
-                  suffix="₽"
-                />
-                <NumberInput
-                  label="Вышивка/Принт (работа), ₽/шт"
-                  value={formData.print_embroidery_work_cost}
-                  onChange={(v) => onChange({ ...formData, print_embroidery_work_cost: v })}
-                  suffix="₽"
-                />
-                <NumberInput
-                  label="Вышивка/Принт (материалы), ₽/шт"
-                  value={formData.print_embroidery_materials_cost}
-                  onChange={(v) => onChange({ ...formData, print_embroidery_materials_cost: v })}
-                  suffix="₽"
-                />
-              </div>
-            </AccordionContent>
-          </AccordionItem>
+          {/* Production costs section - hidden for hidden_cost role */}
+          {!shouldHideCost ? (
+            <AccordionItem value="costs" className="border rounded-lg px-4">
+              <AccordionTrigger className="hover:no-underline">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  <span>Производственные затраты</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="pt-4 pb-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <NumberInput
+                    label="Работа швейный, ₽/шт"
+                    value={formData.sewing_cost}
+                    onChange={(v) => onChange({ ...formData, sewing_cost: v })}
+                    suffix="₽"
+                  />
+                  <NumberInput
+                    label="Работа закройный, ₽/шт"
+                    value={formData.cutting_cost}
+                    onChange={(v) => onChange({ ...formData, cutting_cost: v })}
+                    suffix="₽"
+                  />
+                  <NumberInput
+                    label="Фурнитура, ₽/шт"
+                    value={formData.accessories_cost}
+                    onChange={(v) => onChange({ ...formData, accessories_cost: v })}
+                    suffix="₽"
+                  />
+                  <NumberInput
+                    label="Вышивка/Принт (работа), ₽/шт"
+                    value={formData.print_embroidery_work_cost}
+                    onChange={(v) => onChange({ ...formData, print_embroidery_work_cost: v })}
+                    suffix="₽"
+                  />
+                  <NumberInput
+                    label="Вышивка/Принт (материалы), ₽/шт"
+                    value={formData.print_embroidery_materials_cost}
+                    onChange={(v) => onChange({ ...formData, print_embroidery_materials_cost: v })}
+                    suffix="₽"
+                  />
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          ) : (
+            <div className="border rounded-lg px-4 py-4 flex items-center gap-3 text-muted-foreground">
+              <EyeOff className="h-4 w-4" />
+              <span>Производственные затраты — скрыто</span>
+            </div>
+          )}
 
-          {/* Markup section */}
-          <AccordionItem value="markup" className="border rounded-lg px-4">
-            <AccordionTrigger className="hover:no-underline">
-              <div className="flex items-center gap-2">
-                <ShoppingCart className="h-4 w-4" />
-                <span>Себестоимость и наценка</span>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent className="pt-4 pb-6">
-              <div className="grid grid-cols-2 gap-4">
-                <NumberInput
-                  label="Админ. расходы, %"
-                  value={formData.admin_overhead_pct}
-                  onChange={(v) => onChange({ ...formData, admin_overhead_pct: v })}
-                  suffix="%"
-                />
-                <NumberInput
-                  label="Оптовая наценка, %"
-                  value={formData.wholesale_markup_pct}
-                  onChange={(v) => onChange({ ...formData, wholesale_markup_pct: v })}
-                  suffix="%"
-                />
-              </div>
-              
-              {/* Tax in cost section - only shown when WB is not enabled */}
-              {!formData.sell_on_wb && (
-                <div className="mt-4 pt-4 border-t">
-                  <Label className="font-medium mb-3 block">Налоги (в себестоимости)</Label>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Режим</Label>
-                      <Select
-                        value={formData.tax_mode}
-                        onValueChange={(v) => onChange({ ...formData, tax_mode: v as any })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TAX_MODES.map((mode) => (
-                            <SelectItem key={mode.value} value={mode.value}>
-                              {mode.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <NumberInput
-                      label="УСН, %"
-                      value={formData.usn_tax_pct}
-                      onChange={(v) => onChange({ ...formData, usn_tax_pct: v })}
-                      suffix="%"
-                    />
-                    {formData.tax_mode === 'income_expenses_vat' && (
+          {/* Markup section - partially hidden for hidden_cost role */}
+          {!shouldHideCost ? (
+            <AccordionItem value="markup" className="border rounded-lg px-4">
+              <AccordionTrigger className="hover:no-underline">
+                <div className="flex items-center gap-2">
+                  <ShoppingCart className="h-4 w-4" />
+                  <span>Себестоимость и наценка</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="pt-4 pb-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <NumberInput
+                    label="Админ. расходы, %"
+                    value={formData.admin_overhead_pct}
+                    onChange={(v) => onChange({ ...formData, admin_overhead_pct: v })}
+                    suffix="%"
+                  />
+                  <NumberInput
+                    label="Оптовая наценка, %"
+                    value={formData.wholesale_markup_pct}
+                    onChange={(v) => onChange({ ...formData, wholesale_markup_pct: v })}
+                    suffix="%"
+                  />
+                </div>
+                
+                {/* Tax in cost section - only shown when WB is not enabled */}
+                {!formData.sell_on_wb && (
+                  <div className="mt-4 pt-4 border-t">
+                    <Label className="font-medium mb-3 block">Налоги (в себестоимости)</Label>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Режим</Label>
+                        <Select
+                          value={formData.tax_mode}
+                          onValueChange={(v) => onChange({ ...formData, tax_mode: v as any })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {TAX_MODES.map((mode) => (
+                              <SelectItem key={mode.value} value={mode.value}>
+                                {mode.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                       <NumberInput
-                        label="НДС, %"
-                        value={formData.vat_pct}
-                        onChange={(v) => onChange({ ...formData, vat_pct: v })}
+                        label="УСН, %"
+                        value={formData.usn_tax_pct}
+                        onChange={(v) => onChange({ ...formData, usn_tax_pct: v })}
                         suffix="%"
                       />
-                    )}
+                      {formData.tax_mode === 'income_expenses_vat' && (
+                        <NumberInput
+                          label="НДС, %"
+                          value={formData.vat_pct}
+                          onChange={(v) => onChange({ ...formData, vat_pct: v })}
+                          suffix="%"
+                        />
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Налог учитывается в себестоимости. При включении продаж на ВБ — налог считается в блоке Wildberries.
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Налог учитывается в себестоимости. При включении продаж на ВБ — налог считается в блоке Wildberries.
-                  </p>
-                </div>
-              )}
-            </AccordionContent>
-          </AccordionItem>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          ) : (
+            <div className="border rounded-lg px-4 py-4 flex items-center gap-3 text-muted-foreground">
+              <EyeOff className="h-4 w-4" />
+              <span>Себестоимость и наценка — скрыто</span>
+            </div>
+          )}
 
           {/* WB section with toggle */}
           <AccordionItem value="wb" className="border rounded-lg px-4">

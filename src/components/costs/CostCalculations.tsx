@@ -1,7 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { UnitEconFormData } from '@/lib/unitEconTypes';
-import { Calculator, TrendingUp } from 'lucide-react';
+import { useUserRole } from '@/hooks/useUserRole';
+import { Calculator, TrendingUp, EyeOff } from 'lucide-react';
 
 interface CostCalculationsProps {
   calculations: {
@@ -13,6 +14,7 @@ interface CostCalculationsProps {
 }
 
 export function CostCalculations({ calculations, formData }: CostCalculationsProps) {
+  const { shouldHideCost } = useUserRole();
   const printEmbroideryWorkCost = formData.print_embroidery_work_cost || 0;
   const printEmbroideryMaterialsCost = formData.print_embroidery_materials_cost || 0;
   const printEmbroideryCost = formData.print_embroidery_cost || 0;
@@ -46,53 +48,62 @@ export function CostCalculations({ calculations, formData }: CostCalculationsPro
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Cost breakdown */}
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium text-muted-foreground">Структура себестоимости</h4>
-          <div className="space-y-1 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Ткани</span>
-              <span>{(formData.fabric_cost_total || 0).toLocaleString('ru-RU')} ₽</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Швейный</span>
-              <span>{(formData.sewing_cost || 0).toLocaleString('ru-RU')} ₽</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Закройный</span>
-              <span>{(formData.cutting_cost || 0).toLocaleString('ru-RU')} ₽</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Фурнитура</span>
-              <span>{(formData.accessories_cost || 0).toLocaleString('ru-RU')} ₽</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Вышивка/Принт (работа)</span>
-              <span>{printEmbroideryWorkCost.toLocaleString('ru-RU')} ₽</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Вышивка/Принт (материалы)</span>
-              <span>{printEmbroideryMaterialsCost.toLocaleString('ru-RU')} ₽</span>
-            </div>
-            <div className="flex justify-between border-t pt-1">
-              <span className="text-muted-foreground">База</span>
-              <span className="font-medium">{baseCost.toLocaleString('ru-RU')} ₽</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">+ Админ ({formData.admin_overhead_pct || 0}%)</span>
-              <span>{adminCost.toLocaleString('ru-RU')} ₽</span>
+        {/* Cost breakdown - hidden for hidden_cost role */}
+        {!shouldHideCost ? (
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium text-muted-foreground">Структура себестоимости</h4>
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ткани</span>
+                <span>{(formData.fabric_cost_total || 0).toLocaleString('ru-RU')} ₽</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Швейный</span>
+                <span>{(formData.sewing_cost || 0).toLocaleString('ru-RU')} ₽</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Закройный</span>
+                <span>{(formData.cutting_cost || 0).toLocaleString('ru-RU')} ₽</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Фурнитура</span>
+                <span>{(formData.accessories_cost || 0).toLocaleString('ru-RU')} ₽</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Вышивка/Принт (работа)</span>
+                <span>{printEmbroideryWorkCost.toLocaleString('ru-RU')} ₽</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Вышивка/Принт (материалы)</span>
+                <span>{printEmbroideryMaterialsCost.toLocaleString('ru-RU')} ₽</span>
+              </div>
+              <div className="flex justify-between border-t pt-1">
+                <span className="text-muted-foreground">База</span>
+                <span className="font-medium">{baseCost.toLocaleString('ru-RU')} ₽</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">+ Админ ({formData.admin_overhead_pct || 0}%)</span>
+                <span>{adminCost.toLocaleString('ru-RU')} ₽</span>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="p-4 bg-muted/50 rounded-lg text-center">
+            <EyeOff className="h-5 w-5 mx-auto mb-2 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Детали себестоимости скрыты</p>
+          </div>
+        )}
 
         {/* Main metrics */}
         <div className="space-y-3">
-          <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg">
-            <div className="text-xs text-muted-foreground mb-1">Себестоимость</div>
-            <div className="text-2xl font-bold text-primary">
-              {calculations.unit_cost_real_rub.toLocaleString('ru-RU')} ₽
+          {!shouldHideCost && (
+            <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg">
+              <div className="text-xs text-muted-foreground mb-1">Себестоимость</div>
+              <div className="text-2xl font-bold text-primary">
+                {calculations.unit_cost_real_rub.toLocaleString('ru-RU')} ₽
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 bg-muted rounded-lg">
@@ -122,24 +133,26 @@ export function CostCalculations({ calculations, formData }: CostCalculationsPro
           </div>
         </div>
 
-        {/* Margin info */}
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium text-muted-foreground">Маржа при продаже</h4>
-          <div className="space-y-1 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Опт (маржа)</span>
-              <Badge variant="outline" className="text-success">
-                {wholesaleMargin.toLocaleString('ru-RU')} ₽
-              </Badge>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Розница (маржа)</span>
-              <Badge variant="outline" className="text-success">
-                {retailMargin.toLocaleString('ru-RU')} ₽
-              </Badge>
+        {/* Margin info - hidden for hidden_cost role */}
+        {!shouldHideCost && (
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium text-muted-foreground">Маржа при продаже</h4>
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Опт (маржа)</span>
+                <Badge variant="outline" className="text-success">
+                  {wholesaleMargin.toLocaleString('ru-RU')} ₽
+                </Badge>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Розница (маржа)</span>
+                <Badge variant="outline" className="text-success">
+                  {retailMargin.toLocaleString('ru-RU')} ₽
+                </Badge>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Comparison with competitor */}
         {formData.competitor_price && formData.competitor_price > 0 && (

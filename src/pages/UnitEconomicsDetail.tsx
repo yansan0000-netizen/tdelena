@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCosts, UnitEconInput, calculateDerivedFields } from '@/hooks/useCosts';
 import { useUserSettings } from '@/hooks/useUserSettings';
+import { useUserRole } from '@/hooks/useUserRole';
 import { useRuns } from '@/hooks/useRuns';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -25,6 +26,7 @@ export default function UnitEconomicsDetail() {
   
   const { getCostByArticle, upsertCost, deleteCost } = useCosts();
   const { settings } = useUserSettings();
+  const { shouldHideCost } = useUserRole();
   const { runs } = useRuns();
   
   const [loading, setLoading] = useState(!isNew);
@@ -317,7 +319,8 @@ export default function UnitEconomicsDetail() {
                         <span className="font-medium">{salesFacts.current_stock.toLocaleString('ru-RU')}</span>
                       </div>
                       
-                      {calculations.unit_cost_real_rub > 0 && (
+                      {/* Cost-based metrics - hidden for hidden_cost role */}
+                      {!shouldHideCost && calculations.unit_cost_real_rub > 0 && (
                         <>
                           <div className="border-t pt-3">
                             <div className="flex justify-between">
