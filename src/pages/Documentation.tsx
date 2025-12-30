@@ -2,20 +2,41 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { FileSpreadsheet, Upload, BarChart3, Download, TrendingUp, Package, Calculator, AlertTriangle, CheckCircle, DollarSign, Layers, FileUp, Link2, Settings, History, Store, Filter, FileDown, Ban, Sparkles, UserPlus, LineChart } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { FileSpreadsheet, Upload, BarChart3, Download, TrendingUp, Package, Calculator, AlertTriangle, CheckCircle, DollarSign, Layers, FileUp, Link2, Settings, History, Store, Filter, FileDown, Ban, Sparkles, UserPlus, LineChart, FileText } from 'lucide-react';
+import { exportDocumentationToPDF } from '@/lib/documentationExport';
+import { toast } from 'sonner';
 
 export default function Documentation() {
+  const handleExportPDF = () => {
+    try {
+      exportDocumentationToPDF();
+      toast.success('Документация экспортирована в PDF');
+    } catch (error) {
+      console.error('Error exporting documentation:', error);
+      toast.error('Ошибка экспорта документации');
+    }
+  };
+
   return (
     <AppLayout>
       <div className="max-w-4xl mx-auto space-y-8">
         {/* Header with glass effect */}
         <div className="glass-panel rounded-2xl p-6">
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-            Документация
-          </h1>
-          <p className="text-muted-foreground mt-2 leading-relaxed">
-            Система ABC/XYZ анализа, планирования производства и юнит-экономики
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+                Документация
+              </h1>
+              <p className="text-muted-foreground mt-2 leading-relaxed">
+                Система ABC/XYZ анализа, планирования производства и юнит-экономики
+              </p>
+            </div>
+            <Button onClick={handleExportPDF} variant="outline" className="gap-2">
+              <FileText className="h-4 w-4" />
+              Скачать PDF
+            </Button>
+          </div>
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
