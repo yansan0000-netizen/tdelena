@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAssortmentAnalysis, AssortmentFilters, AssortmentProduct } from '@/hooks/useAssortmentAnalysis';
@@ -25,7 +25,10 @@ import {
   Minus,
   Filter,
   RefreshCw,
-  ShieldAlert
+  ShieldAlert,
+  Maximize2,
+  Minimize2,
+  X
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -53,6 +56,28 @@ export default function AssortmentAnalysis() {
   });
   const [search, setSearch] = useState('');
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Handle escape key to exit fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
+
+  // Lock body scroll when fullscreen
+  useEffect(() => {
+    if (isFullscreen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [isFullscreen]);
 
   const { runs, products, summary, categories, isLoading, refetch } = useAssortmentAnalysis(filters);
 
@@ -290,14 +315,197 @@ export default function AssortmentAnalysis() {
                       </Button>
                     </div>
                   )}
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setIsFullscreen(true)}
+                    className="ml-auto gap-2"
+                  >
+                    <Maximize2 className="h-4 w-4" />
+                    На весь экран
+                  </Button>
                 </div>
 
-                {/* Products Table */}
+                {/* Fullscreen Table Modal */}
+                {isFullscreen && (
+                  <div className="fixed inset-0 z-50 bg-background flex flex-col">
+                    {/* Fullscreen Header */}
+                    <div className="flex items-center justify-between p-4 border-b bg-background shrink-0">
+                      <div className="flex items-center gap-4">
+                        <h2 className="text-lg font-semibold">Таблица товаров</h2>
+                        <span className="text-sm text-muted-foreground">
+                          {filteredBySearch.length} товаров
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="relative w-64">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            placeholder="Поиск..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="pl-9"
+                          />
+                        </div>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => setIsFullscreen(false)}
+                          className="gap-2"
+                        >
+                          <Minimize2 className="h-4 w-4" />
+                          Свернуть
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => setIsFullscreen(false)}
+                        >
+                          <X className="h-5 w-5" />
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    {/* Fullscreen Table with sticky header */}
+                    <div className="flex-1 overflow-auto">
+                      <Table>
+                        <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
+                          <TableRow>
+                            <TableHead className="w-10">
+                              <Checkbox
+                                checked={selectedProducts.size === filteredBySearch.length && filteredBySearch.length > 0}
+                                onCheckedChange={(checked) => checked ? selectAllVisible() : clearSelection()}
+                              />
+                            </TableHead>
+                            <TableHead>Артикул</TableHead>
+                            <TableHead>Категория</TableHead>
+                            <TableHead className="text-center">ABC</TableHead>
+                            <TableHead className="text-right">Продажи</TableHead>
+                            <TableHead className="text-right">Выручка</TableHead>
+                            <TableHead className="text-right">Остаток</TableHead>
+                            <TableHead className="text-right">Дней</TableHead>
+                            <TableHead className="text-right">Маржа</TableHead>
+                            <TableHead className="text-right">Прибыль/шт</TableHead>
+                            <TableHead>Рекомендация</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredBySearch.map((product) => {
+                            const recConfig = product.assortment_recommendation 
+                              ? recommendationConfig[product.assortment_recommendation] 
+                              : null;
+                            
+                            return (
+                              <TableRow key={product.id}>
+                                <TableCell>
+                                  <Checkbox
+                                    checked={selectedProducts.has(product.id)}
+                                    onCheckedChange={() => toggleProduct(product.id)}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <div className="font-mono font-medium">{product.article}</div>
+                                  {product.name && (
+                                    <div className="text-xs text-muted-foreground truncate max-w-[150px]">
+                                      {product.name}
+                                    </div>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-muted-foreground">
+                                  {product.category || '—'}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <Badge variant="outline" className="font-mono">
+                                    {product.abc_group || '—'}{product.xyz_group || ''}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right font-medium">
+                                  {product.total_quantity.toLocaleString('ru-RU')}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {product.total_revenue.toLocaleString('ru-RU')} ₽
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {product.current_stock.toLocaleString('ru-RU')}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <span className={cn(
+                                    product.days_until_stockout < 14 ? 'text-red-600' :
+                                    product.days_until_stockout > 180 ? 'text-orange-600' : ''
+                                  )}>
+                                    {product.days_until_stockout > 900 ? '∞' : product.days_until_stockout}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {product.margin_pct !== null ? (
+                                    <span className={cn(
+                                      product.margin_pct < 0 ? 'text-red-600' :
+                                      product.margin_pct < 10 ? 'text-yellow-600' :
+                                      product.margin_pct >= 15 ? 'text-green-600' : ''
+                                    )}>
+                                      {product.margin_pct.toFixed(1)}%
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {product.profit_per_unit !== null ? (
+                                    <span className={cn(product.profit_per_unit < 0 ? 'text-red-600' : '')}>
+                                      {product.profit_per_unit.toLocaleString('ru-RU')} ₽
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {recConfig ? (
+                                    <div className="space-y-1">
+                                      <Badge className={cn('gap-1', recConfig.className)}>
+                                        {recConfig.icon}
+                                        {recConfig.label}
+                                      </Badge>
+                                      {product.assortment_reason && (
+                                        <div className="text-xs text-muted-foreground max-w-[200px] truncate" title={product.assortment_reason}>
+                                          {product.assortment_reason}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Fullscreen Footer */}
+                    {selectedProducts.size > 0 && (
+                      <div className="p-4 border-t bg-background flex items-center gap-4 shrink-0">
+                        <span className="text-sm text-muted-foreground">
+                          Выбрано: {selectedProducts.size}
+                        </span>
+                        <Button size="sm" variant="destructive" className="gap-1">
+                          <Skull className="h-4 w-4" />
+                          В kill-лист
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={clearSelection}>
+                          Снять выбор
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Products Table - Regular view */}
                 <Card>
                   <CardContent className="p-0">
-                    <div className="overflow-x-auto">
+                    <div className="overflow-auto max-h-[600px]">
                       <Table>
-                        <TableHeader>
+                        <TableHeader className="sticky top-0 bg-background z-10">
                           <TableRow>
                             <TableHead className="w-10">
                               <Checkbox
