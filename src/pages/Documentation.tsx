@@ -72,7 +72,7 @@ export default function Documentation() {
               <TabsTrigger value="overview">Обзор</TabsTrigger>
               <TabsTrigger value="format">Формат</TabsTrigger>
               <TabsTrigger value="analysis">Анализ</TabsTrigger>
-              <TabsTrigger value="assortment">Ассортимент</TabsTrigger>
+              {!shouldHideCost && <TabsTrigger value="assortment">Ассортимент</TabsTrigger>}
               <TabsTrigger value="killlist">Kill-лист</TabsTrigger>
               {hasFullAccess && <TabsTrigger value="unit-economics">Юнит-экономика</TabsTrigger>}
               <TabsTrigger value="forecast">Прогноз</TabsTrigger>
@@ -389,7 +389,8 @@ export default function Documentation() {
             </Card>
           </TabsContent>
 
-          {/* Assortment Analysis Tab */}
+          {/* Assortment Analysis Tab - Only for non-hidden_cost users */}
+          {!shouldHideCost && (
           <TabsContent value="assortment" className="space-y-6">
             <Card>
               <CardHeader>
@@ -511,6 +512,7 @@ export default function Documentation() {
               </CardContent>
             </Card>
           </TabsContent>
+          )}
 
           {/* Kill-list Tab */}
           <TabsContent value="killlist" className="space-y-6">
@@ -1105,7 +1107,7 @@ export default function Documentation() {
                           <td className="p-3 pl-6">Анализ ассортимента</td>
                           <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
                           <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
-                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><Ban className="h-4 w-4 text-red-400 mx-auto" /></td>
                         </tr>
                         <tr className="border-b border-border/30 hover:bg-muted/20">
                           <td className="p-3 pl-6">Kill-лист (управление)</td>
@@ -1300,7 +1302,7 @@ export default function Documentation() {
                         <td className="p-2">Анализ ассортимента</td>
                         <td className="p-2 text-center text-green-600">✓</td>
                         <td className="p-2 text-center text-green-600">✓</td>
-                        <td className="p-2 text-center text-green-600">✓</td>
+                        <td className="p-2 text-center text-red-600">✗</td>
                       </tr>
                       <tr className="border-b">
                         <td className="p-2">Kill-лист</td>
