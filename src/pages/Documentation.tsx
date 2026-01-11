@@ -67,19 +67,21 @@ export default function Documentation() {
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="flex flex-wrap gap-1 h-auto p-2">
-            <TabsTrigger value="overview">Обзор</TabsTrigger>
-            <TabsTrigger value="format">Формат файла</TabsTrigger>
-            <TabsTrigger value="analysis">Анализ</TabsTrigger>
-            <TabsTrigger value="assortment">Ассортимент</TabsTrigger>
-            <TabsTrigger value="killlist">Kill-лист</TabsTrigger>
-            {hasFullAccess && <TabsTrigger value="unit-economics">Юнит-экономика</TabsTrigger>}
-            <TabsTrigger value="forecast">Прогноз</TabsTrigger>
-            <TabsTrigger value="export">Экспорт</TabsTrigger>
-            <TabsTrigger value="settings">Настройки</TabsTrigger>
-            {isAdmin && <TabsTrigger value="admin">Администрирование</TabsTrigger>}
-            <TabsTrigger value="roles">Роли</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto pb-2 -mx-1 px-1">
+            <TabsList className="inline-flex w-max gap-1 p-2">
+              <TabsTrigger value="overview">Обзор</TabsTrigger>
+              <TabsTrigger value="format">Формат</TabsTrigger>
+              <TabsTrigger value="analysis">Анализ</TabsTrigger>
+              <TabsTrigger value="assortment">Ассортимент</TabsTrigger>
+              <TabsTrigger value="killlist">Kill-лист</TabsTrigger>
+              {hasFullAccess && <TabsTrigger value="unit-economics">Юнит-экономика</TabsTrigger>}
+              <TabsTrigger value="forecast">Прогноз</TabsTrigger>
+              <TabsTrigger value="export">Экспорт</TabsTrigger>
+              <TabsTrigger value="settings">Настройки</TabsTrigger>
+              {isAdmin && <TabsTrigger value="admin">Админ</TabsTrigger>}
+              <TabsTrigger value="roles">Роли</TabsTrigger>
+            </TabsList>
+          </div>
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
@@ -1007,6 +1009,179 @@ export default function Documentation() {
                       </div>
                     </li>
                   </ul>
+                </CardContent>
+              </Card>
+
+              {/* Permissions Matrix */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Lock className="h-5 w-5 text-primary" />
+                    Матрица прав доступа
+                  </CardTitle>
+                  <CardDescription>Полная таблица разрешений по ролям</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="text-left p-3 font-medium bg-muted/30">Функция</th>
+                          <th className="text-center p-3 font-medium bg-green-500/10">
+                            <div className="flex items-center justify-center gap-1">
+                              <Shield className="h-4 w-4 text-green-600" />
+                              admin
+                            </div>
+                          </th>
+                          <th className="text-center p-3 font-medium bg-blue-500/10">
+                            <div className="flex items-center justify-center gap-1">
+                              <Eye className="h-4 w-4 text-blue-600" />
+                              full_access
+                            </div>
+                          </th>
+                          <th className="text-center p-3 font-medium bg-amber-500/10">
+                            <div className="flex items-center justify-center gap-1">
+                              <EyeOff className="h-4 w-4 text-amber-600" />
+                              hidden_cost
+                            </div>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b border-border/50">
+                          <td className="p-3 font-medium" colSpan={4}>📊 Аналитика</td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">ABC/XYZ анализ</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">Прогноз производства</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">Загрузка данных</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                        </tr>
+                        
+                        <tr className="border-b border-border/50">
+                          <td className="p-3 font-medium" colSpan={4}>💰 Финансы</td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">Юнит-экономика (просмотр)</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><Ban className="h-4 w-4 text-red-400 mx-auto" /></td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">Юнит-экономика (редактирование)</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><Ban className="h-4 w-4 text-red-400 mx-auto" /></td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">Себестоимость и маржа</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><Ban className="h-4 w-4 text-red-400 mx-auto" /></td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">История изменений цен</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><Ban className="h-4 w-4 text-red-400 mx-auto" /></td>
+                        </tr>
+                        
+                        <tr className="border-b border-border/50">
+                          <td className="p-3 font-medium" colSpan={4}>📦 Ассортимент</td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">Анализ ассортимента</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">Kill-лист (управление)</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">Kill-лист (цены/лесенка)</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><Ban className="h-4 w-4 text-red-400 mx-auto" /></td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">Каталог артикулов</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                        </tr>
+                        
+                        <tr className="border-b border-border/50">
+                          <td className="p-3 font-medium" colSpan={4}>⚙️ Настройки</td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">Курс валюты, налоги</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><Ban className="h-4 w-4 text-red-400 mx-auto" /></td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">Пороги XYZ</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">Глобальный тренд</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                        </tr>
+                        
+                        <tr className="border-b border-border/50">
+                          <td className="p-3 font-medium" colSpan={4}>👥 Администрирование</td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">Управление пользователями</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><Ban className="h-4 w-4 text-red-400 mx-auto" /></td>
+                          <td className="p-3 text-center"><Ban className="h-4 w-4 text-red-400 mx-auto" /></td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">Назначение ролей</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><Ban className="h-4 w-4 text-red-400 mx-auto" /></td>
+                          <td className="p-3 text-center"><Ban className="h-4 w-4 text-red-400 mx-auto" /></td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">Правила рекомендаций</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><Ban className="h-4 w-4 text-red-400 mx-auto" /></td>
+                          <td className="p-3 text-center"><Ban className="h-4 w-4 text-red-400 mx-auto" /></td>
+                        </tr>
+                        <tr className="hover:bg-muted/20">
+                          <td className="p-3 pl-6">Админ-панель</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><Ban className="h-4 w-4 text-red-400 mx-auto" /></td>
+                          <td className="p-3 text-center"><Ban className="h-4 w-4 text-red-400 mx-auto" /></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-4 flex items-center gap-4 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-1"><CheckCircle className="h-4 w-4 text-green-500" /> Доступно</span>
+                    <span className="flex items-center gap-1"><Ban className="h-4 w-4 text-red-400" /> Недоступно</span>
+                  </div>
                 </CardContent>
               </Card>
 
