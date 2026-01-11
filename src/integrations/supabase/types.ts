@@ -136,6 +136,78 @@ export type Database = {
         }
         Relationships: []
       }
+      recommendation_rules: {
+        Row: {
+          action: string
+          action_priority: string
+          action_text: string | null
+          condition_abc: string[] | null
+          condition_days_stockout_max: number | null
+          condition_days_stockout_min: number | null
+          condition_is_new: boolean | null
+          condition_margin_max: number | null
+          condition_margin_min: number | null
+          condition_months_max: number | null
+          condition_months_min: number | null
+          condition_xyz: string[] | null
+          created_at: string
+          description: string | null
+          id: string
+          is_enabled: boolean
+          name: string
+          priority: number
+          send_to_kill_list: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          action?: string
+          action_priority?: string
+          action_text?: string | null
+          condition_abc?: string[] | null
+          condition_days_stockout_max?: number | null
+          condition_days_stockout_min?: number | null
+          condition_is_new?: boolean | null
+          condition_margin_max?: number | null
+          condition_margin_min?: number | null
+          condition_months_max?: number | null
+          condition_months_min?: number | null
+          condition_xyz?: string[] | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_enabled?: boolean
+          name: string
+          priority?: number
+          send_to_kill_list?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          action_priority?: string
+          action_text?: string | null
+          condition_abc?: string[] | null
+          condition_days_stockout_max?: number | null
+          condition_days_stockout_min?: number | null
+          condition_is_new?: boolean | null
+          condition_margin_max?: number | null
+          condition_margin_min?: number | null
+          condition_months_max?: number | null
+          condition_months_min?: number | null
+          condition_xyz?: string[] | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_enabled?: boolean
+          name?: string
+          priority?: number
+          send_to_kill_list?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       runs: {
         Row: {
           created_at: string
