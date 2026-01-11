@@ -1,8 +1,8 @@
-CREATE EXTENSION IF NOT EXISTS "pg_graphql" WITH SCHEMA "graphql";
+CREATE EXTENSION IF NOT EXISTS "pg_graphql";
 CREATE EXTENSION IF NOT EXISTS "pg_stat_statements" WITH SCHEMA "extensions";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA "extensions";
-CREATE EXTENSION IF NOT EXISTS "plpgsql" WITH SCHEMA "pg_catalog";
-CREATE EXTENSION IF NOT EXISTS "supabase_vault" WITH SCHEMA "vault";
+CREATE EXTENSION IF NOT EXISTS "plpgsql";
+CREATE EXTENSION IF NOT EXISTS "supabase_vault";
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
 BEGIN;
 
@@ -30,6 +30,17 @@ SET row_security = off;
 -- Name: public; Type: SCHEMA; Schema: -; Owner: -
 --
 
+
+
+--
+-- Name: app_role; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.app_role AS ENUM (
+    'admin',
+    'full_access',
+    'hidden_cost'
+);
 
 
 --
@@ -190,16 +201,35 @@ CREATE FUNCTION public.analytics_phase2_xyz(p_run_id uuid) RETURNS void
     SET search_path TO 'public'
     SET statement_timeout TO '180s'
     AS $$
+DECLARE
+  v_threshold_x numeric;
+  v_threshold_y numeric;
+  v_user_id uuid;
 BEGIN
+  -- Get user_id from run
+  SELECT user_id INTO v_user_id FROM runs WHERE id = p_run_id;
+  
+  -- Get thresholds from user_settings or use defaults
+  SELECT 
+    COALESCE(xyz_threshold_x, 30),
+    COALESCE(xyz_threshold_y, 60)
+  INTO v_threshold_x, v_threshold_y
+  FROM user_settings 
+  WHERE user_id = v_user_id;
+  
+  -- Use defaults if no settings found
+  IF v_threshold_x IS NULL THEN v_threshold_x := 30; END IF;
+  IF v_threshold_y IS NULL THEN v_threshold_y := 60; END IF;
+
   -- Use correlated subquery with index support
   UPDATE sales_analytics sa
   SET 
     coefficient_of_variation = sub.cv,
-    xyz_group = CASE 
-      WHEN sub.cv <= 10 THEN 'X'
-      WHEN sub.cv <= 25 THEN 'Y'
+    xyz_group = TRIM(CASE 
+      WHEN sub.cv <= v_threshold_x THEN 'X'
+      WHEN sub.cv <= v_threshold_y THEN 'Y'
       ELSE 'Z'
-    END
+    END)
   FROM (
     SELECT 
       article,
@@ -233,7 +263,25 @@ CREATE FUNCTION public.analytics_phase2_xyz_batch(p_run_id uuid, p_offset intege
     AS $$
 DECLARE
   v_count integer;
+  v_threshold_x numeric;
+  v_threshold_y numeric;
+  v_user_id uuid;
 BEGIN
+  -- Get user_id from run
+  SELECT user_id INTO v_user_id FROM runs WHERE id = p_run_id;
+  
+  -- Get thresholds from user_settings or use defaults
+  SELECT 
+    COALESCE(xyz_threshold_x, 30),
+    COALESCE(xyz_threshold_y, 60)
+  INTO v_threshold_x, v_threshold_y
+  FROM user_settings 
+  WHERE user_id = v_user_id;
+  
+  -- Use defaults if no settings found
+  IF v_threshold_x IS NULL THEN v_threshold_x := 30; END IF;
+  IF v_threshold_y IS NULL THEN v_threshold_y := 60; END IF;
+
   WITH batch_articles AS (
     SELECT article
     FROM sales_analytics
@@ -257,12 +305,12 @@ BEGIN
       WHEN ast.avg_qty > 0 THEN ROUND((ast.std_dev / ast.avg_qty) * 100, 2)
       ELSE 0
     END,
-    xyz_group = CASE
+    xyz_group = TRIM(CASE
       WHEN ast.avg_qty = 0 THEN 'Z'
-      WHEN (ast.std_dev / ast.avg_qty) * 100 <= 10 THEN 'X'
-      WHEN (ast.std_dev / ast.avg_qty) * 100 <= 25 THEN 'Y'
+      WHEN (ast.std_dev / ast.avg_qty) * 100 <= v_threshold_x THEN 'X'
+      WHEN (ast.std_dev / ast.avg_qty) * 100 <= v_threshold_y THEN 'Y'
       ELSE 'Z'
-    END
+    END)
   FROM article_stats ast
   WHERE sa.run_id = p_run_id AND sa.article = ast.article;
 
@@ -285,7 +333,25 @@ DECLARE
   v_batch_size integer := 5000;
   v_offset integer := 0;
   v_processed integer := 0;
+  v_threshold_x numeric;
+  v_threshold_y numeric;
+  v_user_id uuid;
 BEGIN
+  -- Get user_id from run
+  SELECT user_id INTO v_user_id FROM runs WHERE id = p_run_id;
+  
+  -- Get thresholds from user_settings or use defaults
+  SELECT 
+    COALESCE(xyz_threshold_x, 30),
+    COALESCE(xyz_threshold_y, 60)
+  INTO v_threshold_x, v_threshold_y
+  FROM user_settings 
+  WHERE user_id = v_user_id;
+  
+  -- Use defaults if no settings found
+  IF v_threshold_x IS NULL THEN v_threshold_x := 30; END IF;
+  IF v_threshold_y IS NULL THEN v_threshold_y := 60; END IF;
+
   LOOP
     WITH batch_articles AS (
       SELECT article
@@ -311,12 +377,12 @@ BEGIN
         WHEN ast.avg_qty > 0 THEN (ast.std_dev / ast.avg_qty) * 100
         ELSE 0
       END,
-      xyz_group = CASE
+      xyz_group = TRIM(CASE
         WHEN ast.avg_qty = 0 THEN 'Z'
-        WHEN (ast.std_dev / ast.avg_qty) * 100 <= 10 THEN 'X'
-        WHEN (ast.std_dev / ast.avg_qty) * 100 <= 25 THEN 'Y'
+        WHEN (ast.std_dev / ast.avg_qty) * 100 <= v_threshold_x THEN 'X'
+        WHEN (ast.std_dev / ast.avg_qty) * 100 <= v_threshold_y THEN 'Y'
         ELSE 'Z'
-      END
+      END)
     FROM article_stats ast
     WHERE sa.run_id = p_run_id AND sa.article = ast.article;
 
@@ -378,32 +444,139 @@ $$;
 CREATE FUNCTION public.analytics_phase4_plans(p_run_id uuid) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
-    SET statement_timeout TO '90s'
+    SET statement_timeout TO '120s'
     AS $$
+DECLARE
+  v_trend_coef numeric;
+  v_user_id uuid;
 BEGIN
+  -- Get user_id from run
+  SELECT user_id INTO v_user_id FROM runs WHERE id = p_run_id;
+  
+  -- Get global trend coefficient from user_settings or use default
+  SELECT COALESCE(global_trend_coef, 1.0)
+  INTO v_trend_coef
+  FROM user_settings 
+  WHERE user_id = v_user_id;
+  
+  -- Use default if no settings found
+  IF v_trend_coef IS NULL THEN v_trend_coef := 1.0; END IF;
+
+  -- Update basic calculations
   UPDATE sales_analytics
   SET 
-    sales_velocity_day = ROUND(COALESCE(avg_monthly_qty, 0) / 30, 4),
+    sales_velocity_day = ROUND(COALESCE(avg_monthly_qty, 0) * v_trend_coef / 30, 4),
     days_until_stockout = CASE 
-      WHEN COALESCE(avg_monthly_qty, 0) > 0 
-      THEN LEAST((COALESCE(current_stock, 0) * 30 / avg_monthly_qty)::integer, 999)
+      WHEN COALESCE(avg_monthly_qty, 0) * v_trend_coef > 0 
+      THEN LEAST((COALESCE(current_stock, 0) * 30 / (avg_monthly_qty * v_trend_coef))::integer, 999)
       ELSE 999
     END,
-    plan_1m = GREATEST(0, ROUND(COALESCE(avg_monthly_qty, 0) * 1 - COALESCE(current_stock, 0)))::integer,
-    plan_3m = GREATEST(0, ROUND(COALESCE(avg_monthly_qty, 0) * 3 - COALESCE(current_stock, 0)))::integer,
-    plan_6m = GREATEST(0, ROUND(COALESCE(avg_monthly_qty, 0) * 6 - COALESCE(current_stock, 0)))::integer,
-    recommendation = CASE 
-      WHEN cumulative_share <= 80 AND coefficient_of_variation <= 10 THEN 'Ключевой товар - максимальный контроль запасов'
-      WHEN cumulative_share <= 80 AND coefficient_of_variation <= 25 THEN 'Важный товар - регулярное пополнение'
-      WHEN cumulative_share <= 80 THEN 'Высокая выручка, нестабильный спрос - анализ причин'
-      WHEN cumulative_share <= 95 AND coefficient_of_variation <= 10 THEN 'Стабильный товар - стандартное управление'
-      WHEN cumulative_share <= 95 AND coefficient_of_variation <= 25 THEN 'Средний приоритет - периодический контроль'
-      WHEN cumulative_share <= 95 THEN 'Средняя выручка, нестабильный спрос - оптимизация'
-      WHEN coefficient_of_variation <= 10 THEN 'Низкая выручка, стабильный спрос - минимум запасов'
-      WHEN coefficient_of_variation <= 25 THEN 'Низкий приоритет - сокращение ассортимента'
-      ELSE 'Кандидат на вывод из ассортимента'
-    END
+    plan_1m = GREATEST(0, ROUND(COALESCE(avg_monthly_qty, 0) * v_trend_coef * 1 - COALESCE(current_stock, 0)))::integer,
+    plan_3m = GREATEST(0, ROUND(COALESCE(avg_monthly_qty, 0) * v_trend_coef * 3 - COALESCE(current_stock, 0)))::integer,
+    plan_6m = GREATEST(0, ROUND(COALESCE(avg_monthly_qty, 0) * v_trend_coef * 6 - COALESCE(current_stock, 0)))::integer
   WHERE run_id = p_run_id;
+
+  -- Update enriched recommendations with priority, action, and details
+  UPDATE sales_analytics sa
+  SET 
+    recommendation_priority = CASE
+      -- Critical: A-class items running out soon
+      WHEN sa.abc_group = 'A' AND COALESCE(sa.xyz_group, 'Z') IN ('X', 'Y') AND sa.days_until_stockout < 14 THEN 'critical'
+      WHEN sa.abc_group = 'A' AND sa.days_until_stockout < 7 THEN 'critical'
+      -- High: A-class needs attention or B-class running out
+      WHEN sa.abc_group = 'A' AND COALESCE(sa.xyz_group, 'Z') = 'X' AND sa.days_until_stockout < 30 THEN 'high'
+      WHEN sa.abc_group = 'A' AND COALESCE(sa.xyz_group, 'Z') = 'Y' AND sa.days_until_stockout < 21 THEN 'high'
+      WHEN sa.abc_group = 'B' AND COALESCE(sa.xyz_group, 'Z') = 'X' AND sa.days_until_stockout < 14 THEN 'high'
+      -- Medium: Regular replenishment needed
+      WHEN sa.abc_group = 'A' AND sa.days_until_stockout < 45 THEN 'medium'
+      WHEN sa.abc_group = 'B' AND sa.days_until_stockout < 30 THEN 'medium'
+      WHEN sa.abc_group = 'A' AND COALESCE(sa.xyz_group, 'Z') = 'Z' THEN 'medium'
+      -- Low: C-class or excess stock
+      WHEN sa.abc_group = 'C' AND sa.days_until_stockout > 90 THEN 'low'
+      WHEN sa.abc_group = 'B' AND sa.days_until_stockout > 60 THEN 'low'
+      ELSE 'none'
+    END,
+    
+    recommendation_action = CASE
+      -- Urgent order needed
+      WHEN sa.abc_group = 'A' AND sa.days_until_stockout < 14 THEN 'order_urgent'
+      WHEN sa.abc_group = 'B' AND COALESCE(sa.xyz_group, 'Z') = 'X' AND sa.days_until_stockout < 14 THEN 'order_urgent'
+      -- Regular order
+      WHEN sa.abc_group IN ('A', 'B') AND sa.days_until_stockout < 30 THEN 'order_regular'
+      WHEN sa.abc_group = 'A' AND COALESCE(sa.xyz_group, 'Z') = 'Z' AND sa.plan_1m > 0 THEN 'order_careful'
+      -- Reduce stock / discontinue
+      WHEN sa.abc_group = 'C' AND COALESCE(sa.xyz_group, 'Z') = 'Z' AND sa.days_until_stockout > 180 THEN 'discontinue'
+      WHEN sa.abc_group = 'C' AND sa.days_until_stockout > 90 THEN 'reduce_stock'
+      WHEN sa.abc_group = 'B' AND COALESCE(sa.xyz_group, 'Z') = 'Z' AND sa.days_until_stockout > 120 THEN 'reduce_stock'
+      -- Monitor
+      ELSE 'monitor'
+    END,
+    
+    recommendation = CASE
+      -- Critical urgent orders
+      WHEN sa.abc_group = 'A' AND COALESCE(sa.xyz_group, 'Z') IN ('X', 'Y') AND sa.days_until_stockout < 14 
+        THEN 'Срочный заказ ' || sa.plan_1m || ' ед. — остаток на ' || sa.days_until_stockout || ' дней'
+      WHEN sa.abc_group = 'A' AND sa.days_until_stockout < 7 
+        THEN 'КРИТИЧНО: заказать ' || sa.plan_1m || ' ед. немедленно'
+      
+      -- High priority orders  
+      WHEN sa.abc_group = 'A' AND COALESCE(sa.xyz_group, 'Z') = 'X' AND sa.days_until_stockout < 30 
+        THEN 'Заказать ' || sa.plan_1m || ' ед. в течение недели'
+      WHEN sa.abc_group = 'A' AND COALESCE(sa.xyz_group, 'Z') = 'Y' AND sa.days_until_stockout < 21 
+        THEN 'Пополнить ' || sa.plan_1m || ' ед. — спрос умеренно стабилен'
+      WHEN sa.abc_group = 'B' AND COALESCE(sa.xyz_group, 'Z') = 'X' AND sa.days_until_stockout < 14 
+        THEN 'Заказать ' || sa.plan_1m || ' ед. — стабильный B-товар'
+      
+      -- Medium priority
+      WHEN sa.abc_group = 'A' AND COALESCE(sa.xyz_group, 'Z') = 'Z' AND sa.plan_1m > 0
+        THEN 'Осторожный заказ ' || GREATEST(1, (sa.plan_1m * 0.7)::integer) || ' ед. — нестабильный спрос'
+      WHEN sa.abc_group = 'A' AND sa.days_until_stockout < 45 
+        THEN 'Запланировать заказ ' || sa.plan_1m || ' ед.'
+      WHEN sa.abc_group = 'B' AND sa.days_until_stockout < 30 
+        THEN 'Пополнить ' || sa.plan_1m || ' ед.'
+      
+      -- Reduce stock / excess
+      WHEN sa.abc_group = 'C' AND COALESCE(sa.xyz_group, 'Z') = 'Z' AND sa.days_until_stockout > 180 
+        THEN 'Вывести из ассортимента — низкая доля и нестаб. спрос'
+      WHEN sa.abc_group = 'C' AND sa.days_until_stockout > 90 
+        THEN 'Избыток ~' || (sa.current_stock - COALESCE(sa.plan_1m, 0) * 2) || ' ед. — распродать со скидкой'
+      WHEN sa.abc_group = 'B' AND COALESCE(sa.xyz_group, 'Z') = 'Z' AND sa.days_until_stockout > 120 
+        THEN 'Оптимизировать остаток — нестабильный спрос'
+      
+      -- Standard monitoring
+      WHEN sa.abc_group = 'A' THEN 'Ключевой товар — контроль остатков'
+      WHEN sa.abc_group = 'B' AND COALESCE(sa.xyz_group, 'Z') IN ('X', 'Y') THEN 'Стандартное пополнение'
+      WHEN sa.abc_group = 'B' THEN 'Периодический контроль'
+      WHEN sa.abc_group = 'C' AND COALESCE(sa.xyz_group, 'Z') = 'X' THEN 'Минимальный запас — стабильный спрос'
+      ELSE 'Кандидат на сокращение ассортимента'
+    END,
+    
+    recommendation_details = jsonb_build_object(
+      'days_left', sa.days_until_stockout,
+      'stock', sa.current_stock,
+      'velocity_day', ROUND(sa.sales_velocity_day::numeric, 2),
+      'velocity_month', ROUND(COALESCE(sa.avg_monthly_qty, 0)::numeric, 1),
+      'plan_qty', sa.plan_1m,
+      'abc', sa.abc_group,
+      'xyz', COALESCE(sa.xyz_group, 'Z'),
+      'cv', ROUND(COALESCE(sa.coefficient_of_variation, 0)::numeric, 1),
+      'revenue_share', ROUND(COALESCE(sa.revenue_share, 0)::numeric, 2)
+    )
+  WHERE run_id = p_run_id;
+
+  -- Enrich with unit economics data if available
+  UPDATE sales_analytics sa
+  SET recommendation_details = sa.recommendation_details || jsonb_build_object(
+    'margin_pct', ROUND(COALESCE(ue.margin_pct, 0)::numeric, 1),
+    'profit_per_unit', ROUND(COALESCE(ue.profit_per_unit, 0)::numeric, 0),
+    'potential_profit', ROUND((COALESCE(ue.profit_per_unit, 0) * sa.plan_1m)::numeric, 0),
+    'has_econ_data', true
+  )
+  FROM unit_econ_inputs ue
+  WHERE sa.run_id = p_run_id 
+    AND ue.user_id = v_user_id
+    AND LOWER(TRIM(sa.article)) = LOWER(TRIM(ue.article));
+
 END;
 $$;
 
@@ -444,6 +617,21 @@ $$;
 
 
 --
+-- Name: get_user_role(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_user_role(_user_id uuid) RETURNS public.app_role
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  SELECT role
+  FROM public.user_roles
+  WHERE user_id = _user_id
+  LIMIT 1
+$$;
+
+
+--
 -- Name: handle_new_user(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -452,11 +640,86 @@ CREATE FUNCTION public.handle_new_user() RETURNS trigger
     SET search_path TO 'public'
     AS $$
 BEGIN
-  INSERT INTO public.profiles (user_id, email)
-  VALUES (NEW.id, NEW.email);
+  INSERT INTO public.profiles (id, user_id, email, full_name, phone, position)
+  VALUES (
+    gen_random_uuid(),
+    NEW.id,
+    NEW.email,
+    NEW.raw_user_meta_data ->> 'full_name',
+    NEW.raw_user_meta_data ->> 'phone',
+    NEW.raw_user_meta_data ->> 'position'
+  );
   RETURN NEW;
 END;
 $$;
+
+
+--
+-- Name: has_role(uuid, public.app_role); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.has_role(_user_id uuid, _role public.app_role) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_roles
+    WHERE user_id = _user_id
+      AND role = _role
+  )
+$$;
+
+
+--
+-- Name: track_unit_econ_changes(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.track_unit_econ_changes() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+DECLARE
+  tracked_fields TEXT[] := ARRAY[
+    'article', 'name', 'category', 'product_url', 'is_new', 'is_recalculation',
+    'fabric_cost_total', 'sewing_cost', 'cutting_cost', 'accessories_cost', 'print_embroidery_cost',
+    'admin_overhead_pct', 'wholesale_markup_pct', 'fx_rate',
+    'unit_cost_real_rub', 'wholesale_price_rub', 'retail_price_rub',
+    'sell_on_wb', 'price_no_spp', 'spp_pct', 'buyout_pct',
+    'logistics_to_client', 'logistics_return_fixed', 'acceptance_rub',
+    'usn_tax_pct', 'vat_pct', 'tax_mode',
+    'competitor_url', 'competitor_price', 'competitor_comment'
+  ];
+  field_name TEXT;
+  old_val TEXT;
+  new_val TEXT;
+  has_changes BOOLEAN := FALSE;
+BEGIN
+  -- Check each tracked field for changes
+  FOREACH field_name IN ARRAY tracked_fields
+  LOOP
+    EXECUTE format('SELECT ($1).%I::TEXT, ($2).%I::TEXT', field_name, field_name)
+      INTO old_val, new_val
+      USING OLD, NEW;
+    
+    IF old_val IS DISTINCT FROM new_val THEN
+      has_changes := TRUE;
+      -- Log the change
+      INSERT INTO public.product_change_log (product_id, user_id, field_name, old_value, new_value)
+      VALUES (NEW.id, NEW.user_id, field_name, old_val, new_val);
+    END IF;
+  END LOOP;
+  
+  -- Only update timestamp if there were actual changes
+  IF has_changes THEN
+    NEW.updated_at := now();
+  ELSE
+    NEW.updated_at := OLD.updated_at;
+  END IF;
+  
+  RETURN NEW;
+END;
+$_$;
 
 
 --
@@ -477,6 +740,21 @@ $$;
 SET default_table_access_method = heap;
 
 --
+-- Name: product_change_log; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.product_change_log (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    product_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    changed_at timestamp with time zone DEFAULT now() NOT NULL,
+    field_name text NOT NULL,
+    old_value text,
+    new_value text
+);
+
+
+--
 -- Name: profiles; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -485,7 +763,12 @@ CREATE TABLE public.profiles (
     user_id uuid NOT NULL,
     email text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    full_name text,
+    phone text,
+    "position" text,
+    approval_status text DEFAULT 'pending'::text NOT NULL,
+    CONSTRAINT profiles_approval_status_check CHECK ((approval_status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text])))
 );
 
 
@@ -544,7 +827,10 @@ CREATE TABLE public.sales_analytics (
     recommendation text,
     created_at timestamp with time zone DEFAULT now(),
     product_group text DEFAULT 'другая'::text,
-    size text DEFAULT ''::text
+    size text DEFAULT ''::text,
+    recommendation_priority text,
+    recommendation_action text,
+    recommendation_details jsonb
 );
 
 
@@ -654,8 +940,77 @@ CREATE TABLE public.unit_econ_inputs (
     competitor_price numeric,
     calculation_date date,
     created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
+    updated_at timestamp with time zone DEFAULT now(),
+    is_recalculation boolean DEFAULT false,
+    sell_on_wb boolean DEFAULT false,
+    price_no_spp numeric,
+    price_with_spp_calculated numeric,
+    buyout_pct numeric DEFAULT 90,
+    logistics_to_client numeric DEFAULT 50,
+    logistics_return_fixed numeric DEFAULT 50,
+    units_shipped_calculated integer,
+    units_return_calculated integer,
+    delivery_cost_total_calculated numeric,
+    delivery_per_unit_calculated numeric,
+    acceptance_total_calculated numeric,
+    investment_total_calculated numeric,
+    tax_mode text DEFAULT 'income_expenses'::text,
+    vat_pct numeric DEFAULT 0,
+    competitor_comment text,
+    margin_pct numeric,
+    profit_per_unit numeric,
+    print_embroidery_work_cost numeric,
+    print_embroidery_materials_cost numeric
 );
+
+
+--
+-- Name: user_roles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.user_roles (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    role public.app_role NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: user_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.user_settings (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    fx_rate numeric DEFAULT 90,
+    admin_overhead_pct numeric DEFAULT 15,
+    wholesale_markup_pct numeric DEFAULT 35,
+    usn_tax_pct numeric DEFAULT 7,
+    vat_pct numeric DEFAULT 0,
+    default_buyout_pct numeric DEFAULT 90,
+    default_logistics_to_client numeric DEFAULT 50,
+    default_logistics_return numeric DEFAULT 50,
+    default_acceptance_fee numeric DEFAULT 50,
+    xyz_threshold_x numeric DEFAULT 30,
+    xyz_threshold_y numeric DEFAULT 60,
+    global_trend_coef numeric DEFAULT 1.0,
+    global_trend_manual boolean DEFAULT false,
+    tax_mode text DEFAULT 'income_expenses'::text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    custom_product_categories jsonb DEFAULT '[]'::jsonb,
+    custom_material_categories jsonb DEFAULT '[]'::jsonb,
+    excluded_articles jsonb DEFAULT '[]'::jsonb
+);
+
+
+--
+-- Name: product_change_log product_change_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_change_log
+    ADD CONSTRAINT product_change_log_pkey PRIMARY KEY (id);
 
 
 --
@@ -731,6 +1086,38 @@ ALTER TABLE ONLY public.unit_econ_inputs
 
 
 --
+-- Name: user_roles user_roles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_roles
+    ADD CONSTRAINT user_roles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: user_roles user_roles_user_id_role_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_roles
+    ADD CONSTRAINT user_roles_user_id_role_key UNIQUE (user_id, role);
+
+
+--
+-- Name: user_settings user_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_settings
+    ADD CONSTRAINT user_settings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: user_settings user_settings_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_settings
+    ADD CONSTRAINT user_settings_user_id_key UNIQUE (user_id);
+
+
+--
 -- Name: idx_analytics_run_revenue; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -738,10 +1125,38 @@ CREATE INDEX idx_analytics_run_revenue ON public.sales_analytics USING btree (ru
 
 
 --
+-- Name: idx_product_change_log_changed_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_product_change_log_changed_at ON public.product_change_log USING btree (changed_at DESC);
+
+
+--
+-- Name: idx_product_change_log_product; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_product_change_log_product ON public.product_change_log USING btree (product_id);
+
+
+--
+-- Name: idx_profiles_approval_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_profiles_approval_status ON public.profiles USING btree (approval_status);
+
+
+--
 -- Name: idx_sales_analytics_abc; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_sales_analytics_abc ON public.sales_analytics USING btree (abc_group);
+
+
+--
+-- Name: idx_sales_analytics_recommendation_priority; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sales_analytics_recommendation_priority ON public.sales_analytics USING btree (run_id, recommendation_priority);
 
 
 --
@@ -892,6 +1307,13 @@ CREATE INDEX idx_unit_econ_inputs_user_id ON public.unit_econ_inputs USING btree
 
 
 --
+-- Name: unit_econ_inputs track_unit_econ_changes_trigger; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER track_unit_econ_changes_trigger BEFORE UPDATE ON public.unit_econ_inputs FOR EACH ROW EXECUTE FUNCTION public.track_unit_econ_changes();
+
+
+--
 -- Name: profiles update_profiles_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -903,6 +1325,21 @@ CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON public.profiles FOR E
 --
 
 CREATE TRIGGER update_unit_econ_inputs_updated_at BEFORE UPDATE ON public.unit_econ_inputs FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: user_settings update_user_settings_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_user_settings_updated_at BEFORE UPDATE ON public.user_settings FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: product_change_log product_change_log_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_change_log
+    ADD CONSTRAINT product_change_log_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.unit_econ_inputs(id) ON DELETE CASCADE;
 
 
 --
@@ -946,10 +1383,60 @@ ALTER TABLE ONLY public.sales_data
 
 
 --
+-- Name: user_roles user_roles_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_roles
+    ADD CONSTRAINT user_roles_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: user_roles Admins can delete roles; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Admins can delete roles" ON public.user_roles FOR DELETE TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role));
+
+
+--
+-- Name: user_roles Admins can insert roles; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Admins can insert roles" ON public.user_roles FOR INSERT TO authenticated WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
+
+
+--
+-- Name: user_roles Admins can update roles; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Admins can update roles" ON public.user_roles FOR UPDATE TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role));
+
+
+--
+-- Name: profiles Admins can view all profiles; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Admins can view all profiles" ON public.profiles FOR SELECT USING (public.has_role(auth.uid(), 'admin'::public.app_role));
+
+
+--
+-- Name: user_roles Admins can view all roles; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Admins can view all roles" ON public.user_roles FOR SELECT TO authenticated USING (public.has_role(auth.uid(), 'admin'::public.app_role));
+
+
+--
 -- Name: sales_analytics Service role can insert analytics; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "Service role can insert analytics" ON public.sales_analytics FOR INSERT WITH CHECK (true);
+
+
+--
+-- Name: product_change_log Service role can insert history; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Service role can insert history" ON public.product_change_log FOR INSERT WITH CHECK (true);
 
 
 --
@@ -1020,6 +1507,13 @@ CREATE POLICY "Users can insert own sales data" ON public.sales_data FOR INSERT 
 
 
 --
+-- Name: user_settings Users can insert own settings; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users can insert own settings" ON public.user_settings FOR INSERT WITH CHECK ((auth.uid() = user_id));
+
+
+--
 -- Name: unit_econ_inputs Users can insert own unit econ data; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1041,6 +1535,13 @@ CREATE POLICY "Users can update own runs" ON public.runs FOR UPDATE USING ((auth
 
 
 --
+-- Name: user_settings Users can update own settings; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users can update own settings" ON public.user_settings FOR UPDATE USING ((auth.uid() = user_id));
+
+
+--
 -- Name: unit_econ_inputs Users can update own unit econ data; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1054,6 +1555,13 @@ CREATE POLICY "Users can update own unit econ data" ON public.unit_econ_inputs F
 CREATE POLICY "Users can view own analytics via run" ON public.sales_analytics FOR SELECT USING ((EXISTS ( SELECT 1
    FROM public.runs
   WHERE ((runs.id = sales_analytics.run_id) AND (runs.user_id = auth.uid())))));
+
+
+--
+-- Name: product_change_log Users can view own product history; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users can view own product history" ON public.product_change_log FOR SELECT USING ((auth.uid() = user_id));
 
 
 --
@@ -1073,6 +1581,13 @@ CREATE POLICY "Users can view own raw data via run" ON public.sales_data_raw FOR
 
 
 --
+-- Name: user_roles Users can view own role; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users can view own role" ON public.user_roles FOR SELECT TO authenticated USING ((auth.uid() = user_id));
+
+
+--
 -- Name: runs Users can view own runs; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -1087,11 +1602,24 @@ CREATE POLICY "Users can view own sales data" ON public.sales_data FOR SELECT US
 
 
 --
+-- Name: user_settings Users can view own settings; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users can view own settings" ON public.user_settings FOR SELECT USING ((auth.uid() = user_id));
+
+
+--
 -- Name: unit_econ_inputs Users can view own unit econ data; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "Users can view own unit econ data" ON public.unit_econ_inputs FOR SELECT USING ((auth.uid() = user_id));
 
+
+--
+-- Name: product_change_log; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.product_change_log ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: profiles; Type: ROW SECURITY; Schema: public; Owner: -
@@ -1128,6 +1656,18 @@ ALTER TABLE public.sales_data_raw ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.unit_econ_inputs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: user_roles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: user_settings; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
 
 --
 -- PostgreSQL database dump complete
