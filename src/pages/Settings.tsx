@@ -12,6 +12,7 @@ import { TAX_MODES } from '@/lib/categories';
 import { Settings as SettingsIcon, Save, Loader2, DollarSign, TrendingUp, Package, Percent, EyeOff, Plus, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { RecommendationRulesPanel } from '@/components/recommendations/RecommendationRulesPanel';
 
 export default function Settings() {
   const { settings, loading, updateSettings } = useUserSettings();
@@ -472,6 +473,9 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Recommendation Rules */}
+          <RecommendationRulesPanel />
         </div>
       </div>
     </AppLayout>
