@@ -103,6 +103,26 @@ serve(async (req) => {
     await supabase.from('runs').update({ status: 'PROCESSING' }).eq('id', runId);
     await appendLog(supabase, runId, 'INFO', 'analytics', 'Запуск SQL-аналитики');
 
+    // Auto-expire "is_new" status for products where is_new_until has passed
+    console.log(`[run-analytics-sql] Checking for expired "is_new" statuses...`);
+    const { data: expiredNewProducts, error: expireError } = await supabase
+      .from('unit_econ_inputs')
+      .update({ is_new: false, is_new_until: null })
+      .eq('user_id', userId)
+      .eq('is_new', true)
+      .lt('is_new_until', new Date().toISOString())
+      .select('article');
+
+    if (expireError) {
+      console.warn(`[run-analytics-sql] Failed to expire is_new statuses: ${expireError.message}`);
+    } else if (expiredNewProducts && expiredNewProducts.length > 0) {
+      console.log(`[run-analytics-sql] Expired "is_new" for ${expiredNewProducts.length} products`);
+      await appendLog(supabase, runId, 'INFO', 'is_new_expire', 
+        `Статус "новинка" снят с ${expiredNewProducts.length} товаров (прошло 6 месяцев)`, 
+        { articles: expiredNewProducts.map(p => p.article) }
+      );
+    }
+
     // Phase 1: Basic aggregation (BATCHED to avoid timeout)
     console.log(`[run-analytics-sql] Phase 1: Basic aggregation (batched)...`);
     const phase1Start = Date.now();

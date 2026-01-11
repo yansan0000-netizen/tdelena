@@ -11,6 +11,7 @@ export interface UnitEconInput {
   category: string | null;
   product_url: string | null;
   is_new: boolean;
+  is_new_until: string | null; // Auto-expires after 6 months
   
   // Production
   units_in_cut: number | null;
@@ -173,11 +174,23 @@ export function useCosts() {
     // Calculate derived fields
     const derived = calculateDerivedFields(input);
     
+    // If is_new is being set to true, calculate is_new_until (6 months from now)
+    let is_new_until: string | null = undefined as unknown as string | null;
+    if (input.is_new === true) {
+      const sixMonthsFromNow = new Date();
+      sixMonthsFromNow.setMonth(sixMonthsFromNow.getMonth() + 6);
+      is_new_until = sixMonthsFromNow.toISOString();
+    } else if (input.is_new === false) {
+      is_new_until = null;
+    }
+    
     const record = {
       ...input,
       ...derived,
       user_id: user.id,
       calculation_date: new Date().toISOString().split('T')[0],
+      // Only set is_new_until if is_new was explicitly changed
+      ...(input.is_new !== undefined ? { is_new_until } : {}),
     };
     
     const { error } = await supabase
