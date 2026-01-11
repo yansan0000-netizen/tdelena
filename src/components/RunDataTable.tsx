@@ -14,8 +14,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Search, Filter, ChevronLeft, ChevronRight, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Loader2, Search, Filter, ChevronLeft, ChevronRight, X, ArrowUpDown, ArrowUp, ArrowDown, Skull } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useArticleCatalog } from '@/hooks/useArticleCatalog';
+import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
 
 type SortDirection = 'asc' | 'desc' | null;
 
@@ -31,6 +35,8 @@ interface DataRow {
 const ROWS_PER_PAGE = 20;
 
 export function RunDataTable({ processedFilePath, resultFilePath }: RunDataTableProps) {
+  const { user } = useAuth();
+  const { articles: catalogArticles, updateArticle } = useArticleCatalog();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<DataRow[]>([]);
   const [columns, setColumns] = useState<string[]>([]);
@@ -53,6 +59,42 @@ export function RunDataTable({ processedFilePath, resultFilePath }: RunDataTable
   
   // Source selection
   const [dataSource, setDataSource] = useState<'processed' | 'result'>('result');
+
+  // Check if article is in kill list
+  const isInKillList = (articleCode: string): boolean => {
+    return catalogArticles.some(a => a.article === articleCode && a.is_in_kill_list);
+  };
+
+  // Add article to kill list
+  const handleAddToKillList = async (articleCode: string) => {
+    const catalogItem = catalogArticles.find(a => a.article === articleCode);
+    if (catalogItem) {
+      updateArticle.mutate({
+        id: catalogItem.id,
+        updates: { is_in_kill_list: true },
+      });
+      toast.success(`${articleCode} добавлен в Kill-лист`);
+    } else {
+      // Article not in catalog yet, need to add it first
+      if (!user?.id) return;
+      
+      const { error: insertError } = await supabase
+        .from('article_catalog')
+        .insert({
+          user_id: user.id,
+          article: articleCode,
+          is_in_kill_list: true,
+          kill_list_added_at: new Date().toISOString(),
+        });
+      
+      if (insertError) {
+        toast.error('Не удалось добавить в Kill-лист');
+        console.error(insertError);
+      } else {
+        toast.success(`${articleCode} добавлен в Kill-лист`);
+      }
+    }
+  };
 
   // Load data from Excel file
   const loadData = async () => {
@@ -470,7 +512,17 @@ export function RunDataTable({ processedFilePath, resultFilePath }: RunDataTable
                 <Table>
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
-                      {columns.slice(0, 15).map((col) => (
+                      <TableHead className="w-10 text-center">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Skull className="h-4 w-4 mx-auto text-muted-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Добавить в Kill-лист</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TableHead>
+                      {columns.slice(0, 14).map((col) => (
                         <TableHead 
                           key={col} 
                           className="whitespace-nowrap font-semibold cursor-pointer hover:bg-muted/50 select-none"
@@ -482,9 +534,9 @@ export function RunDataTable({ processedFilePath, resultFilePath }: RunDataTable
                           </div>
                         </TableHead>
                       ))}
-                      {columns.length > 15 && (
+                      {columns.length > 14 && (
                         <TableHead className="text-muted-foreground">
-                          +{columns.length - 15} колонок
+                          +{columns.length - 14} колонок
                         </TableHead>
                       )}
                     </TableRow>
@@ -492,29 +544,66 @@ export function RunDataTable({ processedFilePath, resultFilePath }: RunDataTable
                   <TableBody>
                     {paginatedData.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={Math.min(columns.length, 16)} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={Math.min(columns.length + 1, 16)} className="text-center py-8 text-muted-foreground">
                           Нет данных для отображения
                         </TableCell>
                       </TableRow>
                     ) : (
-                      paginatedData.map((row, rowIndex) => (
-                        <TableRow key={rowIndex} className="hover:bg-muted/50">
-                          {columns.slice(0, 15).map((col) => (
-                            <TableCell 
-                              key={col} 
-                              className={cn(
-                                'whitespace-nowrap text-sm',
-                                getCellClassName(row[col], col)
+                      paginatedData.map((row, rowIndex) => {
+                        const articleCode = String(row['Артикул'] || row['Article'] || '');
+                        const inKillList = isInKillList(articleCode);
+                        
+                        return (
+                          <TableRow 
+                            key={rowIndex} 
+                            className={cn(
+                              "hover:bg-muted/50",
+                              inKillList && "bg-destructive/5"
+                            )}
+                          >
+                            <TableCell className="text-center">
+                              {inKillList ? (
+                                <Badge variant="destructive" className="text-xs px-1.5">
+                                  Kill
+                                </Badge>
+                              ) : (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                        onClick={() => handleAddToKillList(articleCode)}
+                                        disabled={!articleCode}
+                                      >
+                                        <Skull className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Добавить в Kill-лист</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
                               )}
-                            >
-                              {formatCellValue(row[col], col)}
                             </TableCell>
-                          ))}
-                          {columns.length > 15 && (
-                            <TableCell className="text-muted-foreground text-xs">...</TableCell>
-                          )}
-                        </TableRow>
-                      ))
+                            {columns.slice(0, 14).map((col) => (
+                              <TableCell 
+                                key={col} 
+                                className={cn(
+                                  'whitespace-nowrap text-sm',
+                                  getCellClassName(row[col], col)
+                                )}
+                              >
+                                {formatCellValue(row[col], col)}
+                              </TableCell>
+                            ))}
+                            {columns.length > 14 && (
+                              <TableCell className="text-muted-foreground text-xs">...</TableCell>
+                            )}
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
