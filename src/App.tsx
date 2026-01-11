@@ -17,6 +17,7 @@ import Settings from "./pages/Settings";
 import AdminPanel from "./pages/AdminPanel";
 import ArticleCatalog from "./pages/ArticleCatalog";
 import KillList from "./pages/KillList";
+import AssortmentAnalysis from "./pages/AssortmentAnalysis";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -101,6 +102,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <KillList />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/assortment"
+              element={
+                <ProtectedRoute>
+                  <AssortmentAnalysis />
                 </ProtectedRoute>
               }
             />
