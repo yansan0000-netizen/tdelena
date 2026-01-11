@@ -3,11 +3,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { FileSpreadsheet, Upload, BarChart3, Download, TrendingUp, Package, Calculator, AlertTriangle, CheckCircle, DollarSign, Layers, FileUp, Link2, Settings, History, Store, Filter, FileDown, Ban, Sparkles, UserPlus, LineChart, FileText } from 'lucide-react';
+import { 
+  FileSpreadsheet, Upload, BarChart3, Download, TrendingUp, Package, Calculator, 
+  AlertTriangle, CheckCircle, DollarSign, Layers, FileUp, Link2, Settings, History, 
+  Store, Filter, FileDown, Ban, Sparkles, UserPlus, LineChart, FileText, Lock,
+  Users, Shield, Eye, EyeOff, Skull, Target, Percent, ArrowDownUp
+} from 'lucide-react';
 import { exportDocumentationToPDF } from '@/lib/documentationExport';
 import { toast } from 'sonner';
+import { useUserRole } from '@/hooks/useUserRole';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function Documentation() {
+  const { role, isAdmin, hasFullAccess, shouldHideCost, loading } = useUserRole();
+
   const handleExportPDF = () => {
     try {
       exportDocumentationToPDF();
@@ -17,6 +26,18 @@ export default function Documentation() {
       toast.error('Ошибка экспорта документации');
     }
   };
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="max-w-4xl mx-auto space-y-8">
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-96 w-full" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
@@ -31,6 +52,12 @@ export default function Documentation() {
               <p className="text-muted-foreground mt-2 leading-relaxed">
                 Система ABC/XYZ анализа, планирования производства и юнит-экономики
               </p>
+              <div className="mt-3 flex items-center gap-2">
+                <Badge variant="outline" className="gap-1">
+                  <Shield className="h-3 w-3" />
+                  Ваша роль: {role === 'admin' ? 'Администратор' : role === 'full_access' ? 'Полный доступ' : 'Скрытая себестоимость'}
+                </Badge>
+              </div>
             </div>
             <Button onClick={handleExportPDF} variant="outline" className="gap-2">
               <FileText className="h-4 w-4" />
@@ -44,13 +71,14 @@ export default function Documentation() {
             <TabsTrigger value="overview">Обзор</TabsTrigger>
             <TabsTrigger value="format">Формат файла</TabsTrigger>
             <TabsTrigger value="analysis">Анализ</TabsTrigger>
+            <TabsTrigger value="assortment">Ассортимент</TabsTrigger>
+            <TabsTrigger value="killlist">Kill-лист</TabsTrigger>
+            {hasFullAccess && <TabsTrigger value="unit-economics">Юнит-экономика</TabsTrigger>}
             <TabsTrigger value="forecast">Прогноз</TabsTrigger>
-            <TabsTrigger value="output">Результаты</TabsTrigger>
             <TabsTrigger value="export">Экспорт</TabsTrigger>
-            <TabsTrigger value="unit-economics">Юнит-экономика</TabsTrigger>
             <TabsTrigger value="settings">Настройки</TabsTrigger>
-            <TabsTrigger value="auth">Регистрация</TabsTrigger>
-            <TabsTrigger value="quality">Качество</TabsTrigger>
+            {isAdmin && <TabsTrigger value="admin">Администрирование</TabsTrigger>}
+            <TabsTrigger value="roles">Роли</TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -94,15 +122,31 @@ export default function Documentation() {
                   <li className="flex items-start gap-3">
                     <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
                     <div>
-                      <strong>Юнит-экономика</strong> — расчёт себестоимости, маржи, прибыли и WB-сценариев
+                      <strong>Анализ ассортимента</strong> — выявление прибыльных, убыточных и залежавшихся товаров
                     </div>
                   </li>
                   <li className="flex items-start gap-3">
                     <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
                     <div>
-                      <strong>История изменений</strong> — отслеживание всех изменений карточек товаров
+                      <strong>Kill-лист</strong> — управление выводом товаров с автоматической лесенкой цен
                     </div>
                   </li>
+                  {hasFullAccess && (
+                    <>
+                      <li className="flex items-start gap-3">
+                        <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                        <div>
+                          <strong>Юнит-экономика</strong> — расчёт себестоимости, маржи, прибыли и WB-сценариев
+                        </div>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                        <div>
+                          <strong>История изменений</strong> — отслеживание всех изменений карточек товаров
+                        </div>
+                      </li>
+                    </>
+                  )}
                   <li className="flex items-start gap-3">
                     <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
                     <div>
@@ -140,14 +184,22 @@ export default function Documentation() {
                       <strong>Дождитесь обработки</strong> — система автоматически распознает структуру и обработает данные
                     </div>
                   </li>
+                  {hasFullAccess && (
+                    <li className="flex items-start gap-3">
+                      <Badge className="shrink-0">4</Badge>
+                      <div>
+                        <strong>Заполните себестоимость</strong> — перейдите в раздел «Юнит-экономика» и добавьте данные
+                      </div>
+                    </li>
+                  )}
                   <li className="flex items-start gap-3">
-                    <Badge className="shrink-0">4</Badge>
+                    <Badge className="shrink-0">{hasFullAccess ? '5' : '4'}</Badge>
                     <div>
-                      <strong>Заполните себестоимость</strong> — перейдите в раздел «Юнит-экономика» и добавьте данные
+                      <strong>Анализируйте ассортимент</strong> — выявите товары на развитие и на вывод
                     </div>
                   </li>
                   <li className="flex items-start gap-3">
-                    <Badge className="shrink-0">5</Badge>
+                    <Badge className="shrink-0">{hasFullAccess ? '6' : '5'}</Badge>
                     <div>
                       <strong>Скачайте результаты</strong> — получите готовые отчёты с анализом и экономикой
                     </div>
@@ -313,20 +365,20 @@ export default function Documentation() {
                       <tr className="border-b">
                         <td className="p-2 font-medium">A</td>
                         <td className="p-2 text-center bg-green-500/10">Максимальный контроль</td>
-                        <td className="p-2 text-center bg-amber-500/10">Регулярное пополнение</td>
-                        <td className="p-2 text-center bg-orange-500/10">Анализ причин</td>
+                        <td className="p-2 text-center bg-blue-500/10">Регулярное пополнение</td>
+                        <td className="p-2 text-center bg-amber-500/10">Анализировать</td>
                       </tr>
                       <tr className="border-b">
                         <td className="p-2 font-medium">B</td>
-                        <td className="p-2 text-center bg-blue-500/10">Стандартное управление</td>
-                        <td className="p-2 text-center bg-purple-500/10">Периодический контроль</td>
-                        <td className="p-2 text-center bg-orange-500/10">Оптимизация</td>
+                        <td className="p-2 text-center bg-blue-500/10">Регулярный заказ</td>
+                        <td className="p-2 text-center bg-amber-500/10">Страховой запас</td>
+                        <td className="p-2 text-center bg-orange-500/10">Сократить запас</td>
                       </tr>
                       <tr>
                         <td className="p-2 font-medium">C</td>
-                        <td className="p-2 text-center bg-gray-500/10">Минимум запасов</td>
-                        <td className="p-2 text-center bg-red-500/10">Сокращение</td>
-                        <td className="p-2 text-center bg-red-500/10">Вывод из ассортимента</td>
+                        <td className="p-2 text-center bg-amber-500/10">Минимальные заказы</td>
+                        <td className="p-2 text-center bg-orange-500/10">Сократить ассортимент</td>
+                        <td className="p-2 text-center bg-red-500/10">Вывести</td>
                       </tr>
                     </tbody>
                   </table>
@@ -335,79 +387,60 @@ export default function Documentation() {
             </Card>
           </TabsContent>
 
-          {/* Forecast Tab */}
-          <TabsContent value="forecast" className="space-y-6">
+          {/* Assortment Analysis Tab */}
+          <TabsContent value="assortment" className="space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-primary" />
-                  Прогнозирование продаж
+                  <Target className="h-5 w-5 text-primary" />
+                  Анализ ассортимента
                 </CardTitle>
-                <CardDescription>Методы прогнозирования и сезонная корректировка</CardDescription>
+                <CardDescription>Выявление прибыльных, убыточных и залежавшихся товаров</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Система поддерживает несколько методов прогнозирования с возможностью сезонной корректировки:
-                </p>
-                
-                <div className="grid gap-3">
-                  <div className="flex items-center gap-4 p-4 bg-primary/10 border border-primary/20 rounded-xl backdrop-blur-sm">
-                    <Badge className="bg-primary text-primary-foreground px-3 py-1">1</Badge>
+                <p>Модуль помогает понять:</p>
+                <ul className="space-y-3">
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
                     <div>
-                      <div className="font-medium">Линейная регрессия</div>
-                      <div className="text-sm text-muted-foreground">
-                        Классический метод: y = mx + b. Лучше всего работает при устойчивом тренде без резких колебаний.
-                      </div>
+                      <strong>Какие товары развивать</strong> — прибыльные товары с хорошими продажами
                     </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl backdrop-blur-sm">
-                    <Badge className="bg-blue-600 text-white px-3 py-1">2</Badge>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
                     <div>
-                      <div className="font-medium">Экспоненциальное сглаживание (Holt)</div>
-                      <div className="text-sm text-muted-foreground">
-                        Учитывает уровень и тренд с адаптивными коэффициентами (α=0.3, β=0.1). Хорош при изменяющемся тренде.
-                      </div>
+                      <strong>Какие товары убрать</strong> — невыгодные или залежавшиеся товары
                     </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-4 p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl backdrop-blur-sm">
-                    <Badge className="bg-purple-600 text-white px-3 py-1">3</Badge>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
                     <div>
-                      <div className="font-medium">Скользящее среднее</div>
-                      <div className="text-sm text-muted-foreground">
-                        Простой метод на основе среднего за последние 3 периода. Хорош при стабильных продажах без выраженного тренда.
-                      </div>
+                      <strong>Где расширить линейку</strong> — категории с высоким спросом
                     </div>
-                  </div>
-                </div>
+                  </li>
+                </ul>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <LineChart className="h-5 w-5 text-primary" />
-                  Сезонная корректировка
-                </CardTitle>
+                <CardTitle>Экраны модуля</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30 space-y-3">
-                  <h4 className="font-medium">Как работает сезонность?</h4>
-                  <ul className="list-disc list-inside text-sm text-muted-foreground space-y-2">
-                    <li>Система рассчитывает коэффициенты для каждого месяца на основе исторических данных</li>
-                    <li>Коэффициент {'>'} 1 означает сезон с повышенными продажами</li>
-                    <li>Коэффициент {'<'} 1 означает сезон со сниженными продажами</li>
-                    <li>Для расчёта требуется минимум 12 месяцев данных</li>
-                  </ul>
-                </div>
-
-                <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl backdrop-blur-sm">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
-                    <p className="text-sm">
-                      <strong>Важно:</strong> Точность прогноза (R²) показывает, насколько хорошо модель описывает данные.
-                      R² {'>'} 80% — высокая точность, 50-80% — средняя, {'<'} 50% — низкая.
+                <div className="grid gap-3">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📊 Сводка ассортимента</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Общая картина: сколько товаров продаётся хорошо/средне/плохо, сколько убыточных, 
+                      сколько денег и прибыли даёт ассортимент.
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📋 Таблица товаров</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Для каждого товара: продажи, остаток, дней хватит, прогноз, 
+                      {hasFullAccess && ' прибыль на штуку, '} рекомендация и причина.
                     </p>
                   </div>
                 </div>
@@ -416,90 +449,371 @@ export default function Documentation() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Настройки прогноза</CardTitle>
+                <CardTitle>Типы рекомендаций</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-3 text-sm">
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <strong>Метод прогноза</strong> — выбор алгоритма: линейная регрессия, экспоненциальное сглаживание, скользящее среднее
+                <div className="grid gap-3">
+                  <div className="flex items-center gap-4 p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
+                    <Badge className="bg-green-600 text-white">Расширить</Badge>
+                    <div className="text-sm text-muted-foreground">
+                      Товар хорошо продаётся и выгоден — добавить варианты, увеличить закупку
+                    </div>
                   </div>
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <strong>Горизонт прогноза</strong> — от 1 до 12 месяцев вперёд
+                  
+                  <div className="flex items-center gap-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                    <Badge className="bg-blue-600 text-white">Оставить</Badge>
+                    <div className="text-sm text-muted-foreground">
+                      Стабильные показатели — поддерживать текущий уровень
+                    </div>
                   </div>
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <strong>Сезонность</strong> — включение/выключение сезонной корректировки
+                  
+                  <div className="flex items-center gap-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                    <Badge className="bg-amber-600 text-white">Сократить</Badge>
+                    <div className="text-sm text-muted-foreground">
+                      Низкая эффективность — уменьшить объём закупки
+                    </div>
                   </div>
+                  
+                  <div className="flex items-center gap-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                    <Badge className="bg-red-600 text-white">Убрать</Badge>
+                    <div className="text-sm text-muted-foreground">
+                      Убыточный или залежавшийся товар — кандидат в kill-лист
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Критерии рекомендаций</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                  <h4 className="font-medium mb-2">🚫 Кандидат на вывод (убрать)</h4>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    <li>• Товар не приносит прибыль (в минус или почти в ноль)</li>
+                    <li>• Плохо продаётся и лежит на складе слишком долго</li>
+                    <li>• Нет продаж за выбранный период, а остаток есть</li>
+                  </ul>
+                </div>
+                
+                <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
+                  <h4 className="font-medium mb-2">✅ Кандидат на расширение</h4>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    <li>• Товар в топе по продажам/выручке</li>
+                    <li>• Товар прибыльный</li>
+                    <li>• Остаток быстро заканчивается или прогноз показывает высокий спрос</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Kill-list Tab */}
+          <TabsContent value="killlist" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Skull className="h-5 w-5 text-primary" />
+                  Kill-лист
+                </CardTitle>
+                <CardDescription>Управление выводом товаров из ассортимента</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p>
+                  Kill-лист — это список товаров, которые компания решила вывести из ассортимента.
+                  Система помогает распродать остатки правильно.
+                </p>
+                <ul className="space-y-3">
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                    <div>
+                      <strong>Список на вывод</strong> — с причинами и датами
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                    <div>
+                      <strong>Автоматическая лесенка цен</strong> — постепенное снижение по графику
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                    <div>
+                      <strong>Контроль прогресса</strong> — отслеживание выполнения плана
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                    <div>
+                      <strong>История действий</strong> — кто добавил, кто менял цены
+                    </div>
+                  </li>
+                </ul>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ArrowDownUp className="h-5 w-5 text-primary" />
+                  Лесенка цен
+                </CardTitle>
+                <CardDescription>Автоматический расчёт постепенного снижения</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3">
                   <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <strong>Показатель</strong> — выручка или количество продаж
+                    <h4 className="font-medium mb-2">⚙️ Параметры лесенки</h4>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      <li>• Срок распродажи (например, 30 дней)</li>
+                      <li>• Количество шагов (например, 4 шага)</li>
+                      <li>• Минимальная цена (ниже которой не опускаться)</li>
+                      <li>• Округление (до 10/50 или .99)</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📊 Пример плана</h4>
+                    <div className="text-sm text-muted-foreground space-y-1">
+                      <div>Шаг 1: 01.02 → 2 990 ₽</div>
+                      <div>Шаг 2: 08.02 → 2 490 ₽</div>
+                      <div>Шаг 3: 15.02 → 1 990 ₽</div>
+                      <div>Шаг 4: 22.02 → 1 490 ₽</div>
+                    </div>
+                  </div>
+                </div>
+
+                {hasFullAccess && (
+                  <div className="flex items-start gap-3 p-4 bg-primary/5 border border-primary/20 rounded-xl">
+                    <Percent className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                    <p className="text-sm">
+                      На каждом шаге показывается прибыль/убыток на штуку для контроля маржинальности.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Добавление товаров</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">Способы добавления</h4>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      <li>• Из «Анализа ассортимента» одной кнопкой</li>
+                      <li>• Вручную по поиску артикула</li>
+                      <li>• Импортом списка</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">Что указывается</h4>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      <li>• Причина вывода (из списка + комментарий)</li>
+                      <li>• Срок распродажи (14/30/60 дней)</li>
+                      <li>• Минимальная допустимая цена</li>
+                      <li>• Стратегия: авто-лесенка или ручная</li>
+                    </ul>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Контроль прогресса</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3">
+                  <div className="flex items-center gap-4 p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
+                    <Badge className="bg-green-600 text-white">По плану</Badge>
+                    <div className="text-sm text-muted-foreground">
+                      Распродажа идёт согласно графику
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                    <Badge className="bg-amber-600 text-white">Отстаём</Badge>
+                    <div className="text-sm text-muted-foreground">
+                      Нужно сделать скидку сильнее или увеличить срок
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                    <Badge className="bg-blue-600 text-white">Завершено</Badge>
+                    <div className="text-sm text-muted-foreground">
+                      Товар успешно распродан
+                    </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Output Tab */}
-          <TabsContent value="output" className="space-y-6">
+          {/* Unit Economics Tab - Only for full_access and admin */}
+          {hasFullAccess && (
+            <TabsContent value="unit-economics" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-primary" />
+                    Назначение модуля
+                  </CardTitle>
+                  <CardDescription>Расчёт себестоимости и маржинальности</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <ul className="space-y-3">
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                      <div>
+                        <strong>Расчёт себестоимости</strong> — материалы, работа, накладные расходы
+                      </div>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                      <div>
+                        <strong>Маржинальность и чистая прибыль</strong> — отображаются в таблице товаров
+                      </div>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                      <div>
+                        <strong>История изменений</strong> — полный лог всех изменений карточки товара
+                      </div>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                      <div>
+                        <strong>Экспорт в Excel</strong> — выгрузка всех данных со сводкой
+                      </div>
+                    </li>
+                  </ul>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Layers className="h-5 w-5 text-primary" />
+                    Структура себестоимости
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-3">
+                    <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                      <h4 className="font-medium mb-2">🧵 Ткани (до 3-х видов)</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Название, цена ($/кг), вес на единицу. Автоматический пересчёт по курсу.
+                      </p>
+                    </div>
+                    
+                    <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                      <h4 className="font-medium mb-2">✂️ Работа</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Раскрой и пошив — отдельные поля для точного учёта.
+                      </p>
+                    </div>
+                    
+                    <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                      <h4 className="font-medium mb-2">🎨 Вышивка/Принт</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Разделены на работу и материалы для точного учёта затрат.
+                      </p>
+                    </div>
+                    
+                    <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                      <h4 className="font-medium mb-2">🔧 Фурнитура</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Молнии, пуговицы, лейблы и т.д.
+                      </p>
+                    </div>
+                    
+                    <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                      <h4 className="font-medium mb-2">📊 Накладные расходы</h4>
+                      <p className="text-sm text-muted-foreground">
+                        % от себестоимости на административные расходы.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Store className="h-5 w-5 text-primary" />
+                    Wildberries (WB-модуль)
+                  </CardTitle>
+                  <CardDescription>Расчёт юнит-экономики для маркетплейса</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl backdrop-blur-sm">
+                    <p className="text-sm">
+                      Модуль активируется переключателем <strong>«Продавать на WB»</strong> в карточке товара.
+                    </p>
+                  </div>
+                  <div className="grid gap-3">
+                    <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                      <h4 className="font-medium mb-2">📊 Ценообразование с СПП</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Цена без СПП × (1 - СПП%) = Цена с СПП
+                      </p>
+                    </div>
+                    
+                    <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                      <h4 className="font-medium mb-2">🚚 Логистика с возвратами</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Учитывается % выкупа, логистика до клиента и возврата.
+                      </p>
+                    </div>
+                    
+                    <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                      <h4 className="font-medium mb-2">💰 Налоги</h4>
+                      <p className="text-sm text-muted-foreground">
+                        УСН или УСН + НДС — налог считается в WB-модуле.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {/* Forecast Tab */}
+          <TabsContent value="forecast" className="space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Download className="h-5 w-5" />
-                  Выходные файлы
+                  <LineChart className="h-5 w-5 text-primary" />
+                  Методы прогнозирования
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30 space-y-3">
-                  <h4 className="font-medium flex items-center gap-2">
-                    <BarChart3 className="h-4 w-4" />
-                    Отчёт ABC/XYZ (XLSX)
-                  </h4>
-                  <p className="text-sm text-muted-foreground">
-                    Полный отчёт со всеми показателями по каждому артикулу:
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="glass">Артикул</Badge>
-                    <Badge variant="glass">Категория</Badge>
-                    <Badge variant="glass">ABC</Badge>
-                    <Badge variant="glass">XYZ</Badge>
-                    <Badge variant="glass">Кол-во продаж</Badge>
-                    <Badge variant="glass">Остаток</Badge>
-                    <Badge variant="glass">Скорость/день</Badge>
-                    <Badge variant="glass">Дней до 0</Badge>
-                    <Badge variant="glass">План 1м/3м/6м</Badge>
-                    <Badge variant="glass">Рекомендация</Badge>
+                <div className="grid gap-3">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📈 Линейная регрессия</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Вычисляет линию тренда на основе исторических данных: y = a + b×x
+                    </p>
                   </div>
-                </div>
-
-                <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl backdrop-blur-sm space-y-3">
-                  <h4 className="font-medium flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-primary" />
-                    Листы с динамикой продаж
-                  </h4>
-                  <p className="text-sm text-muted-foreground">
-                    Отчёт включает дополнительные листы:
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="glass" className="bg-primary/10">Динамика продаж</Badge>
-                    <Badge variant="glass" className="bg-primary/10">Продажи по периодам</Badge>
-                    <Badge variant="glass" className="bg-primary/10">Топ-20 динамика</Badge>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📊 Экспоненциальное сглаживание</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Недавние наблюдения имеют больший вес: F(t+1) = α × Y(t) + (1-α) × F(t)
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Эти листы показывают продажи за все периоды для анализа динамики.
-                  </p>
-                </div>
-
-                <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30 space-y-3">
-                  <h4 className="font-medium flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-primary" />
-                    Колонки с юнит-экономикой
-                  </h4>
-                  <p className="text-sm text-muted-foreground">
-                    При наличии данных о себестоимости добавляются:
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="glass" className="bg-primary/10">Себестоимость</Badge>
-                    <Badge variant="glass" className="bg-primary/10">Маржа/шт</Badge>
-                    <Badge variant="glass" className="bg-primary/10">Маржинальность %</Badge>
-                    <Badge variant="glass" className="bg-primary/10">Прибыль</Badge>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📉 Скользящая средняя</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Среднее за последние N периодов с сезонной корректировкой.
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -507,24 +821,21 @@ export default function Documentation() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Формулы расчёта</CardTitle>
+                <CardTitle>Глобальный тренд</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-3 text-sm">
+                <p className="text-sm text-muted-foreground">
+                  Коэффициент применяется ко всем прогнозам:
+                </p>
+                <div className="grid gap-3">
                   <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <strong>Ср. месячные продажи</strong> = Общее кол-во продаж / Число периодов
+                    <code className="text-sm">= 1.0</code> — без изменений
                   </div>
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <strong>Скорость продаж/день</strong> = Ср.мес.продажи × Тренд / 30
+                  <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
+                    <code className="text-sm">&gt; 1.0</code> — ожидается рост (например, 1.2 = +20%)
                   </div>
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <strong>Дней до нуля</strong> = Текущий остаток / Скорость в день
-                  </div>
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <strong>План на N мес.</strong> = max(0, Ср.мес.продажи × Тренд × N − Остаток)
-                  </div>
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <strong>CV (коэфф. вариации)</strong> = (Стандартное отклонение / Среднее) × 100%
+                  <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                    <code className="text-sm">&lt; 1.0</code> — ожидается падение (например, 0.8 = -20%)
                   </div>
                 </div>
               </CardContent>
@@ -536,312 +847,66 @@ export default function Documentation() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
+                  <Download className="h-5 w-5 text-primary" />
+                  Варианты экспорта
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3">
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📊 Отчёт ABC/XYZ (Excel)</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Полный анализ со всеми метриками и группировками.
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📋 План производства (Excel)</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Приоритетный план на 1, 3 и 6 месяцев.
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                    <h4 className="font-medium mb-2">📄 Отчёты (PDF)</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Печатные версии с цветовой кодировкой.
+                    </p>
+                  </div>
+                  
+                  {hasFullAccess && (
+                    <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                      <h4 className="font-medium mb-2">💰 Юнит-экономика (Excel)</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Все поля по каждому артикулу: себестоимость, ткани, маржа.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
                   <Filter className="h-5 w-5 text-primary" />
-                  Фильтрация экспорта
-                </CardTitle>
-                <CardDescription>Гибкая настройка выгрузки отчётов</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  На странице деталей запуска доступна панель фильтров для настройки экспорта:
-                </p>
-                <div className="grid gap-3">
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">📅 Фильтр по периодам</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Выберите конкретные месяцы для включения в отчёт динамики продаж
-                    </p>
-                  </div>
-                  
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">📂 Фильтр по категориям</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Отфильтруйте товары по категориям (например, «Платья», «Юбки»)
-                    </p>
-                  </div>
-                  
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">🏷️ Фильтр по ABC/XYZ группам</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Выберите только определённые группы (например, только A+X для ключевых товаров)
-                    </p>
-                  </div>
-                  
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">📦 Фильтр по товарным группам</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Группировка по типам продукции
-                    </p>
-                  </div>
-                  
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">📊 Фильтр по остаткам</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Все товары / С остатками / Без остатков
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileDown className="h-5 w-5 text-primary" />
-                  Экспорт юнит-экономики
+                  Фильтры экспорта
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  В разделе «Юнит-экономика» доступна кнопка «Экспорт Excel» для выгрузки всех данных:
-                </p>
-                <div className="grid gap-3">
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">📋 Лист «Юнит-экономика»</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Все поля по каждому артикулу: себестоимость, ткани, работа, наценки, WB-параметры, маржа
-                    </p>
+                <div className="grid gap-2 text-sm">
+                  <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
+                    📅 По периодам (выбор месяцев)
                   </div>
-                  
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">📊 Лист «Сводка»</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Общая статистика: количество товаров, средняя себестоимость, средняя маржа
-                    </p>
+                  <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
+                    📂 По категориям
                   </div>
-                  
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">📁 Лист «По категориям»</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Разбивка по категориям: количество товаров, средние показатели
-                    </p>
+                  <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
+                    🏷️ По ABC/XYZ группам
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Ban className="h-5 w-5 text-primary" />
-                  Исключённые артикулы
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  В разделе «Настройки» можно добавить артикулы, которые будут скрыты из финального отчёта:
-                </p>
-                <ul className="space-y-2 text-sm">
-                  <li>• Товары остаются в аналитике и сводных таблицах</li>
-                  <li>• Но не выводятся в экспортируемый Excel-файл</li>
-                  <li>• Удобно для тестовых артикулов, образцов, выводимых из ассортимента товаров</li>
-                </ul>
-                <div className="flex items-start gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl backdrop-blur-sm">
-                  <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
-                  <p className="text-sm">
-                    Добавляйте артикулы через запятую. Регистр не учитывается.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Unit Economics Tab */}
-          <TabsContent value="unit-economics" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-primary" />
-                  Назначение модуля
-                </CardTitle>
-                <CardDescription>Расчёт себестоимости и маржинальности</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <ul className="space-y-3">
-                  <li className="flex items-start gap-3">
-                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
-                    <div>
-                      <strong>Расчёт себестоимости</strong> — материалы, работа, накладные расходы
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
-                    <div>
-                      <strong>Категории из справочника</strong> — единые значения с возможностью добавления своих
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
-                    <div>
-                      <strong>Маржинальность и чистая прибыль</strong> — отображаются в таблице товаров
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
-                    <div>
-                      <strong>Флаги «Новинка» и «Перерасчёт»</strong> — для отслеживания новых товаров и пересчётов
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
-                    <div>
-                      <strong>Дата обновления</strong> — автоматически обновляется при реальных изменениях
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
-                    <div>
-                      <strong>История изменений</strong> — полный лог всех изменений карточки товара
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
-                    <div>
-                      <strong>Экспорт в Excel</strong> — выгрузка всех данных со сводкой и разбивкой по категориям
-                    </div>
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Layers className="h-5 w-5 text-primary" />
-                  Структура себестоимости
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-3">
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">🧵 Ткани (до 3-х видов)</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Название, цена ($/кг), вес на единицу. Автоматический пересчёт по курсу.
-                    </p>
+                  <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
+                    📦 По остаткам (все / с остатками / без)
                   </div>
-                  
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">✂️ Работа</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Раскрой и пошив — отдельные поля для точного учёта.
-                    </p>
-                  </div>
-                  
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">🎨 Вышивка/Принт</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Разделены на два компонента: <strong>Работа</strong> (услуги) и <strong>Материалы</strong> (нитки, краска). Это позволяет точнее учитывать затраты.
-                    </p>
-                  </div>
-                  
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">🔧 Фурнитура</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Молнии, пуговицы, лейблы и т.д.
-                    </p>
-                  </div>
-                  
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">📊 Накладные расходы</h4>
-                    <p className="text-sm text-muted-foreground">
-                      % от себестоимости на административные и прочие расходы.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Store className="h-5 w-5 text-primary" />
-                  Wildberries (WB-модуль)
-                </CardTitle>
-                <CardDescription>Расчёт юнит-экономики для маркетплейса</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl backdrop-blur-sm">
-                  <p className="text-sm">
-                    Модуль активируется переключателем <strong>«Продавать на WB»</strong> в карточке товара.
-                  </p>
-                </div>
-                <div className="grid gap-3">
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">📊 Ценообразование с СПП</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Вводите «Цена без СПП» и «СПП %» — система автоматически рассчитывает «Цена с СПП»
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Формула: Цена с СПП = Цена без СПП / (1 - СПП%)
-                    </p>
-                  </div>
-                  
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">🚚 Логистика с возвратами</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Учитывается % выкупа, логистика до клиента и возврата. Рассчитывается стоимость доставки на 1 выкуп.
-                    </p>
-                  </div>
-                  
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">💰 Инвестиции</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Автоматический расчёт вложений: Инвестиции = Кол-во отгрузки × Себестоимость
-                    </p>
-                  </div>
-                  
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">📋 Налоги</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Выбор режима: «УСН доход-расход» или «УСН доход-расход + НДС». Налог считается только в WB-модуле.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <History className="h-5 w-5 text-primary" />
-                  История изменений
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Система ведёт полный аудит-лог изменений каждого товара:
-                </p>
-                <ul className="space-y-2 text-sm">
-                  <li>• Отслеживаются все ключевые поля: цена, себестоимость, категория, флаги и т.д.</li>
-                  <li>• Записывается дата, старое и новое значение</li>
-                  <li>• Дата «Обновлено» меняется только при реальных изменениях</li>
-                  <li>• Доступ к истории — кнопка «История» в карточке товара</li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Layers className="h-5 w-5 text-primary" />
-                  Добавление категорий
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Категории товаров и типы тканей выбираются из справочника. Для добавления новой категории:
-                </p>
-                <ol className="space-y-2 text-sm">
-                  <li>1. Откройте выпадающий список категорий</li>
-                  <li>2. Введите название новой категории в поле внизу списка</li>
-                  <li>3. Нажмите «+» для добавления</li>
-                  <li>4. Новая категория сохраняется в вашем профиле и доступна везде</li>
-                </ol>
-                <div className="flex items-start gap-3 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl backdrop-blur-sm">
-                  <CheckCircle className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
-                  <p className="text-sm">
-                    Пользовательские категории помечаются как «(свой)» в списке.
-                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -855,227 +920,180 @@ export default function Documentation() {
                   <Settings className="h-5 w-5 text-primary" />
                   Глобальные настройки
                 </CardTitle>
-                <CardDescription>Параметры, применяемые ко всем расчётам</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-3">
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">💱 Курс валюты</h4>
-                    <p className="text-sm text-muted-foreground">
-                      USD/RUB для пересчёта цен на ткани. По умолчанию: 90₽
-                    </p>
-                  </div>
+                  {hasFullAccess && (
+                    <>
+                      <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                        <h4 className="font-medium mb-2">💱 Курс валюты</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Курс USD к RUB для пересчёта стоимости тканей.
+                        </p>
+                      </div>
+                      
+                      <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                        <h4 className="font-medium mb-2">📊 Накладные расходы</h4>
+                        <p className="text-sm text-muted-foreground">
+                          % от производственных затрат на административные расходы.
+                        </p>
+                      </div>
+                      
+                      <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                        <h4 className="font-medium mb-2">💰 Налоговый режим</h4>
+                        <p className="text-sm text-muted-foreground">
+                          УСН (ставка по умолчанию 7%) или НДС.
+                        </p>
+                      </div>
+                    </>
+                  )}
                   
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">📊 Накладные расходы</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Административные расходы (%) добавляются к себестоимости. По умолчанию: 15%
-                    </p>
-                  </div>
-                  
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">💰 Оптовая наценка</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Наценка для расчёта оптовой цены. По умолчанию: 35%
-                    </p>
-                  </div>
-                  
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">📋 Налоги</h4>
-                    <p className="text-sm text-muted-foreground">
-                      УСН: 7%, НДС: 0% (по умолчанию). Режим: «УСН доход-расход» или «+ НДС»
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Package className="h-5 w-5 text-primary" />
-                  Настройки WB по умолчанию
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Значения применяются автоматически при создании нового товара:
-                </p>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <strong>Выкуп:</strong> 90%
-                  </div>
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <strong>Логистика до клиента:</strong> 50₽
-                  </div>
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <strong>Логистика возврата:</strong> 50₽
-                  </div>
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <strong>Приёмка:</strong> 50₽
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-primary" />
-                  Пороги XYZ и тренд
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-3">
                   <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
                     <h4 className="font-medium mb-2">📈 Пороги XYZ</h4>
                     <p className="text-sm text-muted-foreground">
-                      X ≤ 30%, Y ≤ 60% (по умолчанию). Позволяет расширить категорию X до 70% для включения большего числа товаров.
+                      Порог X (по умолчанию 30%) и порог Y (по умолчанию 60%).
                     </p>
                   </div>
                   
-                  <div className="p-4 bg-gradient-to-br from-primary/5 to-primary/10 border border-primary/20 rounded-xl">
-                    <h4 className="font-semibold mb-2 flex items-center gap-2">
-                      <span className="text-lg">🌍</span>
-                      Глобальный тренд
-                    </h4>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Коэффициент для корректировки прогнозов с учётом общего тренда рынка.
-                    </p>
-                    <ul className="text-sm text-muted-foreground space-y-1 mb-4">
-                      <li>• 1.0 = без изменений</li>
-                      <li>• 0.8 = падение 20%</li>
-                      <li>• 1.2 = рост 20%</li>
-                    </ul>
-                    <div className="bg-background/80 backdrop-blur-sm rounded-lg px-4 py-3 border border-border/50 mb-3">
-                      <code className="text-sm font-mono font-medium text-foreground">
-                        forecast = base × trend_coef × global_trend
-                      </code>
-                    </div>
-                    <div className="grid gap-2 text-xs">
-                      <div className="flex items-start gap-2">
-                        <code className="bg-muted px-2 py-0.5 rounded font-mono font-medium shrink-0">forecast</code>
-                        <span className="text-muted-foreground">— итоговый прогноз продаж на период</span>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <code className="bg-muted px-2 py-0.5 rounded font-mono font-medium shrink-0">base</code>
-                        <span className="text-muted-foreground">— базовый расчёт (средние продажи за период)</span>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <code className="bg-muted px-2 py-0.5 rounded font-mono font-medium shrink-0">trend_coef</code>
-                        <span className="text-muted-foreground">— коэффициент тренда товара (рассчитывается автоматически по истории)</span>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <code className="bg-muted px-2 py-0.5 rounded font-mono font-medium shrink-0">global_trend</code>
-                        <span className="text-muted-foreground">— глобальный тренд рынка (задаётся вручную в настройках)</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Auth Tab */}
-          <TabsContent value="auth" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <UserPlus className="h-5 w-5 text-primary" />
-                  Регистрация в системе
-                </CardTitle>
-                <CardDescription>Как получить доступ к системе</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl backdrop-blur-sm">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
-                    <p className="text-sm">
-                      <strong>Важно:</strong> Для регистрации требуется специальный код доступа. 
-                      Получите его у администратора системы.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid gap-3">
                   <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">📝 Поля регистрации</h4>
-                    <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                      <li><strong>Код регистрации</strong> — специальный пароль для доступа</li>
-                      <li><strong>ФИО</strong> — полное имя пользователя</li>
-                      <li><strong>Телефон</strong> — контактный номер</li>
-                      <li><strong>Должность</strong> — позиция в компании</li>
-                      <li><strong>Email</strong> — адрес электронной почты (логин)</li>
-                      <li><strong>Пароль</strong> — минимум 6 символов</li>
-                    </ul>
-                  </div>
-                  
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <h4 className="font-medium mb-2">🔐 Вход в систему</h4>
+                    <h4 className="font-medium mb-2">📉 Глобальный тренд</h4>
                     <p className="text-sm text-muted-foreground">
-                      После регистрации используйте email и пароль для входа. 
-                      Код регистрации при входе не требуется.
+                      Ручной режим или автоматический расчёт из данных.
                     </p>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Безопасность</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-3 text-sm">
-                  <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl backdrop-blur-sm">
-                    <div className="flex items-start gap-3">
-                      <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
-                      <div>
-                        <strong>Защита данных</strong>
-                        <p className="text-muted-foreground mt-1">
-                          Все данные хранятся в защищённой базе данных. 
-                          Каждый пользователь видит только свои данные.
-                        </p>
-                      </div>
+                  {hasFullAccess && (
+                    <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                      <h4 className="font-medium mb-2">🚚 Параметры WB по умолчанию</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Логистика к клиенту, возврата, приёмка, % выкупа.
+                      </p>
                     </div>
-                  </div>
-                  <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl backdrop-blur-sm">
-                    <div className="flex items-start gap-3">
-                      <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
-                      <div>
-                        <strong>Код доступа</strong>
-                        <p className="text-muted-foreground mt-1">
-                          Код регистрации защищает систему от несанкционированного доступа. 
-                          Не передавайте его третьим лицам.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Quality Tab */}
-          <TabsContent value="quality" className="space-y-6">
+          {/* Admin Tab - Only for admin */}
+          {isAdmin && (
+            <TabsContent value="admin" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-primary" />
+                    Панель администратора
+                  </CardTitle>
+                  <CardDescription>Управление пользователями и настройками системы</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <ul className="space-y-3">
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                      <div>
+                        <strong>Управление пользователями</strong> — просмотр, одобрение, изменение ролей
+                      </div>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                      <div>
+                        <strong>Назначение ролей</strong> — admin, full_access, hidden_cost
+                      </div>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                      <div>
+                        <strong>Правила рекомендаций</strong> — настройка автоматических рекомендаций
+                      </div>
+                    </li>
+                  </ul>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Настройки kill-листа</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-3">
+                    <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                      <h4 className="font-medium mb-2">📅 Порог залёживания</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Сколько дней считать «товар залежался» (по умолчанию 90 дней).
+                      </p>
+                    </div>
+                    
+                    <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                      <h4 className="font-medium mb-2">💰 Уровень прибыльности</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Какой уровень прибыльности считать нормальным.
+                      </p>
+                    </div>
+                    
+                    <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
+                      <h4 className="font-medium mb-2">📉 Стандартная лесенка</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Количество шагов и частота снижения по умолчанию.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {/* Roles Tab */}
+          <TabsContent value="roles" className="space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                  Контроль качества данных
+                  <Users className="h-5 w-5 text-primary" />
+                  Система ролей
                 </CardTitle>
-                <CardDescription>Метрики и логирование обработки</CardDescription>
+                <CardDescription>Три уровня доступа к функциям системы</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-3">
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <strong>Сырых строк</strong> — общее количество записей: артикул×размер×период
+                  <div className={`p-4 rounded-xl border ${role === 'admin' ? 'bg-green-500/10 border-green-500/30' : 'bg-muted/40 border-border/30'}`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Shield className="h-5 w-5 text-green-600" />
+                      <h4 className="font-medium">Администратор (admin)</h4>
+                      {role === 'admin' && <Badge variant="outline" className="ml-auto">Ваша роль</Badge>}
+                    </div>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      <li>• Полный доступ ко всем функциям</li>
+                      <li>• Управление пользователями и ролями</li>
+                      <li>• Настройка правил рекомендаций</li>
+                      <li>• Просмотр всех данных включая себестоимость</li>
+                    </ul>
                   </div>
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <strong>Уникальных артикулов</strong> — количество уникальных артикулов без учёта размеров
+                  
+                  <div className={`p-4 rounded-xl border ${role === 'full_access' ? 'bg-blue-500/10 border-blue-500/30' : 'bg-muted/40 border-border/30'}`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Eye className="h-5 w-5 text-blue-600" />
+                      <h4 className="font-medium">Полный доступ (full_access)</h4>
+                      {role === 'full_access' && <Badge variant="outline" className="ml-auto">Ваша роль</Badge>}
+                    </div>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      <li>• Просмотр и редактирование юнит-экономики</li>
+                      <li>• Доступ к себестоимости и марже</li>
+                      <li>• Работа с kill-листом и ассортиментом</li>
+                      <li>• Экспорт всех отчётов</li>
+                    </ul>
                   </div>
-                  <div className="p-4 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <strong>Сжатие данных</strong> — коэффициент агрегации от сырых строк к аналитике
+                  
+                  <div className={`p-4 rounded-xl border ${role === 'hidden_cost' ? 'bg-amber-500/10 border-amber-500/30' : 'bg-muted/40 border-border/30'}`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <EyeOff className="h-5 w-5 text-amber-600" />
+                      <h4 className="font-medium">Скрытая себестоимость (hidden_cost)</h4>
+                      {role === 'hidden_cost' && <Badge variant="outline" className="ml-auto">Ваша роль</Badge>}
+                    </div>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      <li>• Просмотр аналитики без финансовых данных</li>
+                      <li>• ABC/XYZ анализ и рекомендации</li>
+                      <li>• Работа с kill-листом (без цен)</li>
+                      <li>• Себестоимость и маржа скрыты</li>
+                    </ul>
                   </div>
                 </div>
               </CardContent>
@@ -1083,72 +1101,85 @@ export default function Documentation() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Этапы обработки</CardTitle>
+                <CardTitle>Доступ к разделам по ролям</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <ol className="space-y-3">
-                  <li className="flex items-start gap-3">
-                    <Badge className="shrink-0">1</Badge>
-                    <div>
-                      <strong>Загрузка файла</strong> — парсинг Excel, разбиение на чанки и загрузка в БД
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <Badge className="shrink-0">2</Badge>
-                    <div>
-                      <strong>Агрегация</strong> — группировка по артикулам, расчёт сумм и средних
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <Badge className="shrink-0">3</Badge>
-                    <div>
-                      <strong>XYZ-анализ</strong> — расчёт CV с учётом пользовательских порогов
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <Badge className="shrink-0">4</Badge>
-                    <div>
-                      <strong>ABC-анализ</strong> — ранжирование по выручке
-                    </div>
-                  </li>
-                  <li className="flex items-start gap-3">
-                    <Badge className="shrink-0">5</Badge>
-                    <div>
-                      <strong>Прогнозы</strong> — расчёт планов с учётом глобального тренда
-                    </div>
-                  </li>
-                </ol>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Логирование</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Логи доступны на странице деталей запуска:
-                </p>
-                <div className="grid gap-2">
-                  <div className="flex items-center gap-3 p-3 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <Badge variant="glass" className="bg-primary/10 text-primary">INFO</Badge>
-                    <span className="text-sm">Информационные сообщения</span>
-                  </div>
-                  <div className="flex items-center gap-3 p-3 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <Badge variant="glass" className="bg-green-500/10 text-green-600">ACTION</Badge>
-                    <span className="text-sm">Успешное завершение этапов</span>
-                  </div>
-                  <div className="flex items-center gap-3 p-3 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <Badge variant="glass" className="bg-amber-500/10 text-amber-600">WARN</Badge>
-                    <span className="text-sm">Предупреждения</span>
-                  </div>
-                  <div className="flex items-center gap-3 p-3 bg-muted/40 rounded-xl backdrop-blur-sm border border-border/30">
-                    <Badge variant="glass" className="bg-red-500/10 text-red-600">ERROR</Badge>
-                    <span className="text-sm">Ошибки</span>
-                  </div>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="p-2 text-left">Раздел</th>
+                        <th className="p-2 text-center">admin</th>
+                        <th className="p-2 text-center">full_access</th>
+                        <th className="p-2 text-center">hidden_cost</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b">
+                        <td className="p-2">ABC/XYZ анализ</td>
+                        <td className="p-2 text-center text-green-600">✓</td>
+                        <td className="p-2 text-center text-green-600">✓</td>
+                        <td className="p-2 text-center text-green-600">✓</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="p-2">Анализ ассортимента</td>
+                        <td className="p-2 text-center text-green-600">✓</td>
+                        <td className="p-2 text-center text-green-600">✓</td>
+                        <td className="p-2 text-center text-green-600">✓</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="p-2">Kill-лист</td>
+                        <td className="p-2 text-center text-green-600">✓</td>
+                        <td className="p-2 text-center text-green-600">✓</td>
+                        <td className="p-2 text-center text-green-600">✓</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="p-2">Юнит-экономика</td>
+                        <td className="p-2 text-center text-green-600">✓</td>
+                        <td className="p-2 text-center text-green-600">✓</td>
+                        <td className="p-2 text-center text-red-600">✗</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="p-2">Себестоимость / маржа</td>
+                        <td className="p-2 text-center text-green-600">✓</td>
+                        <td className="p-2 text-center text-green-600">✓</td>
+                        <td className="p-2 text-center text-red-600">✗</td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="p-2">Администрирование</td>
+                        <td className="p-2 text-center text-green-600">✓</td>
+                        <td className="p-2 text-center text-red-600">✗</td>
+                        <td className="p-2 text-center text-red-600">✗</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2">Управление пользователями</td>
+                        <td className="p-2 text-center text-green-600">✓</td>
+                        <td className="p-2 text-center text-red-600">✗</td>
+                        <td className="p-2 text-center text-red-600">✗</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </CardContent>
             </Card>
+
+            {shouldHideCost && (
+              <Card className="border-amber-500/30 bg-amber-500/5">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-amber-600">
+                    <AlertTriangle className="h-5 w-5" />
+                    Ограниченный доступ
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    Ваша роль <strong>hidden_cost</strong> ограничивает доступ к финансовым данным.
+                    Вы не видите себестоимость, маржу и прибыль по товарам.
+                    Для получения полного доступа обратитесь к администратору.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
         </Tabs>
       </div>
