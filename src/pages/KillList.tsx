@@ -23,7 +23,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, Skull, Undo2, Plus, Trash2 } from "lucide-react";
+import { Search, Skull, Undo2, Plus, Trash2, Pencil, Check, X } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { toast } from "sonner";
@@ -40,6 +40,8 @@ export default function KillList() {
   const [addPriceDialogOpen, setAddPriceDialogOpen] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState<ArticleCatalogItem | null>(null);
   const [newPriceField, setNewPriceField] = useState({ name: "", value: "" });
+  const [editingReasonId, setEditingReasonId] = useState<string | null>(null);
+  const [editingReasonValue, setEditingReasonValue] = useState("");
 
   const filteredArticles = useMemo(() => {
     if (!search) return killListArticles;
@@ -97,6 +99,26 @@ export default function KillList() {
       id: article.id,
       fieldName,
     });
+  };
+
+  const handleStartEditReason = (article: ArticleCatalogItem) => {
+    setEditingReasonId(article.id);
+    setEditingReasonValue(article.kill_list_reason || "");
+  };
+
+  const handleSaveReason = (article: ArticleCatalogItem) => {
+    updateArticle.mutate({
+      id: article.id,
+      updates: { kill_list_reason: editingReasonValue || null },
+    });
+    setEditingReasonId(null);
+    setEditingReasonValue("");
+    toast.success("Причина обновлена");
+  };
+
+  const handleCancelEditReason = () => {
+    setEditingReasonId(null);
+    setEditingReasonValue("");
   };
 
   if (isLoading) {
@@ -226,8 +248,51 @@ export default function KillList() {
                             : "—"
                           }
                         </TableCell>
-                        <TableCell className="text-muted-foreground max-w-[200px] truncate">
-                          {article.kill_list_reason || "—"}
+                        <TableCell className="max-w-[250px]">
+                          {editingReasonId === article.id ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                value={editingReasonValue}
+                                onChange={(e) => setEditingReasonValue(e.target.value)}
+                                placeholder="Введите причину..."
+                                className="h-8 text-sm"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleSaveReason(article);
+                                  } else if (e.key === 'Escape') {
+                                    handleCancelEditReason();
+                                  }
+                                }}
+                              />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-green-600 hover:text-green-700"
+                                onClick={() => handleSaveReason(article)}
+                              >
+                                <Check className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={handleCancelEditReason}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div 
+                              className="group flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-2 py-1 -mx-2"
+                              onClick={() => handleStartEditReason(article)}
+                            >
+                              <span className="text-muted-foreground truncate">
+                                {article.kill_list_reason || "—"}
+                              </span>
+                              <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-1">
