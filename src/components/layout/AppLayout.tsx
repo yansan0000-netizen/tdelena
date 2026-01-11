@@ -9,9 +9,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 
 interface AppLayoutProps {
   children: ReactNode;
+  fullWidth?: boolean;
 }
 
-export function AppLayout({ children }: AppLayoutProps) {
+export function AppLayout({ children, fullWidth = false }: AppLayoutProps) {
   const { user, signOut } = useAuth();
   const { isAdmin, shouldHideCost } = useUserRole();
   const location = useLocation();
@@ -103,7 +104,10 @@ export function AppLayout({ children }: AppLayoutProps) {
         </header>
 
         {/* Main content */}
-        <main className="container py-8">
+        <main className={cn(
+          "py-8",
+          fullWidth ? "px-4 md:px-6 lg:px-8 max-w-[1920px] mx-auto" : "container"
+        )}>
           {children}
         </main>
       </div>
