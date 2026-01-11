@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
+import { Navigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAssortmentAnalysis, AssortmentFilters, AssortmentProduct } from '@/hooks/useAssortmentAnalysis';
+import { useUserRole } from '@/hooks/useUserRole';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,7 +24,8 @@ import {
   ArrowDownRight,
   Minus,
   Filter,
-  RefreshCw
+  RefreshCw,
+  ShieldAlert
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -36,6 +39,8 @@ const recommendationConfig: Record<string, { label: string; icon: React.ReactNod
 };
 
 export default function AssortmentAnalysis() {
+  const { shouldHideCost, loading: roleLoading } = useUserRole();
+  
   const [filters, setFilters] = useState<AssortmentFilters>({
     runId: null,
     category: null,
@@ -50,6 +55,11 @@ export default function AssortmentAnalysis() {
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
 
   const { runs, products, summary, categories, isLoading, refetch } = useAssortmentAnalysis(filters);
+
+  // Redirect hidden_cost users
+  if (!roleLoading && shouldHideCost) {
+    return <Navigate to="/runs" replace />;
+  }
 
   // Auto-select latest run
   useMemo(() => {

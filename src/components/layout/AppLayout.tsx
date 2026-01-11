@@ -13,7 +13,7 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const { user, signOut } = useAuth();
-  const { isAdmin } = useUserRole();
+  const { isAdmin, shouldHideCost } = useUserRole();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -25,7 +25,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   const navItems = [
     { path: '/new', label: 'Новый расчёт', icon: Plus },
     { path: '/runs', label: 'История', icon: History },
-    { path: '/assortment', label: 'Ассортимент', icon: BarChart3 },
+    // Hide assortment from hidden_cost users
+    ...(!shouldHideCost ? [{ path: '/assortment', label: 'Ассортимент', icon: BarChart3 }] : []),
     { path: '/articles', label: 'Каталог', icon: Package },
     { path: '/kill-list', label: 'Kill-лист', icon: Skull },
     { path: '/unit-economics', label: 'Юнит-экономика', icon: Calculator },

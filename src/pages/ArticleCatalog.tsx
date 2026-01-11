@@ -23,8 +23,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, RefreshCw, Eye, EyeOff, Skull, Package } from "lucide-react";
+import { Search, RefreshCw, Eye, EyeOff, Skull, Package, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
@@ -35,6 +45,36 @@ export default function ArticleCatalog() {
   const [filter, setFilter] = useState<"all" | "visible" | "hidden" | "kill-list">("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedRunId, setSelectedRunId] = useState<string>("");
+  
+  // Edit dialog state
+  const [editingArticle, setEditingArticle] = useState<ArticleCatalogItem | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editKillReason, setEditKillReason] = useState("");
+
+  const openEditDialog = (article: ArticleCatalogItem) => {
+    setEditingArticle(article);
+    setEditName(article.name || "");
+    setEditKillReason(article.kill_list_reason || "");
+  };
+
+  const closeEditDialog = () => {
+    setEditingArticle(null);
+    setEditName("");
+    setEditKillReason("");
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingArticle) return;
+    updateArticle.mutate({
+      id: editingArticle.id,
+      updates: {
+        name: editName || null,
+        kill_list_reason: editKillReason || null,
+      },
+    }, {
+      onSuccess: () => closeEditDialog(),
+    });
+  };
 
   const completedRuns = useMemo(() => 
     runs.filter(r => r.status === "DONE").slice(0, 10),
@@ -308,12 +348,13 @@ export default function ArticleCatalog() {
                   <TableHead className="text-right">Средняя цена</TableHead>
                   <TableHead className="text-center">Видимость</TableHead>
                   <TableHead className="text-center">Kill-лист</TableHead>
+                  <TableHead className="w-12"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredArticles.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       {articles.length === 0 
                         ? "Нет артикулов. Синхронизируйте данные из отчёта выше."
                         : "Артикулы не найдены по заданным фильтрам"
@@ -365,6 +406,16 @@ export default function ArticleCatalog() {
                           onCheckedChange={() => handleToggleKillList(article)}
                         />
                       </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEditDialog(article)}
+                          className="h-8 w-8"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -373,6 +424,49 @@ export default function ArticleCatalog() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editingArticle} onOpenChange={(open) => !open && closeEditDialog()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Редактирование артикула</DialogTitle>
+            <DialogDescription>
+              {editingArticle?.article}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Наименование</Label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Введите наименование товара"
+              />
+            </div>
+            {editingArticle?.is_in_kill_list && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-reason">Причина добавления в Kill-лист</Label>
+                <Textarea
+                  id="edit-reason"
+                  value={editKillReason}
+                  onChange={(e) => setEditKillReason(e.target.value)}
+                  placeholder="Опишите причину вывода товара..."
+                  rows={3}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeEditDialog}>
+              Отмена
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={updateArticle.isPending}>
+              Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
