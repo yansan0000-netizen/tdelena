@@ -62,6 +62,177 @@ export type Database = {
         }
         Relationships: []
       }
+      kill_list_history: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          id: string
+          kill_list_item_id: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          kill_list_item_id: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          kill_list_item_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kill_list_history_kill_list_item_id_fkey"
+            columns: ["kill_list_item_id"]
+            isOneToOne: false
+            referencedRelation: "kill_list_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kill_list_items: {
+        Row: {
+          article: string
+          article_id: string | null
+          completed_at: string | null
+          created_at: string
+          current_step: number | null
+          current_stock: number | null
+          id: string
+          initial_price: number | null
+          initial_stock: number | null
+          min_price: number | null
+          price_rounding: string | null
+          reason: string | null
+          reason_category: string | null
+          sold_qty: number | null
+          sold_revenue: number | null
+          started_at: string | null
+          status: string | null
+          strategy: string | null
+          target_days: number
+          target_end_date: string | null
+          total_steps: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          article: string
+          article_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          current_step?: number | null
+          current_stock?: number | null
+          id?: string
+          initial_price?: number | null
+          initial_stock?: number | null
+          min_price?: number | null
+          price_rounding?: string | null
+          reason?: string | null
+          reason_category?: string | null
+          sold_qty?: number | null
+          sold_revenue?: number | null
+          started_at?: string | null
+          status?: string | null
+          strategy?: string | null
+          target_days?: number
+          target_end_date?: string | null
+          total_steps?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          article?: string
+          article_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          current_step?: number | null
+          current_stock?: number | null
+          id?: string
+          initial_price?: number | null
+          initial_stock?: number | null
+          min_price?: number | null
+          price_rounding?: string | null
+          reason?: string | null
+          reason_category?: string | null
+          sold_qty?: number | null
+          sold_revenue?: number | null
+          started_at?: string | null
+          status?: string | null
+          strategy?: string | null
+          target_days?: number
+          target_end_date?: string | null
+          total_steps?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kill_list_items_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "article_catalog"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kill_list_price_steps: {
+        Row: {
+          applied_at: string | null
+          created_at: string
+          discount_pct: number | null
+          id: string
+          kill_list_item_id: string
+          price: number
+          profit_per_unit: number | null
+          qty_sold: number | null
+          revenue: number | null
+          scheduled_date: string
+          step_number: number
+        }
+        Insert: {
+          applied_at?: string | null
+          created_at?: string
+          discount_pct?: number | null
+          id?: string
+          kill_list_item_id: string
+          price: number
+          profit_per_unit?: number | null
+          qty_sold?: number | null
+          revenue?: number | null
+          scheduled_date: string
+          step_number: number
+        }
+        Update: {
+          applied_at?: string | null
+          created_at?: string
+          discount_pct?: number | null
+          id?: string
+          kill_list_item_id?: string
+          price?: number
+          profit_per_unit?: number | null
+          qty_sold?: number | null
+          revenue?: number | null
+          scheduled_date?: string
+          step_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kill_list_price_steps_kill_list_item_id_fkey"
+            columns: ["kill_list_item_id"]
+            isOneToOne: false
+            referencedRelation: "kill_list_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_change_log: {
         Row: {
           changed_at: string
