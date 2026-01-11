@@ -14,6 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      article_catalog: {
+        Row: {
+          article: string
+          avg_sale_price: number | null
+          created_at: string
+          custom_prices: Json | null
+          first_seen_at: string
+          id: string
+          is_in_kill_list: boolean
+          is_visible: boolean
+          kill_list_added_at: string | null
+          kill_list_reason: string | null
+          name: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          article: string
+          avg_sale_price?: number | null
+          created_at?: string
+          custom_prices?: Json | null
+          first_seen_at?: string
+          id?: string
+          is_in_kill_list?: boolean
+          is_visible?: boolean
+          kill_list_added_at?: string | null
+          kill_list_reason?: string | null
+          name?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          article?: string
+          avg_sale_price?: number | null
+          created_at?: string
+          custom_prices?: Json | null
+          first_seen_at?: string
+          id?: string
+          is_in_kill_list?: boolean
+          is_visible?: boolean
+          kill_list_added_at?: string | null
+          kill_list_reason?: string | null
+          name?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       product_change_log: {
         Row: {
           changed_at: string
@@ -408,6 +456,7 @@ export type Database = {
           investment_total_calculated: number | null
           investments_rub: number | null
           is_new: boolean | null
+          is_new_until: string | null
           is_recalculation: boolean | null
           logistics_return_fixed: number | null
           logistics_to_client: number | null
@@ -490,6 +539,7 @@ export type Database = {
           investment_total_calculated?: number | null
           investments_rub?: number | null
           is_new?: boolean | null
+          is_new_until?: string | null
           is_recalculation?: boolean | null
           logistics_return_fixed?: number | null
           logistics_to_client?: number | null
@@ -572,6 +622,7 @@ export type Database = {
           investment_total_calculated?: number | null
           investments_rub?: number | null
           is_new?: boolean | null
+          is_new_until?: string | null
           is_recalculation?: boolean | null
           logistics_return_fixed?: number | null
           logistics_to_client?: number | null

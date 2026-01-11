@@ -4,7 +4,15 @@
  */
 
 export type RecommendationPriority = 'critical' | 'high' | 'medium' | 'low' | 'none';
-export type RecommendationAction = 'order_urgent' | 'order_regular' | 'order_careful' | 'reduce_stock' | 'discontinue' | 'monitor';
+export type RecommendationAction = 
+  | 'order_urgent' 
+  | 'order_regular' 
+  | 'order_careful' 
+  | 'reduce_stock' 
+  | 'discontinue' 
+  | 'monitor'
+  | 'send_to_kill_list'
+  | 'analyze_profitability';
 
 export interface RecommendationDetails {
   days_left: number;
@@ -20,6 +28,8 @@ export interface RecommendationDetails {
   profit_per_unit?: number;
   potential_profit?: number;
   has_econ_data?: boolean;
+  months_in_sales?: number;
+  is_new?: boolean;
 }
 
 export interface RecommendationResult {
@@ -27,6 +37,8 @@ export interface RecommendationResult {
   action: RecommendationAction;
   text: string;
   details: RecommendationDetails;
+  killListCandidate?: boolean;
+  profitabilityWarning?: boolean;
 }
 
 export interface ArticleData {
@@ -40,6 +52,9 @@ export interface ArticleData {
   revenueShare: number;
   marginPct?: number;
   profitPerUnit?: number;
+  // New fields for kill-list logic
+  firstSeenAt?: Date | string;
+  isNew?: boolean;
 }
 
 /**
@@ -177,15 +192,89 @@ export function getABCXYZRecommendation(abc: string, xyz: string): string {
 }
 
 /**
+ * Calculate months since first seen
+ */
+export function getMonthsInSales(firstSeenAt?: Date | string): number {
+  if (!firstSeenAt) return 0;
+  const firstSeen = typeof firstSeenAt === 'string' ? new Date(firstSeenAt) : firstSeenAt;
+  const now = new Date();
+  const diffMs = now.getTime() - firstSeen.getTime();
+  return Math.floor(diffMs / (30 * 24 * 60 * 60 * 1000));
+}
+
+/**
+ * Check if article should be sent to kill-list based on rules
+ */
+export function shouldSendToKillList(data: ArticleData): { 
+  should: boolean; 
+  reason?: string;
+} {
+  const monthsInSales = getMonthsInSales(data.firstSeenAt);
+  const isNew = data.isNew === true;
+  
+  // Rule 1: Category C + in sales > 6 months + not new
+  if (data.abc === 'C' && !isNew && monthsInSales > 6) {
+    return { 
+      should: true, 
+      reason: `Категория C, в продаже ${monthsInSales} мес. — рекомендуется вывести из ассортимента` 
+    };
+  }
+  
+  // Rule 2: Category B + in sales > 18 months
+  if (data.abc === 'B' && monthsInSales > 18) {
+    return { 
+      should: true, 
+      reason: `Категория B, в продаже ${monthsInSales} мес. — рассмотреть вывод из ассортимента` 
+    };
+  }
+  
+  return { should: false };
+}
+
+/**
+ * Check if article needs profitability analysis
+ */
+export function needsProfitabilityAnalysis(data: ArticleData): boolean {
+  // Rule 3: Average margin below 10%
+  return data.marginPct !== undefined && data.marginPct !== null && data.marginPct < 10;
+}
+
+/**
  * Get full recommendation with priority, action, and details
  */
 export function getFullRecommendation(data: ArticleData): RecommendationResult {
   const velocityDay = data.avgMonthlyQty / 30;
+  const monthsInSales = getMonthsInSales(data.firstSeenAt);
+  
+  // Check kill-list rules first
+  const killListCheck = shouldSendToKillList(data);
+  const profitabilityWarning = needsProfitabilityAnalysis(data);
+  
+  // Determine action and text based on new rules
+  let action = getRecommendationAction(data);
+  let text = getRecommendationText(data);
+  let priority = getRecommendationPriority(data);
+  
+  // Override with kill-list recommendation if applicable
+  if (killListCheck.should) {
+    action = 'send_to_kill_list';
+    text = killListCheck.reason || 'Отправить в kill-лист';
+    priority = 'medium';
+  }
+  
+  // Add profitability warning
+  if (profitabilityWarning && !killListCheck.should) {
+    action = 'analyze_profitability';
+    text = `Внимание: маржинальность ${data.marginPct?.toFixed(1)}% — анализ рентабельности`;
+    priority = priority === 'none' ? 'low' : priority;
+  }
   
   return {
-    priority: getRecommendationPriority(data),
-    action: getRecommendationAction(data),
-    text: getRecommendationText(data),
+    priority,
+    action,
+    text,
+    killListCandidate: killListCheck.should,
+    profitabilityWarning,
     details: {
       days_left: data.daysUntilStockout,
       stock: data.currentStock,
@@ -200,6 +289,8 @@ export function getFullRecommendation(data: ArticleData): RecommendationResult {
       profit_per_unit: data.profitPerUnit,
       potential_profit: data.profitPerUnit && data.plan1m ? Math.round(data.profitPerUnit * data.plan1m) : undefined,
       has_econ_data: !!(data.marginPct || data.profitPerUnit),
+      months_in_sales: monthsInSales,
+      is_new: data.isNew,
     },
   };
 }
@@ -255,4 +346,6 @@ export const actionConfig: Record<RecommendationAction, { label: string; icon: s
   reduce_stock: { label: 'Сократить остаток', icon: '📉' },
   discontinue: { label: 'Вывести', icon: '❌' },
   monitor: { label: 'Мониторинг', icon: '👁️' },
+  send_to_kill_list: { label: 'В kill-лист', icon: '💀' },
+  analyze_profitability: { label: 'Анализ рентабельности', icon: '📊' },
 };

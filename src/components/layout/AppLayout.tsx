@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
-import { FileSpreadsheet, History, Plus, LogOut, BookOpen, Calculator, Settings, Shield } from 'lucide-react';
+import { FileSpreadsheet, History, Plus, LogOut, BookOpen, Calculator, Settings, Shield, Package, Skull } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -25,6 +25,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   const navItems = [
     { path: '/new', label: 'Новый расчёт', icon: Plus },
     { path: '/runs', label: 'История', icon: History },
+    { path: '/articles', label: 'Каталог', icon: Package },
+    { path: '/kill-list', label: 'Kill-лист', icon: Skull },
     { path: '/unit-economics', label: 'Юнит-экономика', icon: Calculator },
     { path: '/settings', label: 'Настройки', icon: Settings },
     { path: '/docs', label: 'Документация', icon: BookOpen },
