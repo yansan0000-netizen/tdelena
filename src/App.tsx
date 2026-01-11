@@ -15,6 +15,8 @@ import UnitEconomics from "./pages/UnitEconomics";
 import UnitEconomicsDetail from "./pages/UnitEconomicsDetail";
 import Settings from "./pages/Settings";
 import AdminPanel from "./pages/AdminPanel";
+import ArticleCatalog from "./pages/ArticleCatalog";
+import KillList from "./pages/KillList";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -83,6 +85,22 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <AdminPanel />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/articles"
+              element={
+                <ProtectedRoute>
+                  <ArticleCatalog />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/kill-list"
+              element={
+                <ProtectedRoute>
+                  <KillList />
                 </ProtectedRoute>
               }
             />
