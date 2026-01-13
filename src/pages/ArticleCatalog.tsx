@@ -343,7 +343,7 @@ export default function ArticleCatalog() {
                     />
                   </TableHead>
                   <TableHead>Артикул</TableHead>
-                  <TableHead>Наименование</TableHead>
+                  <TableHead>Группа</TableHead>
                   <TableHead>Первое появление</TableHead>
                   <TableHead className="text-right">Средняя цена</TableHead>
                   <TableHead className="text-center">Видимость</TableHead>
@@ -436,12 +436,12 @@ export default function ArticleCatalog() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-name">Наименование</Label>
+              <Label htmlFor="edit-name">Группа</Label>
               <Input
                 id="edit-name"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
-                placeholder="Введите наименование товара"
+                placeholder="Введите группу товара"
               />
             </div>
             {editingArticle?.is_in_kill_list && (
