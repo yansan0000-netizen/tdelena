@@ -363,7 +363,7 @@ export default function Dashboard() {
                         <TableRow>
                           <TableHead className="w-10">#</TableHead>
                           <TableHead>Артикул</TableHead>
-                          <TableHead>Название</TableHead>
+                          <TableHead>Группа</TableHead>
                           <TableHead className="text-center">ABC</TableHead>
                           <TableHead className="text-right">Выручка</TableHead>
                         </TableRow>
@@ -412,7 +412,7 @@ export default function Dashboard() {
                           <TableRow>
                             <TableHead className="w-10">#</TableHead>
                             <TableHead>Артикул</TableHead>
-                            <TableHead>Название</TableHead>
+                            <TableHead>Группа</TableHead>
                             <TableHead className="text-center">ABC</TableHead>
                             <TableHead className="text-right">Прибыль</TableHead>
                           </TableRow>
