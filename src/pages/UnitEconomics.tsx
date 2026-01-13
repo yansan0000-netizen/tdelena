@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { CostsTable } from '@/components/costs/CostsTable';
 import { CostImport } from '@/components/costs/CostImport';
+import { ColumnSelector } from '@/components/costs/ColumnSelector';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,18 +11,46 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { CategorySelect } from '@/components/ui/category-select';
 import { useCosts } from '@/hooks/useCosts';
 import { useUserSettings } from '@/hooks/useUserSettings';
+import { useUserRole } from '@/hooks/useUserRole';
 import { PRODUCT_CATEGORIES } from '@/lib/categories';
 import { downloadUnitEconExport } from '@/lib/excel/unitEconExport';
+import { getDefaultVisibleColumns, UNIT_ECON_COLUMNS } from '@/lib/unitEconColumns';
 import { Plus, Upload, Search, Calculator, TrendingUp, Package, Download } from 'lucide-react';
 import { toast } from 'sonner';
+
+const STORAGE_KEY = 'unit-econ-visible-columns';
 
 export default function UnitEconomics() {
   const { costs, loading } = useCosts();
   const { settings, addCustomCategory } = useUserSettings();
+  const { shouldHideCost } = useUserRole();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [showFilledOnly, setShowFilledOnly] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  
+  // Load visible columns from localStorage or use defaults
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch {
+        return getDefaultVisibleColumns();
+      }
+    }
+    return getDefaultVisibleColumns();
+  });
+
+  // Save to localStorage when columns change
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(visibleColumns));
+  }, [visibleColumns]);
+
+  // Get columns that should be hidden for current role
+  const hiddenForRole = shouldHideCost 
+    ? UNIT_ECON_COLUMNS.filter(col => col.hideForRole === 'hidden_cost').map(col => col.key)
+    : [];
 
   const customProductCategories = settings?.custom_product_categories || [];
   
@@ -90,6 +119,11 @@ export default function UnitEconomics() {
                 <CostImport onSuccess={() => setImportOpen(false)} />
               </DialogContent>
             </Dialog>
+            <ColumnSelector 
+              visibleColumns={visibleColumns}
+              onColumnsChange={setVisibleColumns}
+              hiddenForRole={hiddenForRole}
+            />
             <Link to="/unit-economics/new">
               <Button className="gap-2 gradient-primary">
                 <Plus className="h-4 w-4" />
@@ -182,7 +216,7 @@ export default function UnitEconomics() {
         </Card>
 
         {/* Table */}
-        <CostsTable costs={filteredCosts} loading={loading} />
+        <CostsTable costs={filteredCosts} loading={loading} visibleColumns={visibleColumns} />
       </div>
     </AppLayout>
   );

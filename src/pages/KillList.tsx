@@ -23,11 +23,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, Skull, Undo2, Plus, Trash2, Pencil, Check, X, Upload } from "lucide-react";
+import { Search, Skull, Undo2, Plus, Trash2, Pencil, Check, X, Upload, Download } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { toast } from "sonner";
 import { KillListImport } from "@/components/costs/KillListImport";
+import { exportKillListForEditing } from "@/lib/killListExport";
 
 export default function KillList() {
   const { 
@@ -170,10 +171,27 @@ export default function KillList() {
             </CardContent>
           </Card>
           
-          <Button onClick={() => setImportDialogOpen(true)} className="gap-2">
-            <Upload className="h-4 w-4" />
-            Импорт Excel
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline"
+              onClick={() => {
+                if (killListArticles.length === 0) {
+                  toast.error("Kill-лист пуст");
+                  return;
+                }
+                exportKillListForEditing(killListArticles, allCustomPriceFields);
+                toast.success("Файл экспортирован");
+              }} 
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Экспорт
+            </Button>
+            <Button onClick={() => setImportDialogOpen(true)} className="gap-2">
+              <Upload className="h-4 w-4" />
+              Импорт Excel
+            </Button>
+          </div>
         </div>
 
         {/* Search */}

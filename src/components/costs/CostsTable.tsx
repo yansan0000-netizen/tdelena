@@ -6,17 +6,109 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { UnitEconInput } from '@/hooks/useCosts';
 import { useUserRole } from '@/hooks/useUserRole';
-import { ExternalLink, RefreshCw, AlertCircle, EyeOff } from 'lucide-react';
+import { UNIT_ECON_COLUMNS, UnitEconColumn } from '@/lib/unitEconColumns';
+import { ExternalLink, RefreshCw, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
 interface CostsTableProps {
   costs: UnitEconInput[];
   loading: boolean;
+  visibleColumns: string[];
 }
 
-export function CostsTable({ costs, loading }: CostsTableProps) {
+export function CostsTable({ costs, loading, visibleColumns }: CostsTableProps) {
   const { shouldHideCost } = useUserRole();
+
+  // Filter columns based on visibility and role
+  const displayColumns = UNIT_ECON_COLUMNS.filter(col => {
+    if (!visibleColumns.includes(col.key)) return false;
+    if (col.hideForRole === 'hidden_cost' && shouldHideCost) return false;
+    return true;
+  });
+
+  const formatValue = (cost: UnitEconInput, column: UnitEconColumn): React.ReactNode => {
+    const value = (cost as any)[column.key];
+
+    // Special cases
+    if (column.key === 'article') {
+      return (
+        <Link 
+          to={`/unit-economics/${encodeURIComponent(cost.article)}`}
+          className="hover:underline text-primary font-medium"
+        >
+          {cost.article}
+        </Link>
+      );
+    }
+
+    if (column.key === 'is_new') {
+      return cost.is_new ? (
+        <Badge variant="secondary" className="text-xs">Новинка</Badge>
+      ) : null;
+    }
+
+    if (column.key === 'sell_on_wb') {
+      const sellOnWb = (cost as any).sell_on_wb;
+      return sellOnWb ? (
+        <Badge variant="outline" className="text-xs">Да</Badge>
+      ) : null;
+    }
+
+    if (column.key === 'category') {
+      return cost.category ? (
+        <Badge variant="outline">{cost.category}</Badge>
+      ) : '-';
+    }
+
+    if (column.key === 'updated_at') {
+      return (
+        <span className="text-xs text-muted-foreground">
+          {cost.updated_at ? format(new Date(cost.updated_at), 'dd.MM.yy', { locale: ru }) : '-'}
+          {(cost as any).is_recalculation && (
+            <RefreshCw className="h-3 w-3 inline ml-1 text-warning" />
+          )}
+        </span>
+      );
+    }
+
+    if (column.key === 'name') {
+      return (
+        <span className="max-w-[200px] truncate block">
+          {cost.name || '-'}
+        </span>
+      );
+    }
+
+    // Calculate margin if needed
+    if (column.key === 'margin_pct') {
+      if (!cost.unit_cost_real_rub || !cost.wholesale_price_rub) return '-';
+      const profit = cost.wholesale_price_rub - cost.unit_cost_real_rub;
+      const margin = (profit / cost.wholesale_price_rub) * 100;
+      return `${margin.toFixed(1)}%`;
+    }
+
+    // Calculate profit per unit if needed
+    if (column.key === 'profit_per_unit' && value === null) {
+      if (!cost.unit_cost_real_rub || !cost.wholesale_price_rub) return '-';
+      const profit = cost.wholesale_price_rub - cost.unit_cost_real_rub;
+      return `${profit.toLocaleString('ru-RU')} ₽`;
+    }
+
+    // Null values
+    if (value === null || value === undefined) return '-';
+
+    // Format based on type
+    if (column.isCurrency) {
+      return `${Number(value).toLocaleString('ru-RU')} ₽`;
+    }
+
+    if (column.isPercent) {
+      return `${Number(value).toFixed(1)}%`;
+    }
+
+    return String(value);
+  };
 
   if (loading) {
     return (
@@ -56,80 +148,34 @@ export function CostsTable({ costs, loading }: CostsTableProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="min-w-[180px]">Артикул</TableHead>
-                <TableHead>Наименование</TableHead>
-                <TableHead>Категория</TableHead>
-                {!shouldHideCost && (
-                  <TableHead className="text-right">Себестоимость</TableHead>
-                )}
-                <TableHead className="text-right">Опт</TableHead>
-                <TableHead className="text-right">Маржа, %</TableHead>
-                {!shouldHideCost && (
-                  <TableHead className="text-right">Прибыль/шт</TableHead>
-                )}
-                <TableHead className="text-center">Обновлено</TableHead>
+                {displayColumns.map(column => (
+                  <TableHead 
+                    key={column.key}
+                    className={
+                      column.align === 'right' ? 'text-right' :
+                      column.align === 'center' ? 'text-center' : ''
+                    }
+                  >
+                    {column.label}
+                  </TableHead>
+                ))}
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {costs.map((cost) => (
                 <TableRow key={cost.id}>
-                  <TableCell className="font-medium">
-                    <Link 
-                      to={`/unit-economics/${encodeURIComponent(cost.article)}`}
-                      className="hover:underline text-primary"
+                  {displayColumns.map(column => (
+                    <TableCell 
+                      key={column.key}
+                      className={`${
+                        column.align === 'right' ? 'text-right font-mono' :
+                        column.align === 'center' ? 'text-center' : ''
+                      }`}
                     >
-                      {cost.article}
-                    </Link>
-                    {cost.is_new && (
-                      <Badge variant="secondary" className="ml-2 text-xs">
-                        Новинка
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="max-w-[200px] truncate">
-                    {cost.name || '-'}
-                  </TableCell>
-                  <TableCell>
-                    {cost.category ? (
-                      <Badge variant="outline">{cost.category}</Badge>
-                    ) : '-'}
-                  </TableCell>
-                  {!shouldHideCost && (
-                    <TableCell className="text-right font-mono">
-                      {cost.unit_cost_real_rub !== null 
-                        ? `${cost.unit_cost_real_rub.toLocaleString('ru-RU')} ₽`
-                        : '-'}
+                      {formatValue(cost, column)}
                     </TableCell>
-                  )}
-                  <TableCell className="text-right font-mono">
-                    {cost.wholesale_price_rub !== null
-                      ? `${cost.wholesale_price_rub.toLocaleString('ru-RU')} ₽`
-                      : '-'}
-                  </TableCell>
-                  <TableCell className="text-right font-mono">
-                    {(() => {
-                      if (!cost.unit_cost_real_rub || !cost.wholesale_price_rub) return '-';
-                      const profit = cost.wholesale_price_rub - cost.unit_cost_real_rub;
-                      const margin = (profit / cost.wholesale_price_rub) * 100;
-                      return `${margin.toFixed(1)}%`;
-                    })()}
-                  </TableCell>
-                  {!shouldHideCost && (
-                    <TableCell className="text-right font-mono">
-                      {(() => {
-                        if (!cost.unit_cost_real_rub || !cost.wholesale_price_rub) return '-';
-                        const profit = cost.wholesale_price_rub - cost.unit_cost_real_rub;
-                        return `${profit.toLocaleString('ru-RU')} ₽`;
-                      })()}
-                    </TableCell>
-                  )}
-                  <TableCell className="text-center text-xs text-muted-foreground">
-                    {cost.updated_at ? format(new Date(cost.updated_at), 'dd.MM.yy', { locale: ru }) : '-'}
-                    {(cost as any).is_recalculation && (
-                      <RefreshCw className="h-3 w-3 inline ml-1 text-warning" />
-                    )}
-                  </TableCell>
+                  ))}
                   <TableCell>
                     <Link to={`/unit-economics/${encodeURIComponent(cost.article)}`}>
                       <Button variant="ghost" size="icon">
