@@ -7,7 +7,8 @@ import {
   FileSpreadsheet, Upload, BarChart3, Download, TrendingUp, Package, Calculator, 
   AlertTriangle, CheckCircle, DollarSign, Layers, FileUp, Link2, Settings, History, 
   Store, Filter, FileDown, Ban, Sparkles, UserPlus, LineChart, FileText, Lock,
-  Users, Shield, Eye, EyeOff, Skull, Target, Percent, ArrowDownUp
+  Users, Shield, Eye, EyeOff, Skull, Target, Percent, ArrowDownUp, LayoutDashboard,
+  Grid3X3, ChevronDown, PieChart
 } from 'lucide-react';
 import { exportDocumentationToPDF } from '@/lib/documentationExport';
 import { toast } from 'sonner';
@@ -70,9 +71,10 @@ export default function Documentation() {
           <div className="overflow-x-auto pb-2 -mx-1 px-1">
             <TabsList className="inline-flex w-max gap-1 p-2">
               <TabsTrigger value="overview">Обзор</TabsTrigger>
+              <TabsTrigger value="dashboard">Дашборд</TabsTrigger>
               <TabsTrigger value="format">Формат</TabsTrigger>
               <TabsTrigger value="analysis">Анализ</TabsTrigger>
-              {!shouldHideCost && <TabsTrigger value="assortment">Ассортимент</TabsTrigger>}
+              {!shouldHideCost && <TabsTrigger value="assortment">ABC-XYZ Матрица</TabsTrigger>}
               <TabsTrigger value="killlist">Kill-лист</TabsTrigger>
               {hasFullAccess && <TabsTrigger value="unit-economics">Юнит-экономика</TabsTrigger>}
               <TabsTrigger value="forecast">Прогноз</TabsTrigger>
@@ -97,6 +99,12 @@ export default function Documentation() {
                   Система анализирует выгрузку продаж из 1С за несколько месяцев и формирует:
                 </p>
                 <ul className="space-y-3">
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                    <div>
+                      <strong>Дашборд</strong> — ключевые метрики бизнеса, графики динамики продаж, топ-10 товаров
+                    </div>
+                  </li>
                   <li className="flex items-start gap-3">
                     <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
                     <div>
@@ -207,6 +215,145 @@ export default function Documentation() {
                     </div>
                   </li>
                 </ol>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Dashboard Tab */}
+          <TabsContent value="dashboard" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <LayoutDashboard className="h-5 w-5 text-primary" />
+                  Дашборд
+                </CardTitle>
+                <CardDescription>Главная страница с ключевыми метриками бизнеса</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="bg-muted/40 p-4 rounded-xl backdrop-blur-sm border border-border/30 space-y-3">
+                  <h4 className="font-medium flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-primary" />
+                    KPI-карточки
+                  </h4>
+                  <div className="grid md:grid-cols-3 gap-3">
+                    <div className="bg-background/50 p-3 rounded-lg border border-border/30">
+                      <div className="font-medium text-sm">Выручка</div>
+                      <div className="text-xs text-muted-foreground">Общая сумма продаж за период</div>
+                    </div>
+                    <div className="bg-background/50 p-3 rounded-lg border border-border/30">
+                      <div className="font-medium text-sm">Прибыль</div>
+                      <div className="text-xs text-muted-foreground">Чистая прибыль (если заполнена себестоимость)</div>
+                    </div>
+                    <div className="bg-background/50 p-3 rounded-lg border border-border/30">
+                      <div className="font-medium text-sm">Ср. маржа</div>
+                      <div className="text-xs text-muted-foreground">Средняя рентабельность в %</div>
+                    </div>
+                    <div className="bg-background/50 p-3 rounded-lg border border-border/30">
+                      <div className="font-medium text-sm">Артикулов</div>
+                      <div className="text-xs text-muted-foreground">Общее количество уникальных артикулов</div>
+                    </div>
+                    <div className="bg-background/50 p-3 rounded-lg border border-border/30">
+                      <div className="font-medium text-sm text-green-600">В наличии</div>
+                      <div className="text-xs text-muted-foreground">Количество товаров с остатками</div>
+                    </div>
+                    <div className="bg-background/50 p-3 rounded-lg border border-border/30">
+                      <div className="font-medium text-sm text-red-600">Нет в наличии</div>
+                      <div className="text-xs text-muted-foreground">Количество товаров без остатков</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-muted/40 p-4 rounded-xl backdrop-blur-sm border border-border/30 space-y-3">
+                  <h4 className="font-medium flex items-center gap-2">
+                    <LineChart className="h-4 w-4 text-primary" />
+                    Графики
+                  </h4>
+                  <ul className="list-disc list-inside text-sm text-muted-foreground space-y-2">
+                    <li><strong>Динамика продаж</strong> — график выручки по периодам (месяцам)</li>
+                    <li><strong>ABC-распределение</strong> — круговая диаграмма по группам A/B/C</li>
+                  </ul>
+                </div>
+
+                <div className="bg-muted/40 p-4 rounded-xl backdrop-blur-sm border border-border/30 space-y-3">
+                  <h4 className="font-medium flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-primary" />
+                    Топ-10 товаров
+                  </h4>
+                  <ul className="list-disc list-inside text-sm text-muted-foreground space-y-2">
+                    <li>Переключение: по выручке / по прибыли</li>
+                    <li>Колонки: Артикул, Группа, ABC, Сумма</li>
+                    <li>Автоматическое обновление при выборе прогона</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ChevronDown className="h-5 w-5 text-primary" />
+                  Навигация по меню
+                </CardTitle>
+                <CardDescription>Меню разделено на 3 группы для удобства</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div className="bg-muted/40 p-4 rounded-xl backdrop-blur-sm border border-border/30 space-y-2">
+                    <h4 className="font-medium text-sm">Основные (всегда видны)</h4>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      <li className="flex items-center gap-2">
+                        <LayoutDashboard className="h-3 w-3" />
+                        Дашборд
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Upload className="h-3 w-3" />
+                        Новый расчёт
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <History className="h-3 w-3" />
+                        История
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="bg-muted/40 p-4 rounded-xl backdrop-blur-sm border border-border/30 space-y-2">
+                    <h4 className="font-medium text-sm">Анализ (выпадающее)</h4>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      <li className="flex items-center gap-2">
+                        <Grid3X3 className="h-3 w-3" />
+                        ABC-XYZ Матрица
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Package className="h-3 w-3" />
+                        Каталог артикулов
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Skull className="h-3 w-3" />
+                        Kill-лист
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Calculator className="h-3 w-3" />
+                        Юнит-экономика
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="bg-muted/40 p-4 rounded-xl backdrop-blur-sm border border-border/30 space-y-2">
+                    <h4 className="font-medium text-sm">Ещё (выпадающее)</h4>
+                    <ul className="text-sm text-muted-foreground space-y-1">
+                      <li className="flex items-center gap-2">
+                        <Settings className="h-3 w-3" />
+                        Настройки
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <FileText className="h-3 w-3" />
+                        Документация
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Shield className="h-3 w-3" />
+                        Админ-панель
+                      </li>
+                    </ul>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
