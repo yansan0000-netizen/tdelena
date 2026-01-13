@@ -18,6 +18,7 @@ import AdminPanel from "./pages/AdminPanel";
 import ArticleCatalog from "./pages/ArticleCatalog";
 import KillList from "./pages/KillList";
 import AssortmentAnalysis from "./pages/AssortmentAnalysis";
+import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,6 +34,14 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/docs" element={<Documentation />} />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/new"
               element={

@@ -37,6 +37,7 @@ import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { AssortmentColumnSelector } from '@/components/assortment/AssortmentColumnSelector';
+import { ABCXYZMatrix } from '@/components/assortment/ABCXYZMatrix';
 import { ASSORTMENT_COLUMNS, getDefaultAssortmentColumns } from '@/lib/assortmentColumns';
 
 const recommendationConfig: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
@@ -63,6 +64,7 @@ export default function AssortmentAnalysis() {
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [sort, setSort] = useState<{ column: string; direction: 'asc' | 'desc' } | null>(null);
+  const [matrixCell, setMatrixCell] = useState<{ abc: string; xyz: string } | null>(null);
   
   // Column visibility
   const hiddenForRole = shouldHideCost ? ['profit_per_unit', 'unit_cost'] : [];
@@ -107,14 +109,39 @@ export default function AssortmentAnalysis() {
   }, [runs, filters.runId]);
 
   const filteredBySearch = useMemo(() => {
-    if (!search) return products;
-    const s = search.toLowerCase();
-    return products.filter(p => 
-      p.article.toLowerCase().includes(s) ||
-      p.name?.toLowerCase().includes(s) ||
-      p.category?.toLowerCase().includes(s)
-    );
-  }, [products, search]);
+    let result = products;
+    
+    // Apply matrix filter
+    if (matrixCell) {
+      result = result.filter(p => 
+        p.abc_group === matrixCell.abc && p.xyz_group === matrixCell.xyz
+      );
+    }
+    
+    // Apply search
+    if (search) {
+      const s = search.toLowerCase();
+      result = result.filter(p => 
+        p.article.toLowerCase().includes(s) ||
+        p.name?.toLowerCase().includes(s) ||
+        p.category?.toLowerCase().includes(s)
+      );
+    }
+    
+    return result;
+  }, [products, search, matrixCell]);
+
+  const handleMatrixCellClick = (abc: string, xyz: string) => {
+    if (matrixCell?.abc === abc && matrixCell?.xyz === xyz) {
+      setMatrixCell(null);
+    } else {
+      setMatrixCell({ abc, xyz });
+    }
+  };
+
+  const clearMatrixSelection = () => {
+    setMatrixCell(null);
+  };
 
   // Sort products
   const sortedProducts = useMemo(() => {
@@ -928,7 +955,16 @@ export default function AssortmentAnalysis() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="abc" className="mt-4">
+              <TabsContent value="abc" className="mt-4 space-y-6">
+                {/* Interactive Matrix */}
+                <ABCXYZMatrix
+                  products={products}
+                  selectedCell={matrixCell}
+                  onCellClick={handleMatrixCellClick}
+                  onClearSelection={clearMatrixSelection}
+                />
+
+                {/* ABC Breakdown Cards */}
                 <div className="grid grid-cols-3 gap-4">
                   {summary.abcBreakdown.map(abc => (
                     <Card key={abc.group}>

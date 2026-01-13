@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
-import { FileSpreadsheet, History, Plus, LogOut, BookOpen, Calculator, Settings, Shield, Package, Skull, BarChart3 } from 'lucide-react';
+import { FileSpreadsheet, History, Plus, LogOut, BookOpen, Calculator, Settings, Shield, Package, Skull, BarChart3, LayoutDashboard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -24,6 +24,7 @@ export function AppLayout({ children, fullWidth = false }: AppLayoutProps) {
   };
 
   const navItems = [
+    { path: '/dashboard', label: 'Дашборд', icon: LayoutDashboard },
     { path: '/new', label: 'Новый расчёт', icon: Plus },
     { path: '/runs', label: 'История', icon: History },
     // Hide assortment from hidden_cost users
