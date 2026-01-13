@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,16 +9,40 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { useUserSettings, defaultSettings } from '@/hooks/useUserSettings';
 import { TAX_MODES } from '@/lib/categories';
-import { Settings as SettingsIcon, Save, Loader2, DollarSign, TrendingUp, Package, Percent, EyeOff, Plus, X } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Loader2, DollarSign, TrendingUp, Package, Percent, EyeOff, Plus, X, Check, ChevronsUpDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { useCosts } from '@/hooks/useCosts';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 import { RecommendationRulesPanel } from '@/components/recommendations/RecommendationRulesPanel';
 
 export default function Settings() {
   const { settings, loading, updateSettings } = useUserSettings();
+  const { costs, loading: costsLoading } = useCosts();
   const [formData, setFormData] = useState(defaultSettings);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [excludedArticleOpen, setExcludedArticleOpen] = useState(false);
+  const [excludedArticleSearch, setExcludedArticleSearch] = useState('');
+
+  // Get available articles from costs that are not yet excluded
+  const availableArticles = useMemo(() => {
+    return costs
+      .filter(c => !formData.excluded_articles.includes(c.article))
+      .map(c => ({ article: c.article, name: c.name }));
+  }, [costs, formData.excluded_articles]);
+
+  // Filter articles by search
+  const filteredArticles = useMemo(() => {
+    if (!excludedArticleSearch) return availableArticles;
+    const search = excludedArticleSearch.toLowerCase();
+    return availableArticles.filter(a => 
+      a.article.toLowerCase().includes(search) ||
+      a.name?.toLowerCase().includes(search)
+    );
+  }, [availableArticles, excludedArticleSearch]);
   const [newExcludedArticle, setNewExcludedArticle] = useState('');
 
   // Load settings into form
@@ -86,8 +110,8 @@ export default function Settings() {
     }
   };
 
-  const handleAddExcludedArticle = () => {
-    const trimmed = newExcludedArticle.trim();
+  const handleAddExcludedArticle = (article: string) => {
+    const trimmed = article.trim();
     if (!trimmed) return;
     if (formData.excluded_articles.includes(trimmed)) {
       toast.error('Артикул уже добавлен');
@@ -97,7 +121,8 @@ export default function Settings() {
       ...prev,
       excluded_articles: [...prev.excluded_articles, trimmed],
     }));
-    setNewExcludedArticle('');
+    setExcludedArticleSearch('');
+    setExcludedArticleOpen(false);
     setHasChanges(true);
   };
 
@@ -108,6 +133,7 @@ export default function Settings() {
     }));
     setHasChanges(true);
   };
+
 
   if (loading) {
     return (
@@ -429,20 +455,54 @@ export default function Settings() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-2">
-                <Input
-                  placeholder="Введите артикул"
-                  value={newExcludedArticle}
-                  onChange={(e) => setNewExcludedArticle(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddExcludedArticle();
-                    }
-                  }}
-                />
-                <Button onClick={handleAddExcludedArticle} size="icon" variant="outline">
-                  <Plus className="h-4 w-4" />
-                </Button>
+                <Popover open={excludedArticleOpen} onOpenChange={setExcludedArticleOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={excludedArticleOpen}
+                      className="flex-1 justify-between font-normal"
+                    >
+                      <span className="text-muted-foreground">Выберите артикул...</span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-0" align="start">
+                    <Command shouldFilter={false}>
+                      <CommandInput 
+                        placeholder="Поиск артикула..." 
+                        value={excludedArticleSearch}
+                        onValueChange={setExcludedArticleSearch}
+                      />
+                      <CommandList>
+                        <CommandEmpty>
+                          {costsLoading ? 'Загрузка...' : 'Артикулы не найдены'}
+                        </CommandEmpty>
+                        <CommandGroup>
+                          {filteredArticles.slice(0, 50).map((item) => (
+                            <CommandItem
+                              key={item.article}
+                              value={item.article}
+                              onSelect={() => handleAddExcludedArticle(item.article)}
+                            >
+                              <div className="flex flex-col">
+                                <span className="font-medium">{item.article}</span>
+                                {item.name && (
+                                  <span className="text-xs text-muted-foreground">{item.name}</span>
+                                )}
+                              </div>
+                            </CommandItem>
+                          ))}
+                          {filteredArticles.length > 50 && (
+                            <div className="px-2 py-1.5 text-xs text-muted-foreground text-center">
+                              Показано 50 из {filteredArticles.length}. Уточните поиск.
+                            </div>
+                          )}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               
               {formData.excluded_articles.length > 0 ? (
