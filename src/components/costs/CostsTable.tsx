@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { UnitEconInput } from '@/hooks/useCosts';
 import { useUserRole } from '@/hooks/useUserRole';
 import { UNIT_ECON_COLUMNS, UnitEconColumn } from '@/lib/unitEconColumns';
-import { ExternalLink, RefreshCw, AlertCircle } from 'lucide-react';
+import { ExternalLink, RefreshCw, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
@@ -17,8 +18,16 @@ interface CostsTableProps {
   visibleColumns: string[];
 }
 
+type SortDirection = 'asc' | 'desc' | null;
+
+interface SortState {
+  column: string | null;
+  direction: SortDirection;
+}
+
 export function CostsTable({ costs, loading, visibleColumns }: CostsTableProps) {
   const { shouldHideCost } = useUserRole();
+  const [sort, setSort] = useState<SortState>({ column: null, direction: null });
 
   // Filter columns based on visibility and role
   const displayColumns = UNIT_ECON_COLUMNS.filter(col => {
@@ -27,8 +36,83 @@ export function CostsTable({ costs, loading, visibleColumns }: CostsTableProps) 
     return true;
   });
 
+  // Handle column header click for sorting
+  const handleSort = (columnKey: string) => {
+    setSort(prev => {
+      if (prev.column !== columnKey) {
+        return { column: columnKey, direction: 'asc' };
+      }
+      if (prev.direction === 'asc') {
+        return { column: columnKey, direction: 'desc' };
+      }
+      return { column: null, direction: null };
+    });
+  };
+
+  // Get sort icon for column
+  const getSortIcon = (columnKey: string) => {
+    if (sort.column !== columnKey) {
+      return <ArrowUpDown className="h-3 w-3 opacity-50" />;
+    }
+    if (sort.direction === 'asc') {
+      return <ArrowUp className="h-3 w-3" />;
+    }
+    return <ArrowDown className="h-3 w-3" />;
+  };
+
+  // Get numeric value for sorting
+  const getSortValue = (cost: UnitEconInput, column: UnitEconColumn): number | string | null => {
+    const value = (cost as unknown as Record<string, unknown>)[column.key];
+    
+    // Handle special calculated fields
+    if (column.key === 'margin_pct') {
+      if (!cost.unit_cost_real_rub || !cost.wholesale_price_rub) return null;
+      const profit = cost.wholesale_price_rub - cost.unit_cost_real_rub;
+      return (profit / cost.wholesale_price_rub) * 100;
+    }
+    
+    if (column.key === 'profit_per_unit') {
+      if (!cost.unit_cost_real_rub || !cost.wholesale_price_rub) return null;
+      return cost.wholesale_price_rub - cost.unit_cost_real_rub;
+    }
+    
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'boolean') return value ? 1 : 0;
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') return value.toLowerCase();
+    return null;
+  };
+
+  // Sort costs
+  const sortedCosts = useMemo(() => {
+    if (!sort.column || !sort.direction) return costs;
+    
+    const column = UNIT_ECON_COLUMNS.find(c => c.key === sort.column);
+    if (!column) return costs;
+    
+    return [...costs].sort((a, b) => {
+      const aVal = getSortValue(a, column);
+      const bVal = getSortValue(b, column);
+      
+      // Handle nulls - always push to end
+      if (aVal === null && bVal === null) return 0;
+      if (aVal === null) return 1;
+      if (bVal === null) return -1;
+      
+      // Compare values
+      let comparison = 0;
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        comparison = aVal.localeCompare(bVal, 'ru');
+      } else if (typeof aVal === 'number' && typeof bVal === 'number') {
+        comparison = aVal - bVal;
+      }
+      
+      return sort.direction === 'asc' ? comparison : -comparison;
+    });
+  }, [costs, sort.column, sort.direction]);
+
   const formatValue = (cost: UnitEconInput, column: UnitEconColumn): React.ReactNode => {
-    const value = (cost as any)[column.key];
+    const value = (cost as unknown as Record<string, unknown>)[column.key];
 
     // Special cases
     if (column.key === 'article') {
@@ -49,7 +133,7 @@ export function CostsTable({ costs, loading, visibleColumns }: CostsTableProps) 
     }
 
     if (column.key === 'sell_on_wb') {
-      const sellOnWb = (cost as any).sell_on_wb;
+      const sellOnWb = (cost as unknown as Record<string, unknown>).sell_on_wb;
       return sellOnWb ? (
         <Badge variant="outline" className="text-xs">Да</Badge>
       ) : null;
@@ -65,7 +149,7 @@ export function CostsTable({ costs, loading, visibleColumns }: CostsTableProps) 
       return (
         <span className="text-xs text-muted-foreground">
           {cost.updated_at ? format(new Date(cost.updated_at), 'dd.MM.yy', { locale: ru }) : '-'}
-          {(cost as any).is_recalculation && (
+          {(cost as unknown as Record<string, unknown>).is_recalculation && (
             <RefreshCw className="h-3 w-3 inline ml-1 text-warning" />
           )}
         </span>
@@ -151,19 +235,26 @@ export function CostsTable({ costs, loading, visibleColumns }: CostsTableProps) 
                 {displayColumns.map(column => (
                   <TableHead 
                     key={column.key}
-                    className={
+                    className={`cursor-pointer hover:bg-muted/50 transition-colors select-none ${
                       column.align === 'right' ? 'text-right' :
                       column.align === 'center' ? 'text-center' : ''
-                    }
+                    }`}
+                    onClick={() => handleSort(column.key)}
                   >
-                    {column.label}
+                    <div className={`flex items-center gap-1 ${
+                      column.align === 'right' ? 'justify-end' :
+                      column.align === 'center' ? 'justify-center' : ''
+                    }`}>
+                      <span>{column.label}</span>
+                      {getSortIcon(column.key)}
+                    </div>
                   </TableHead>
                 ))}
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {costs.map((cost) => (
+              {sortedCosts.map((cost) => (
                 <TableRow key={cost.id}>
                   {displayColumns.map(column => (
                     <TableCell 
