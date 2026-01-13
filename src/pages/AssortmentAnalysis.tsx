@@ -96,10 +96,7 @@ export default function AssortmentAnalysis() {
 
   const { runs, products, summary, categories, isLoading, refetch } = useAssortmentAnalysis(filters);
 
-  // Redirect hidden_cost users
-  if (!roleLoading && shouldHideCost) {
-    return <Navigate to="/runs" replace />;
-  }
+  // ABC-XYZ Matrix is hidden for hidden_cost users, but page is accessible
 
   // Auto-select latest run
   useMemo(() => {
@@ -367,7 +364,7 @@ export default function AssortmentAnalysis() {
                 <TabsList>
                   <TabsTrigger value="table">Таблица товаров</TabsTrigger>
                   <TabsTrigger value="categories">По категориям</TabsTrigger>
-                  <TabsTrigger value="abc">ABC-анализ</TabsTrigger>
+                  {!shouldHideCost && <TabsTrigger value="abc">ABC-анализ</TabsTrigger>}
                 </TabsList>
 
                 {/* Filters */}
@@ -955,44 +952,46 @@ export default function AssortmentAnalysis() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="abc" className="mt-4 space-y-6">
-                {/* Interactive Matrix */}
-                <ABCXYZMatrix
-                  products={products}
-                  selectedCell={matrixCell}
-                  onCellClick={handleMatrixCellClick}
-                  onClearSelection={clearMatrixSelection}
-                />
+              {!shouldHideCost && (
+                <TabsContent value="abc" className="mt-4 space-y-6">
+                  {/* Interactive Matrix */}
+                  <ABCXYZMatrix
+                    products={products}
+                    selectedCell={matrixCell}
+                    onCellClick={handleMatrixCellClick}
+                    onClearSelection={clearMatrixSelection}
+                  />
 
-                {/* ABC Breakdown Cards */}
-                <div className="grid grid-cols-3 gap-4">
-                  {summary.abcBreakdown.map(abc => (
-                    <Card key={abc.group}>
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                          <Badge variant={abc.group === 'A' ? 'default' : abc.group === 'B' ? 'secondary' : 'outline'}>
-                            {abc.group}
-                          </Badge>
-                          Категория {abc.group}
-                        </CardTitle>
-                        <CardDescription>
-                          {abc.group === 'A' && '80% выручки — ключевые товары'}
-                          {abc.group === 'B' && '15% выручки — середняки'}
-                          {abc.group === 'C' && '5% выручки — длинный хвост'}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2">
-                          <div className="text-3xl font-bold">{abc.count}</div>
-                          <div className="text-sm text-muted-foreground">товаров</div>
-                          <div className="text-lg font-medium">{abc.revenue.toLocaleString('ru-RU')} ₽</div>
-                          <div className="text-sm text-muted-foreground">выручка</div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </TabsContent>
+                  {/* ABC Breakdown Cards */}
+                  <div className="grid grid-cols-3 gap-4">
+                    {summary.abcBreakdown.map(abc => (
+                      <Card key={abc.group}>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <Badge variant={abc.group === 'A' ? 'default' : abc.group === 'B' ? 'secondary' : 'outline'}>
+                              {abc.group}
+                            </Badge>
+                            Категория {abc.group}
+                          </CardTitle>
+                          <CardDescription>
+                            {abc.group === 'A' && '80% выручки — ключевые товары'}
+                            {abc.group === 'B' && '15% выручки — середняки'}
+                            {abc.group === 'C' && '5% выручки — длинный хвост'}
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-2">
+                            <div className="text-3xl font-bold">{abc.count}</div>
+                            <div className="text-sm text-muted-foreground">товаров</div>
+                            <div className="text-lg font-medium">{abc.revenue.toLocaleString('ru-RU')} ₽</div>
+                            <div className="text-sm text-muted-foreground">выручка</div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </TabsContent>
+              )}
             </Tabs>
           </>
         )}
