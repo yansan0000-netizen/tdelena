@@ -7,49 +7,51 @@
 @layer base {
   :root {
     /* ═══════════════════════════════════════════════════════════════
-       Apple Liquid Glass - Light Theme
-       Premium glassmorphism with depth and soft luminosity
+       TD ELENA Brand Theme - Light Mode
+       Deep navy primary with vibrant coral/orange accents
     ═══════════════════════════════════════════════════════════════ */
     
     /* Core palette */
-    --background: 220 20% 97%;
-    --foreground: 220 25% 12%;
+    --background: 220 25% 97%;
+    --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
-    --card-foreground: 220 25% 12%;
+    --card-foreground: 222 47% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 25% 12%;
+    --popover-foreground: 222 47% 11%;
 
-    /* Brand colors */
-    --primary: 211 100% 50%;
+    /* Brand colors - Deep Navy/Indigo from logo */
+    --primary: 225 60% 30%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 211 100% 65%;
+    --primary-glow: 225 70% 45%;
 
-    --secondary: 220 15% 94%;
-    --secondary-foreground: 220 25% 20%;
+    --secondary: 220 20% 94%;
+    --secondary-foreground: 222 47% 20%;
 
-    --muted: 220 15% 92%;
-    --muted-foreground: 220 12% 48%;
+    --muted: 220 18% 92%;
+    --muted-foreground: 220 15% 46%;
 
-    --accent: 280 85% 60%;
+    /* Vibrant accent - Coral/Orange for CTAs and highlights */
+    --accent: 16 90% 55%;
     --accent-foreground: 0 0% 100%;
 
-    --success: 152 70% 42%;
+    /* Additional vibrant colors */
+    --success: 152 76% 40%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 95% 55%;
-    --warning-foreground: 0 0% 100%;
+    --warning: 38 95% 50%;
+    --warning-foreground: 222 47% 11%;
 
-    --destructive: 0 75% 55%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
     /* Interface elements */
-    --border: 220 15% 88%;
-    --input: 220 15% 95%;
-    --ring: 211 100% 50%;
+    --border: 220 18% 86%;
+    --input: 220 18% 95%;
+    --ring: 225 60% 30%;
 
-    /* Radii - Apple-inspired large curves */
+    /* Radii - Modern curves */
     --radius: 1rem;
     --radius-sm: 0.75rem;
     --radius-lg: 1.5rem;
@@ -61,13 +63,13 @@
     ═══════════════════════════════════════════════════════════════ */
     
     /* Glass surfaces with opacity */
-    --glass-bg: 0 0% 100% / 0.72;
-    --glass-bg-elevated: 0 0% 100% / 0.85;
-    --glass-bg-floating: 0 0% 100% / 0.92;
+    --glass-bg: 0 0% 100% / 0.75;
+    --glass-bg-elevated: 0 0% 100% / 0.88;
+    --glass-bg-floating: 0 0% 100% / 0.94;
     
     /* Glass borders - subtle luminous edges */
     --glass-border: 0 0% 100% / 0.6;
-    --glass-border-subtle: 220 15% 88% / 0.5;
+    --glass-border-subtle: 220 18% 86% / 0.5;
     --glass-border-bright: 0 0% 100% / 0.8;
     
     /* Inner highlights - wet glass effect */
@@ -82,88 +84,90 @@
     
     /* Multi-layer shadows */
     --shadow-glass: 
-      0 2px 4px hsl(220 25% 10% / 0.02),
-      0 8px 16px hsl(220 25% 10% / 0.04),
-      0 24px 48px hsl(220 25% 10% / 0.06);
+      0 2px 4px hsl(222 47% 11% / 0.02),
+      0 8px 16px hsl(222 47% 11% / 0.04),
+      0 24px 48px hsl(222 47% 11% / 0.06);
     --shadow-glass-elevated: 
-      0 4px 8px hsl(220 25% 10% / 0.03),
-      0 16px 32px hsl(220 25% 10% / 0.06),
-      0 32px 64px hsl(220 25% 10% / 0.08);
+      0 4px 8px hsl(222 47% 11% / 0.03),
+      0 16px 32px hsl(222 47% 11% / 0.06),
+      0 32px 64px hsl(222 47% 11% / 0.08);
     --shadow-glass-floating: 
-      0 8px 16px hsl(220 25% 10% / 0.04),
-      0 24px 48px hsl(220 25% 10% / 0.08),
-      0 48px 96px hsl(220 25% 10% / 0.12);
-    --shadow-glow-primary: 0 0 40px hsl(211 100% 50% / 0.2);
-    --shadow-glow-accent: 0 0 40px hsl(280 85% 60% / 0.15);
+      0 8px 16px hsl(222 47% 11% / 0.04),
+      0 24px 48px hsl(222 47% 11% / 0.08),
+      0 48px 96px hsl(222 47% 11% / 0.12);
+    --shadow-glow-primary: 0 0 40px hsl(225 60% 30% / 0.2);
+    --shadow-glow-accent: 0 0 40px hsl(16 90% 55% / 0.2);
 
     /* Sidebar */
-    --sidebar-background: 0 0% 100% / 0.72;
-    --sidebar-foreground: 220 25% 12%;
-    --sidebar-primary: 211 100% 50%;
+    --sidebar-background: 0 0% 100% / 0.75;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 225 60% 30%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 15% 94%;
-    --sidebar-accent-foreground: 220 25% 20%;
-    --sidebar-border: 220 15% 88%;
-    --sidebar-ring: 211 100% 50%;
+    --sidebar-accent: 220 20% 94%;
+    --sidebar-accent-foreground: 222 47% 20%;
+    --sidebar-border: 220 18% 86%;
+    --sidebar-ring: 225 60% 30%;
   }
 
   .dark {
     /* ═══════════════════════════════════════════════════════════════
-       Apple Liquid Glass - Dark Theme
-       Rich depth with luminous accents
+       TD ELENA Brand Theme - Dark Mode
+       Rich deep backgrounds with vibrant accents
     ═══════════════════════════════════════════════════════════════ */
     
     /* Core palette */
-    --background: 225 25% 6%;
-    --foreground: 220 15% 95%;
+    --background: 225 30% 8%;
+    --foreground: 220 20% 95%;
 
-    --card: 225 25% 10%;
-    --card-foreground: 220 15% 95%;
+    --card: 225 28% 12%;
+    --card-foreground: 220 20% 95%;
 
-    --popover: 225 25% 10%;
-    --popover-foreground: 220 15% 95%;
+    --popover: 225 28% 12%;
+    --popover-foreground: 220 20% 95%;
 
-    /* Brand colors - slightly brighter in dark mode */
-    --primary: 211 100% 58%;
+    /* Brand colors - Lighter in dark mode for visibility */
+    --primary: 225 65% 55%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 211 100% 70%;
+    --primary-glow: 225 70% 65%;
 
-    --secondary: 225 20% 16%;
-    --secondary-foreground: 220 15% 90%;
+    --secondary: 225 25% 18%;
+    --secondary-foreground: 220 20% 90%;
 
-    --muted: 225 20% 14%;
-    --muted-foreground: 220 12% 55%;
+    --muted: 225 22% 15%;
+    --muted-foreground: 220 15% 55%;
 
-    --accent: 280 85% 68%;
+    /* Vibrant accent - Coral/Orange */
+    --accent: 16 90% 60%;
     --accent-foreground: 0 0% 100%;
 
-    --success: 152 70% 48%;
+    /* Additional vibrant colors */
+    --success: 152 76% 46%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 95% 58%;
-    --warning-foreground: 0 0% 100%;
+    --warning: 38 95% 55%;
+    --warning-foreground: 222 47% 11%;
 
-    --destructive: 0 70% 52%;
+    --destructive: 0 78% 55%;
     --destructive-foreground: 0 0% 100%;
 
     /* Interface elements */
-    --border: 225 20% 18%;
-    --input: 225 20% 14%;
-    --ring: 211 100% 58%;
+    --border: 225 22% 20%;
+    --input: 225 22% 15%;
+    --ring: 225 65% 55%;
 
     /* ═══════════════════════════════════════════════════════════════
        Liquid Glass System - Dark Mode
     ═══════════════════════════════════════════════════════════════ */
     
     /* Glass surfaces - darker, richer */
-    --glass-bg: 225 25% 10% / 0.75;
-    --glass-bg-elevated: 225 25% 12% / 0.88;
-    --glass-bg-floating: 225 25% 14% / 0.95;
+    --glass-bg: 225 28% 12% / 0.78;
+    --glass-bg-elevated: 225 28% 14% / 0.9;
+    --glass-bg-floating: 225 28% 16% / 0.96;
     
     /* Glass borders - brighter for contrast */
-    --glass-border: 225 20% 25% / 0.5;
-    --glass-border-subtle: 225 20% 22% / 0.4;
-    --glass-border-bright: 225 20% 35% / 0.6;
+    --glass-border: 225 22% 28% / 0.5;
+    --glass-border-subtle: 225 22% 24% / 0.4;
+    --glass-border-bright: 225 22% 38% / 0.6;
     
     /* Inner highlights - subtle in dark mode */
     --glass-highlight: 0 0% 100% / 0.06;
@@ -182,18 +186,18 @@
       0 8px 16px hsl(0 0% 0% / 0.25),
       0 24px 48px hsl(0 0% 0% / 0.3),
       0 48px 96px hsl(0 0% 0% / 0.35);
-    --shadow-glow-primary: 0 0 50px hsl(211 100% 58% / 0.25);
-    --shadow-glow-accent: 0 0 50px hsl(280 85% 68% / 0.2);
+    --shadow-glow-primary: 0 0 50px hsl(225 65% 55% / 0.25);
+    --shadow-glow-accent: 0 0 50px hsl(16 90% 60% / 0.25);
 
     /* Sidebar */
-    --sidebar-background: 225 25% 8% / 0.85;
-    --sidebar-foreground: 220 15% 95%;
-    --sidebar-primary: 211 100% 58%;
+    --sidebar-background: 225 30% 10% / 0.88;
+    --sidebar-foreground: 220 20% 95%;
+    --sidebar-primary: 225 65% 55%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 225 20% 16%;
-    --sidebar-accent-foreground: 220 15% 90%;
-    --sidebar-border: 225 20% 18%;
-    --sidebar-ring: 211 100% 58%;
+    --sidebar-accent: 225 25% 18%;
+    --sidebar-accent-foreground: 220 20% 90%;
+    --sidebar-border: 225 22% 20%;
+    --sidebar-ring: 225 65% 55%;
   }
 }
 
