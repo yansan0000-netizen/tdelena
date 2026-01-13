@@ -6,7 +6,7 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { 
   History, Plus, LogOut, BookOpen, Calculator, 
   Settings, Shield, Package, Skull, BarChart3, LayoutDashboard,
-  ChevronDown, Grid3X3
+  ChevronDown
 } from 'lucide-react';
 import logo from '@/assets/logo.png';
 import { cn } from '@/lib/utils';
@@ -42,9 +42,9 @@ export function AppLayout({ children, fullWidth = false }: AppLayoutProps) {
     { path: '/runs', label: 'История', icon: History },
   ];
 
-  // Analysis section items (in dropdown)
+  // Analysis section items (in dropdown) - Assortment section is visible to all roles
   const analysisItems = [
-    ...(!shouldHideCost ? [{ path: '/assortment', label: 'ABC-XYZ Матрица', icon: Grid3X3 }] : []),
+    { path: '/assortment', label: 'Анализ ассортимента', icon: BarChart3 },
     { path: '/articles', label: 'Каталог артикулов', icon: Package },
     { path: '/kill-list', label: 'Kill-лист', icon: Skull },
     { path: '/unit-economics', label: 'Юнит-экономика', icon: Calculator },
