@@ -23,10 +23,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, Skull, Undo2, Plus, Trash2, Pencil, Check, X } from "lucide-react";
+import { Search, Skull, Undo2, Plus, Trash2, Pencil, Check, X, Upload } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { toast } from "sonner";
+import { KillListImport } from "@/components/costs/KillListImport";
 
 export default function KillList() {
   const { 
@@ -38,6 +39,7 @@ export default function KillList() {
   } = useArticleCatalog();
   const [search, setSearch] = useState("");
   const [addPriceDialogOpen, setAddPriceDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState<ArticleCatalogItem | null>(null);
   const [newPriceField, setNewPriceField] = useState({ name: "", value: "" });
   const [editingReasonId, setEditingReasonId] = useState<string | null>(null);
@@ -146,26 +148,33 @@ export default function KillList() {
           </p>
         </div>
 
-        {/* Stats */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Статистика</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-8">
-              <div>
-                <div className="text-3xl font-bold text-destructive">{killListArticles.length}</div>
-                <div className="text-sm text-muted-foreground">товаров в списке</div>
-              </div>
-              <div>
-                <div className="text-3xl font-bold">
-                  {killListArticles.reduce((sum, a) => sum + (a.avg_sale_price || 0), 0).toLocaleString("ru-RU")} ₽
+        {/* Stats and Actions */}
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+          <Card className="flex-1">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Статистика</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-8">
+                <div>
+                  <div className="text-3xl font-bold text-destructive">{killListArticles.length}</div>
+                  <div className="text-sm text-muted-foreground">товаров в списке</div>
                 </div>
-                <div className="text-sm text-muted-foreground">сумма средних цен</div>
+                <div>
+                  <div className="text-3xl font-bold">
+                    {killListArticles.reduce((sum, a) => sum + (a.avg_sale_price || 0), 0).toLocaleString("ru-RU")} ₽
+                  </div>
+                  <div className="text-sm text-muted-foreground">сумма средних цен</div>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+          
+          <Button onClick={() => setImportDialogOpen(true)} className="gap-2">
+            <Upload className="h-4 w-4" />
+            Импорт Excel
+          </Button>
+        </div>
 
         {/* Search */}
         <div className="relative">
@@ -359,6 +368,19 @@ export default function KillList() {
                 Добавить
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Import Dialog */}
+        <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Импорт артикулов в Kill-лист</DialogTitle>
+              <DialogDescription>
+                Загрузите Excel файл с артикулами для добавления в kill-лист
+              </DialogDescription>
+            </DialogHeader>
+            <KillListImport onSuccess={() => setImportDialogOpen(false)} />
           </DialogContent>
         </Dialog>
       </div>

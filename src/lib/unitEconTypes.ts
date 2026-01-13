@@ -159,24 +159,46 @@ export const defaultFormData: UnitEconFormData = {
 
 // Excel column mapping for import
 export const excelColumnMap: Record<string, keyof UnitEconFormData> = {
+  // Article - many variations
   'артикул': 'article',
   'article': 'article',
+  'арт': 'article',
+  'арт.': 'article',
+  'sku': 'article',
+  'код': 'article',
+  
+  // Name
   'наименование': 'name',
   'название': 'name',
   'name': 'name',
+  'товар': 'name',
+  'product': 'name',
+  
+  // Category
   'категория': 'category',
   'category': 'category',
+  
+  // URL
   'ссылка': 'product_url',
   'url': 'product_url',
+  'product_url': 'product_url',
+  
+  // Flags
   'новинка': 'is_new',
+  'is_new': 'is_new',
+  
+  // Production
   'количество единиц в крою': 'units_in_cut',
+  'единиц в крою': 'units_in_cut',
   'units_in_cut': 'units_in_cut',
   
   // Fabric 1
   'ткань 1': 'fabric1_name',
   'наименование ткани 1': 'fabric1_name',
+  'fabric1_name': 'fabric1_name',
   'вес ткани 1': 'fabric1_weight_cut_kg',
   'расход ткани 1': 'fabric1_kg_per_unit',
+  'fabric1_kg_per_unit': 'fabric1_kg_per_unit',
   'цена ткани 1 usd': 'fabric1_price_usd',
   'цена ткани 1 руб': 'fabric1_price_rub_per_kg',
   'стоимость ткани 1': 'fabric1_cost_rub_per_unit',
@@ -184,8 +206,10 @@ export const excelColumnMap: Record<string, keyof UnitEconFormData> = {
   // Fabric 2
   'ткань 2': 'fabric2_name',
   'наименование ткани 2': 'fabric2_name',
+  'fabric2_name': 'fabric2_name',
   'вес ткани 2': 'fabric2_weight_cut_kg',
   'расход ткани 2': 'fabric2_kg_per_unit',
+  'fabric2_kg_per_unit': 'fabric2_kg_per_unit',
   'цена ткани 2 usd': 'fabric2_price_usd',
   'цена ткани 2 руб': 'fabric2_price_rub_per_kg',
   'стоимость ткани 2': 'fabric2_cost_rub_per_unit',
@@ -193,52 +217,124 @@ export const excelColumnMap: Record<string, keyof UnitEconFormData> = {
   // Fabric 3
   'ткань 3': 'fabric3_name',
   'наименование ткани 3': 'fabric3_name',
+  'fabric3_name': 'fabric3_name',
   'вес ткани 3': 'fabric3_weight_cut_kg',
   'расход ткани 3': 'fabric3_kg_per_unit',
+  'fabric3_kg_per_unit': 'fabric3_kg_per_unit',
   'цена ткани 3 usd': 'fabric3_price_usd',
   'цена ткани 3 руб': 'fabric3_price_rub_per_kg',
   'стоимость ткани 3': 'fabric3_cost_rub_per_unit',
   
-  // Costs
+  // Costs - extended mappings
   'затраты на ткань': 'fabric_cost_total',
+  'стоимость тканей': 'fabric_cost_total',
   'fabric_cost_total': 'fabric_cost_total',
   'работа швейный': 'sewing_cost',
   'швейный': 'sewing_cost',
+  'пошив': 'sewing_cost',
   'sewing_cost': 'sewing_cost',
   'работа закройный': 'cutting_cost',
   'закройный': 'cutting_cost',
+  'крой': 'cutting_cost',
   'cutting_cost': 'cutting_cost',
   'фурнитура': 'accessories_cost',
   'accessories_cost': 'accessories_cost',
   'вышивка': 'print_embroidery_cost',
   'принт': 'print_embroidery_cost',
   'print_embroidery_cost': 'print_embroidery_cost',
+  'работа вышивка': 'print_embroidery_work_cost',
+  'материалы вышивка': 'print_embroidery_materials_cost',
+  
+  // FX
   'курс': 'fx_rate',
+  'курс валюты': 'fx_rate',
   'fx_rate': 'fx_rate',
   
   // Markup
   'административные расходы': 'admin_overhead_pct',
+  'адм расходы': 'admin_overhead_pct',
+  'накладные': 'admin_overhead_pct',
   'admin_overhead_pct': 'admin_overhead_pct',
   'оптовая наценка': 'wholesale_markup_pct',
+  'наценка опт': 'wholesale_markup_pct',
   'wholesale_markup_pct': 'wholesale_markup_pct',
   
-  // WB
+  // Unit cost - maps to fabric_cost_total as closest equivalent
+  'себестоимость': 'fabric_cost_total',
+  'себестоимость единицы': 'fabric_cost_total',
+  
+  // WB pricing
+  'цена без спп': 'price_no_spp',
+  'price_no_spp': 'price_no_spp',
   'цена с спп': 'buyer_price_with_spp',
+  'buyer_price_with_spp': 'buyer_price_with_spp',
   'спп': 'spp_pct',
+  'спп %': 'spp_pct',
+  'spp_pct': 'spp_pct',
   'розничная после скидки': 'planned_retail_after_discount',
+  'planned_retail_after_discount': 'planned_retail_after_discount',
   'розничная до скидки': 'retail_before_discount',
+  'retail_before_discount': 'retail_before_discount',
   'скидка': 'approved_discount_pct',
+  'скидка %': 'approved_discount_pct',
+  'approved_discount_pct': 'approved_discount_pct',
   'план продаж': 'planned_sales_month_qty',
+  'planned_sales_month_qty': 'planned_sales_month_qty',
   'комиссия wb': 'wb_commission_pct',
+  'комиссия вб': 'wb_commission_pct',
+  'wb_commission_pct': 'wb_commission_pct',
+  
+  // Logistics
   'доставка': 'delivery_rub',
+  'delivery_rub': 'delivery_rub',
   'приемка': 'acceptance_rub',
+  'acceptance_rub': 'acceptance_rub',
+  'выкуп %': 'buyout_pct',
+  'выкуп': 'buyout_pct',
+  'buyout_pct': 'buyout_pct',
+  'логистика клиенту': 'logistics_to_client',
+  'логистика до клиента': 'logistics_to_client',
+  'logistics_to_client': 'logistics_to_client',
+  'возврат логистика': 'logistics_return_fixed',
+  'логистика возврат': 'logistics_return_fixed',
+  'logistics_return_fixed': 'logistics_return_fixed',
+  
+  // Tax
   'невыкуп': 'non_purchase_pct',
+  'non_purchase_pct': 'non_purchase_pct',
   'усн': 'usn_tax_pct',
+  'усн %': 'usn_tax_pct',
+  'usn_tax_pct': 'usn_tax_pct',
+  'ндс': 'vat_pct',
+  'ндс %': 'vat_pct',
+  'vat_pct': 'vat_pct',
   'вложения': 'investments_rub',
+  'investments_rub': 'investments_rub',
+  
+  // Scenarios
+  'мин цена': 'scenario_min_price',
+  'минимальная цена': 'scenario_min_price',
+  'scenario_min_price': 'scenario_min_price',
+  'мин прибыль': 'scenario_min_profit',
+  'минимальная прибыль': 'scenario_min_profit',
+  'scenario_min_profit': 'scenario_min_profit',
+  'план цена': 'scenario_plan_price',
+  'плановая цена': 'scenario_plan_price',
+  'scenario_plan_price': 'scenario_plan_price',
+  'план прибыль': 'scenario_plan_profit',
+  'плановая прибыль': 'scenario_plan_profit',
+  'scenario_plan_profit': 'scenario_plan_profit',
+  'рекомендуемая цена': 'scenario_recommended_price',
+  'scenario_recommended_price': 'scenario_recommended_price',
+  'желаемая цена': 'scenario_desired_price',
+  'scenario_desired_price': 'scenario_desired_price',
   
   // Competitor
   'конкурент url': 'competitor_url',
+  'ссылка конкурент': 'competitor_url',
   'competitor_url': 'competitor_url',
   'цена конкурента': 'competitor_price',
   'competitor_price': 'competitor_price',
+  'комментарий конкурент': 'competitor_comment',
+  'competitor_comment': 'competitor_comment',
 };
