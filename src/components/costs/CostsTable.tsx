@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -28,6 +28,10 @@ interface SortState {
   direction: SortDirection;
 }
 
+const ROW_HEIGHT = 48;
+const HEADER_HEIGHT = 44;
+const MAX_TABLE_HEIGHT = 600;
+
 export function CostsTable({ 
   costs, 
   loading, 
@@ -37,40 +41,41 @@ export function CostsTable({
 }: CostsTableProps) {
   const { shouldHideCost } = useUserRole();
   const [sort, setSort] = useState<SortState>({ column: null, direction: null });
+  const parentRef = useRef<HTMLDivElement>(null);
 
   const isSelectable = !!onSelectionChange;
 
   // Filter columns based on visibility and role
-  const displayColumns = UNIT_ECON_COLUMNS.filter(col => {
+  const displayColumns = useMemo(() => UNIT_ECON_COLUMNS.filter(col => {
     if (!visibleColumns.includes(col.key)) return false;
     if (col.hideForRole === 'hidden_cost' && shouldHideCost) return false;
     return true;
-  });
+  }), [visibleColumns, shouldHideCost]);
 
   // Selection handlers
   const allSelected = costs.length > 0 && selectedArticles.length === costs.length;
   const someSelected = selectedArticles.length > 0 && selectedArticles.length < costs.length;
 
-  const handleSelectAll = () => {
+  const handleSelectAll = useCallback(() => {
     if (!onSelectionChange) return;
     if (allSelected) {
       onSelectionChange([]);
     } else {
       onSelectionChange(costs.map(c => c.article));
     }
-  };
+  }, [onSelectionChange, allSelected, costs]);
 
-  const handleSelectOne = (article: string) => {
+  const handleSelectOne = useCallback((article: string) => {
     if (!onSelectionChange) return;
     if (selectedArticles.includes(article)) {
       onSelectionChange(selectedArticles.filter(a => a !== article));
     } else {
       onSelectionChange([...selectedArticles, article]);
     }
-  };
+  }, [onSelectionChange, selectedArticles]);
 
   // Handle column header click for sorting
-  const handleSort = (columnKey: string) => {
+  const handleSort = useCallback((columnKey: string) => {
     setSort(prev => {
       if (prev.column !== columnKey) {
         return { column: columnKey, direction: 'asc' };
@@ -80,10 +85,10 @@ export function CostsTable({
       }
       return { column: null, direction: null };
     });
-  };
+  }, []);
 
   // Get sort icon for column
-  const getSortIcon = (columnKey: string) => {
+  const getSortIcon = useCallback((columnKey: string) => {
     if (sort.column !== columnKey) {
       return <ArrowUpDown className="h-3 w-3 opacity-50" />;
     }
@@ -91,10 +96,10 @@ export function CostsTable({
       return <ArrowUp className="h-3 w-3" />;
     }
     return <ArrowDown className="h-3 w-3" />;
-  };
+  }, [sort.column, sort.direction]);
 
   // Get numeric value for sorting
-  const getSortValue = (cost: UnitEconInput, column: UnitEconColumn): number | string | null => {
+  const getSortValue = useCallback((cost: UnitEconInput, column: UnitEconColumn): number | string | null => {
     const value = (cost as unknown as Record<string, unknown>)[column.key];
     
     // Handle special calculated fields
@@ -114,7 +119,7 @@ export function CostsTable({
     if (typeof value === 'number') return value;
     if (typeof value === 'string') return value.toLowerCase();
     return null;
-  };
+  }, []);
 
   // Sort costs
   const sortedCosts = useMemo(() => {
@@ -142,9 +147,17 @@ export function CostsTable({
       
       return sort.direction === 'asc' ? comparison : -comparison;
     });
-  }, [costs, sort.column, sort.direction]);
+  }, [costs, sort.column, sort.direction, getSortValue]);
 
-  const formatValue = (cost: UnitEconInput, column: UnitEconColumn): React.ReactNode => {
+  // Virtual row renderer
+  const rowVirtualizer = useVirtualizer({
+    count: sortedCosts.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 10,
+  });
+
+  const formatValue = useCallback((cost: UnitEconInput, column: UnitEconColumn): React.ReactNode => {
     const value = (cost as unknown as Record<string, unknown>)[column.key];
 
     // Special cases
@@ -225,7 +238,7 @@ export function CostsTable({
     }
 
     return String(value);
-  };
+  }, []);
 
   if (loading) {
     return (
@@ -258,15 +271,24 @@ export function CostsTable({
     );
   }
 
+  // Calculate dynamic height based on content
+  const contentHeight = Math.min(sortedCosts.length * ROW_HEIGHT, MAX_TABLE_HEIGHT);
+  const needsVirtualization = sortedCosts.length > 20;
+
   return (
     <Card>
       <CardContent className="p-0">
+        {/* Table container with horizontal scroll */}
         <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
+          <div className="min-w-max">
+            {/* Fixed Header */}
+            <div 
+              className="sticky top-0 z-10 bg-background border-b"
+              style={{ height: HEADER_HEIGHT }}
+            >
+              <div className="flex items-center h-full">
                 {isSelectable && (
-                  <TableHead className="w-[40px]">
+                  <div className="w-[52px] px-3 flex items-center justify-center shrink-0">
                     <Checkbox
                       checked={allSelected}
                       ref={(el) => {
@@ -277,67 +299,158 @@ export function CostsTable({
                       onCheckedChange={handleSelectAll}
                       aria-label="Выбрать все"
                     />
-                  </TableHead>
+                  </div>
                 )}
                 {displayColumns.map(column => (
-                  <TableHead 
+                  <div 
                     key={column.key}
-                    className={`cursor-pointer hover:bg-muted/50 transition-colors select-none ${
-                      column.align === 'right' ? 'text-right' :
-                      column.align === 'center' ? 'text-center' : ''
+                    className={`px-3 py-2 text-sm font-medium cursor-pointer hover:bg-muted/50 transition-colors select-none flex items-center gap-1 shrink-0 ${
+                      column.key === 'article' ? 'w-[140px]' :
+                      column.key === 'name' ? 'w-[200px]' :
+                      column.key === 'category' ? 'w-[140px]' :
+                      column.key === 'updated_at' ? 'w-[100px]' :
+                      'w-[120px]'
+                    } ${
+                      column.align === 'right' ? 'justify-end text-right' :
+                      column.align === 'center' ? 'justify-center text-center' : ''
                     }`}
                     onClick={() => handleSort(column.key)}
                   >
-                    <div className={`flex items-center gap-1 ${
-                      column.align === 'right' ? 'justify-end' :
-                      column.align === 'center' ? 'justify-center' : ''
-                    }`}>
-                      <span>{column.label}</span>
-                      {getSortIcon(column.key)}
-                    </div>
-                  </TableHead>
+                    <span>{column.label}</span>
+                    {getSortIcon(column.key)}
+                  </div>
                 ))}
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sortedCosts.map((cost) => (
-                <TableRow 
-                  key={cost.id}
-                  className={selectedArticles.includes(cost.article) ? 'bg-muted/50' : ''}
+                <div className="w-[52px] shrink-0" />
+              </div>
+            </div>
+
+            {/* Virtualized Body */}
+            {needsVirtualization ? (
+              <div
+                ref={parentRef}
+                className="overflow-y-auto"
+                style={{ height: contentHeight }}
+              >
+                <div
+                  style={{
+                    height: `${rowVirtualizer.getTotalSize()}px`,
+                    width: '100%',
+                    position: 'relative',
+                  }}
                 >
-                  {isSelectable && (
-                    <TableCell className="w-[40px]">
-                      <Checkbox
-                        checked={selectedArticles.includes(cost.article)}
-                        onCheckedChange={() => handleSelectOne(cost.article)}
-                        aria-label={`Выбрать ${cost.article}`}
-                      />
-                    </TableCell>
-                  )}
-                  {displayColumns.map(column => (
-                    <TableCell 
-                      key={column.key}
-                      className={`${
-                        column.align === 'right' ? 'text-right font-mono' :
-                        column.align === 'center' ? 'text-center' : ''
+                  {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                    const cost = sortedCosts[virtualRow.index];
+                    const isSelected = selectedArticles.includes(cost.article);
+
+                    return (
+                      <div
+                        key={cost.id}
+                        className={`absolute top-0 left-0 w-full flex items-center border-b hover:bg-muted/30 transition-colors ${
+                          isSelected ? 'bg-muted/50' : ''
+                        }`}
+                        style={{
+                          height: `${virtualRow.size}px`,
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                      >
+                        {isSelectable && (
+                          <div className="w-[52px] px-3 flex items-center justify-center shrink-0">
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => handleSelectOne(cost.article)}
+                              aria-label={`Выбрать ${cost.article}`}
+                            />
+                          </div>
+                        )}
+                        {displayColumns.map(column => (
+                          <div
+                            key={column.key}
+                            className={`px-3 py-2 text-sm shrink-0 ${
+                              column.key === 'article' ? 'w-[140px]' :
+                              column.key === 'name' ? 'w-[200px]' :
+                              column.key === 'category' ? 'w-[140px]' :
+                              column.key === 'updated_at' ? 'w-[100px]' :
+                              'w-[120px]'
+                            } ${
+                              column.align === 'right' ? 'text-right font-mono' :
+                              column.align === 'center' ? 'text-center' : ''
+                            }`}
+                          >
+                            {formatValue(cost, column)}
+                          </div>
+                        ))}
+                        <div className="w-[52px] px-2 shrink-0">
+                          <Link to={`/unit-economics/${encodeURIComponent(cost.article)}`}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              /* Non-virtualized for small lists */
+              <div>
+                {sortedCosts.map((cost) => {
+                  const isSelected = selectedArticles.includes(cost.article);
+                  return (
+                    <div
+                      key={cost.id}
+                      className={`flex items-center border-b hover:bg-muted/30 transition-colors ${
+                        isSelected ? 'bg-muted/50' : ''
                       }`}
+                      style={{ height: ROW_HEIGHT }}
                     >
-                      {formatValue(cost, column)}
-                    </TableCell>
-                  ))}
-                  <TableCell>
-                    <Link to={`/unit-economics/${encodeURIComponent(cost.article)}`}>
-                      <Button variant="ghost" size="icon">
-                        <ExternalLink className="h-4 w-4" />
-                      </Button>
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                      {isSelectable && (
+                        <div className="w-[52px] px-3 flex items-center justify-center shrink-0">
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => handleSelectOne(cost.article)}
+                            aria-label={`Выбрать ${cost.article}`}
+                          />
+                        </div>
+                      )}
+                      {displayColumns.map(column => (
+                        <div
+                          key={column.key}
+                          className={`px-3 py-2 text-sm shrink-0 ${
+                            column.key === 'article' ? 'w-[140px]' :
+                            column.key === 'name' ? 'w-[200px]' :
+                            column.key === 'category' ? 'w-[140px]' :
+                            column.key === 'updated_at' ? 'w-[100px]' :
+                            'w-[120px]'
+                          } ${
+                            column.align === 'right' ? 'text-right font-mono' :
+                            column.align === 'center' ? 'text-center' : ''
+                          }`}
+                        >
+                          {formatValue(cost, column)}
+                        </div>
+                      ))}
+                      <div className="w-[52px] px-2 shrink-0">
+                        <Link to={`/unit-economics/${encodeURIComponent(cost.article)}`}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Row count indicator */}
+        {costs.length > 20 && (
+          <div className="px-4 py-2 text-xs text-muted-foreground border-t bg-muted/30">
+            Показано {sortedCosts.length} артикулов {needsVirtualization && '(виртуализация включена)'}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
