@@ -36,6 +36,8 @@ import {
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { AssortmentColumnSelector } from '@/components/assortment/AssortmentColumnSelector';
+import { ASSORTMENT_COLUMNS, getDefaultAssortmentColumns } from '@/lib/assortmentColumns';
 
 const recommendationConfig: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
   expand: { label: 'Расширять', icon: <ArrowUpRight className="h-4 w-4" />, className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' },
@@ -61,6 +63,13 @@ export default function AssortmentAnalysis() {
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [sort, setSort] = useState<{ column: string; direction: 'asc' | 'desc' } | null>(null);
+  
+  // Column visibility
+  const hiddenForRole = shouldHideCost ? ['profit_per_unit', 'unit_cost'] : [];
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
+    const defaults = getDefaultAssortmentColumns();
+    return defaults.filter(col => !hiddenForRole.includes(col));
+  });
 
   // Handle escape key to exit fullscreen
   useEffect(() => {
@@ -395,15 +404,22 @@ export default function AssortmentAnalysis() {
                       </Button>
                     </div>
                   )}
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => setIsFullscreen(true)}
-                    className="ml-auto gap-2"
-                  >
-                    <Maximize2 className="h-4 w-4" />
-                    На весь экран
-                  </Button>
+                  <div className="flex items-center gap-2 ml-auto">
+                    <AssortmentColumnSelector
+                      visibleColumns={visibleColumns}
+                      onColumnsChange={setVisibleColumns}
+                      hiddenForRole={hiddenForRole}
+                    />
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => setIsFullscreen(true)}
+                      className="gap-2"
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                      На весь экран
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Fullscreen Table Modal */}
@@ -427,6 +443,11 @@ export default function AssortmentAnalysis() {
                             className="pl-9"
                           />
                         </div>
+                        <AssortmentColumnSelector
+                          visibleColumns={visibleColumns}
+                          onColumnsChange={setVisibleColumns}
+                          hiddenForRole={hiddenForRole}
+                        />
                         <Button 
                           variant="outline" 
                           size="sm" 
@@ -457,36 +478,66 @@ export default function AssortmentAnalysis() {
                                 onCheckedChange={(checked) => checked ? selectAllVisible() : clearSelection()}
                               />
                             </TableHead>
-                            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('article')}>
-                              <div className="flex items-center gap-1">Артикул {getSortIcon('article')}</div>
-                            </TableHead>
-                            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('category')}>
-                              <div className="flex items-center gap-1">Категория {getSortIcon('category')}</div>
-                            </TableHead>
-                            <TableHead className="text-center cursor-pointer hover:bg-muted/50" onClick={() => handleSort('abc')}>
-                              <div className="flex items-center justify-center gap-1">ABC {getSortIcon('abc')}</div>
-                            </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('total_quantity')}>
-                              <div className="flex items-center justify-end gap-1">Продажи {getSortIcon('total_quantity')}</div>
-                            </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('total_revenue')}>
-                              <div className="flex items-center justify-end gap-1">Выручка {getSortIcon('total_revenue')}</div>
-                            </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('current_stock')}>
-                              <div className="flex items-center justify-end gap-1">Остаток {getSortIcon('current_stock')}</div>
-                            </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('days_until_stockout')}>
-                              <div className="flex items-center justify-end gap-1">Дней {getSortIcon('days_until_stockout')}</div>
-                            </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('margin_pct')}>
-                              <div className="flex items-center justify-end gap-1">Маржа {getSortIcon('margin_pct')}</div>
-                            </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('profit_per_unit')}>
-                              <div className="flex items-center justify-end gap-1">Прибыль/шт {getSortIcon('profit_per_unit')}</div>
-                            </TableHead>
-                            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('recommendation')}>
-                              <div className="flex items-center gap-1">Рекомендация {getSortIcon('recommendation')}</div>
-                            </TableHead>
+                            {visibleColumns.includes('article') && (
+                              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('article')}>
+                                <div className="flex items-center gap-1">Артикул {getSortIcon('article')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('name') && (
+                              <TableHead className="cursor-pointer hover:bg-muted/50">
+                                <div className="flex items-center gap-1">Наименование</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('category') && (
+                              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('category')}>
+                                <div className="flex items-center gap-1">Категория {getSortIcon('category')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('abc') && (
+                              <TableHead className="text-center cursor-pointer hover:bg-muted/50" onClick={() => handleSort('abc')}>
+                                <div className="flex items-center justify-center gap-1">ABC {getSortIcon('abc')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('total_quantity') && (
+                              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('total_quantity')}>
+                                <div className="flex items-center justify-end gap-1">Продажи {getSortIcon('total_quantity')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('total_revenue') && (
+                              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('total_revenue')}>
+                                <div className="flex items-center justify-end gap-1">Выручка {getSortIcon('total_revenue')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('avg_price') && (
+                              <TableHead className="text-right cursor-pointer hover:bg-muted/50">
+                                <div className="flex items-center justify-end gap-1">Ср. цена</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('current_stock') && (
+                              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('current_stock')}>
+                                <div className="flex items-center justify-end gap-1">Остаток {getSortIcon('current_stock')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('days_until_stockout') && (
+                              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('days_until_stockout')}>
+                                <div className="flex items-center justify-end gap-1">Дней {getSortIcon('days_until_stockout')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('margin_pct') && (
+                              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('margin_pct')}>
+                                <div className="flex items-center justify-end gap-1">Маржа {getSortIcon('margin_pct')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('profit_per_unit') && (
+                              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('profit_per_unit')}>
+                                <div className="flex items-center justify-end gap-1">Прибыль/шт {getSortIcon('profit_per_unit')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('recommendation') && (
+                              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('recommendation')}>
+                                <div className="flex items-center gap-1">Рекомендация {getSortIcon('recommendation')}</div>
+                              </TableHead>
+                            )}
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -503,78 +554,105 @@ export default function AssortmentAnalysis() {
                                     onCheckedChange={() => toggleProduct(product.id)}
                                   />
                                 </TableCell>
-                                <TableCell>
-                                  <div className="font-mono font-medium">{product.article}</div>
-                                  {product.name && (
-                                    <div className="text-xs text-muted-foreground truncate max-w-[150px]">
-                                      {product.name}
+                                {visibleColumns.includes('article') && (
+                                  <TableCell>
+                                    <div className="font-mono font-medium">{product.article}</div>
+                                  </TableCell>
+                                )}
+                                {visibleColumns.includes('name') && (
+                                  <TableCell>
+                                    <div className="text-sm truncate max-w-[200px]">
+                                      {product.name || '—'}
                                     </div>
-                                  )}
-                                </TableCell>
-                                <TableCell className="text-muted-foreground">
-                                  {product.category || '—'}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  <Badge variant="outline" className="font-mono">
-                                    {product.abc_group || '—'}{product.xyz_group || ''}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-right font-medium">
-                                  {product.total_quantity.toLocaleString('ru-RU')}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  {product.total_revenue.toLocaleString('ru-RU')} ₽
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  {product.current_stock.toLocaleString('ru-RU')}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  <span className={cn(
-                                    product.days_until_stockout < 14 ? 'text-red-600' :
-                                    product.days_until_stockout > 180 ? 'text-orange-600' : ''
-                                  )}>
-                                    {product.days_until_stockout > 900 ? '∞' : product.days_until_stockout}
-                                  </span>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  {product.margin_pct !== null ? (
+                                  </TableCell>
+                                )}
+                                {visibleColumns.includes('category') && (
+                                  <TableCell className="text-muted-foreground">
+                                    {product.category || '—'}
+                                  </TableCell>
+                                )}
+                                {visibleColumns.includes('abc') && (
+                                  <TableCell className="text-center">
+                                    <Badge variant="outline" className="font-mono">
+                                      {product.abc_group || '—'}{product.xyz_group || ''}
+                                    </Badge>
+                                  </TableCell>
+                                )}
+                                {visibleColumns.includes('total_quantity') && (
+                                  <TableCell className="text-right font-medium">
+                                    {product.total_quantity.toLocaleString('ru-RU')}
+                                  </TableCell>
+                                )}
+                                {visibleColumns.includes('total_revenue') && (
+                                  <TableCell className="text-right">
+                                    {product.total_revenue.toLocaleString('ru-RU')} ₽
+                                  </TableCell>
+                                )}
+                                {visibleColumns.includes('avg_price') && (
+                                  <TableCell className="text-right">
+                                    {product.avg_price ? `${product.avg_price.toLocaleString('ru-RU')} ₽` : '—'}
+                                  </TableCell>
+                                )}
+                                {visibleColumns.includes('current_stock') && (
+                                  <TableCell className="text-right">
+                                    {product.current_stock.toLocaleString('ru-RU')}
+                                  </TableCell>
+                                )}
+                                {visibleColumns.includes('days_until_stockout') && (
+                                  <TableCell className="text-right">
                                     <span className={cn(
-                                      product.margin_pct < 0 ? 'text-red-600' :
-                                      product.margin_pct < 10 ? 'text-yellow-600' :
-                                      product.margin_pct >= 15 ? 'text-green-600' : ''
+                                      product.days_until_stockout < 14 ? 'text-red-600' :
+                                      product.days_until_stockout > 180 ? 'text-orange-600' : ''
                                     )}>
-                                      {product.margin_pct.toFixed(1)}%
+                                      {product.days_until_stockout > 900 ? '∞' : product.days_until_stockout}
                                     </span>
-                                  ) : (
-                                    <span className="text-muted-foreground">—</span>
-                                  )}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  {product.profit_per_unit !== null ? (
-                                    <span className={cn(product.profit_per_unit < 0 ? 'text-red-600' : '')}>
-                                      {product.profit_per_unit.toLocaleString('ru-RU')} ₽
-                                    </span>
-                                  ) : (
-                                    <span className="text-muted-foreground">—</span>
-                                  )}
-                                </TableCell>
-                                <TableCell>
-                                  {recConfig ? (
-                                    <div className="space-y-1">
-                                      <Badge className={cn('gap-1', recConfig.className)}>
-                                        {recConfig.icon}
-                                        {recConfig.label}
-                                      </Badge>
-                                      {product.assortment_reason && (
-                                        <div className="text-xs text-muted-foreground max-w-[200px] truncate" title={product.assortment_reason}>
-                                          {product.assortment_reason}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <span className="text-muted-foreground">—</span>
-                                  )}
-                                </TableCell>
+                                  </TableCell>
+                                )}
+                                {visibleColumns.includes('margin_pct') && (
+                                  <TableCell className="text-right">
+                                    {product.margin_pct !== null ? (
+                                      <span className={cn(
+                                        product.margin_pct < 0 ? 'text-red-600' :
+                                        product.margin_pct < 10 ? 'text-yellow-600' :
+                                        product.margin_pct >= 15 ? 'text-green-600' : ''
+                                      )}>
+                                        {product.margin_pct.toFixed(1)}%
+                                      </span>
+                                    ) : (
+                                      <span className="text-muted-foreground">—</span>
+                                    )}
+                                  </TableCell>
+                                )}
+                                {visibleColumns.includes('profit_per_unit') && (
+                                  <TableCell className="text-right">
+                                    {product.profit_per_unit !== null ? (
+                                      <span className={cn(product.profit_per_unit < 0 ? 'text-red-600' : '')}>
+                                        {product.profit_per_unit.toLocaleString('ru-RU')} ₽
+                                      </span>
+                                    ) : (
+                                      <span className="text-muted-foreground">—</span>
+                                    )}
+                                  </TableCell>
+                                )}
+                                {visibleColumns.includes('recommendation') && (
+                                  <TableCell>
+                                    {recConfig ? (
+                                      <div className="space-y-1">
+                                        <Badge className={cn('gap-1', recConfig.className)}>
+                                          {recConfig.icon}
+                                          {recConfig.label}
+                                        </Badge>
+                                        {product.assortment_reason && (
+                                          <div className="text-xs text-muted-foreground max-w-[200px] truncate" title={product.assortment_reason}>
+                                            {product.assortment_reason}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-muted-foreground">—</span>
+                                    )}
+                                  </TableCell>
+                                )}
                               </TableRow>
                             );
                           })}
@@ -613,42 +691,72 @@ export default function AssortmentAnalysis() {
                                 onCheckedChange={(checked) => checked ? selectAllVisible() : clearSelection()}
                               />
                             </TableHead>
-                            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('article')}>
-                              <div className="flex items-center gap-1">Артикул {getSortIcon('article')}</div>
-                            </TableHead>
-                            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('category')}>
-                              <div className="flex items-center gap-1">Категория {getSortIcon('category')}</div>
-                            </TableHead>
-                            <TableHead className="text-center cursor-pointer hover:bg-muted/50" onClick={() => handleSort('abc')}>
-                              <div className="flex items-center justify-center gap-1">ABC {getSortIcon('abc')}</div>
-                            </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('total_quantity')}>
-                              <div className="flex items-center justify-end gap-1">Продажи {getSortIcon('total_quantity')}</div>
-                            </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('total_revenue')}>
-                              <div className="flex items-center justify-end gap-1">Выручка {getSortIcon('total_revenue')}</div>
-                            </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('current_stock')}>
-                              <div className="flex items-center justify-end gap-1">Остаток {getSortIcon('current_stock')}</div>
-                            </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('days_until_stockout')}>
-                              <div className="flex items-center justify-end gap-1">Дней {getSortIcon('days_until_stockout')}</div>
-                            </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('margin_pct')}>
-                              <div className="flex items-center justify-end gap-1">Маржа {getSortIcon('margin_pct')}</div>
-                            </TableHead>
-                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('profit_per_unit')}>
-                              <div className="flex items-center justify-end gap-1">Прибыль/шт {getSortIcon('profit_per_unit')}</div>
-                            </TableHead>
-                            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('recommendation')}>
-                              <div className="flex items-center gap-1">Рекомендация {getSortIcon('recommendation')}</div>
-                            </TableHead>
+                            {visibleColumns.includes('article') && (
+                              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('article')}>
+                                <div className="flex items-center gap-1">Артикул {getSortIcon('article')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('name') && (
+                              <TableHead className="cursor-pointer hover:bg-muted/50">
+                                <div className="flex items-center gap-1">Наименование</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('category') && (
+                              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('category')}>
+                                <div className="flex items-center gap-1">Категория {getSortIcon('category')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('abc') && (
+                              <TableHead className="text-center cursor-pointer hover:bg-muted/50" onClick={() => handleSort('abc')}>
+                                <div className="flex items-center justify-center gap-1">ABC {getSortIcon('abc')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('total_quantity') && (
+                              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('total_quantity')}>
+                                <div className="flex items-center justify-end gap-1">Продажи {getSortIcon('total_quantity')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('total_revenue') && (
+                              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('total_revenue')}>
+                                <div className="flex items-center justify-end gap-1">Выручка {getSortIcon('total_revenue')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('avg_price') && (
+                              <TableHead className="text-right cursor-pointer hover:bg-muted/50">
+                                <div className="flex items-center justify-end gap-1">Ср. цена</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('current_stock') && (
+                              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('current_stock')}>
+                                <div className="flex items-center justify-end gap-1">Остаток {getSortIcon('current_stock')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('days_until_stockout') && (
+                              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('days_until_stockout')}>
+                                <div className="flex items-center justify-end gap-1">Дней {getSortIcon('days_until_stockout')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('margin_pct') && (
+                              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('margin_pct')}>
+                                <div className="flex items-center justify-end gap-1">Маржа {getSortIcon('margin_pct')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('profit_per_unit') && (
+                              <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('profit_per_unit')}>
+                                <div className="flex items-center justify-end gap-1">Прибыль/шт {getSortIcon('profit_per_unit')}</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('recommendation') && (
+                              <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('recommendation')}>
+                                <div className="flex items-center gap-1">Рекомендация {getSortIcon('recommendation')}</div>
+                              </TableHead>
+                            )}
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {sortedProducts.length === 0 ? (
                             <TableRow>
-                              <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                              <TableCell colSpan={visibleColumns.length + 1} className="text-center py-8 text-muted-foreground">
                                 {products.length === 0 ? 'Нет данных. Выберите прогон.' : 'Товары не найдены'}
                               </TableCell>
                             </TableRow>
@@ -666,78 +774,105 @@ export default function AssortmentAnalysis() {
                                       onCheckedChange={() => toggleProduct(product.id)}
                                     />
                                   </TableCell>
-                                  <TableCell>
-                                    <div className="font-mono font-medium">{product.article}</div>
-                                    {product.name && (
-                                      <div className="text-xs text-muted-foreground truncate max-w-[150px]">
-                                        {product.name}
+                                  {visibleColumns.includes('article') && (
+                                    <TableCell>
+                                      <div className="font-mono font-medium">{product.article}</div>
+                                    </TableCell>
+                                  )}
+                                  {visibleColumns.includes('name') && (
+                                    <TableCell>
+                                      <div className="text-sm truncate max-w-[200px]">
+                                        {product.name || '—'}
                                       </div>
-                                    )}
-                                  </TableCell>
-                                  <TableCell className="text-muted-foreground">
-                                    {product.category || '—'}
-                                  </TableCell>
-                                  <TableCell className="text-center">
-                                    <Badge variant="outline" className="font-mono">
-                                      {product.abc_group || '—'}{product.xyz_group || ''}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="text-right font-medium">
-                                    {product.total_quantity.toLocaleString('ru-RU')}
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    {product.total_revenue.toLocaleString('ru-RU')} ₽
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    {product.current_stock.toLocaleString('ru-RU')}
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    <span className={cn(
-                                      product.days_until_stockout < 14 ? 'text-red-600' :
-                                      product.days_until_stockout > 180 ? 'text-orange-600' : ''
-                                    )}>
-                                      {product.days_until_stockout > 900 ? '∞' : product.days_until_stockout}
-                                    </span>
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    {product.margin_pct !== null ? (
+                                    </TableCell>
+                                  )}
+                                  {visibleColumns.includes('category') && (
+                                    <TableCell className="text-muted-foreground">
+                                      {product.category || '—'}
+                                    </TableCell>
+                                  )}
+                                  {visibleColumns.includes('abc') && (
+                                    <TableCell className="text-center">
+                                      <Badge variant="outline" className="font-mono">
+                                        {product.abc_group || '—'}{product.xyz_group || ''}
+                                      </Badge>
+                                    </TableCell>
+                                  )}
+                                  {visibleColumns.includes('total_quantity') && (
+                                    <TableCell className="text-right font-medium">
+                                      {product.total_quantity.toLocaleString('ru-RU')}
+                                    </TableCell>
+                                  )}
+                                  {visibleColumns.includes('total_revenue') && (
+                                    <TableCell className="text-right">
+                                      {product.total_revenue.toLocaleString('ru-RU')} ₽
+                                    </TableCell>
+                                  )}
+                                  {visibleColumns.includes('avg_price') && (
+                                    <TableCell className="text-right">
+                                      {product.avg_price ? `${product.avg_price.toLocaleString('ru-RU')} ₽` : '—'}
+                                    </TableCell>
+                                  )}
+                                  {visibleColumns.includes('current_stock') && (
+                                    <TableCell className="text-right">
+                                      {product.current_stock.toLocaleString('ru-RU')}
+                                    </TableCell>
+                                  )}
+                                  {visibleColumns.includes('days_until_stockout') && (
+                                    <TableCell className="text-right">
                                       <span className={cn(
-                                        product.margin_pct < 0 ? 'text-red-600' :
-                                        product.margin_pct < 10 ? 'text-yellow-600' :
-                                        product.margin_pct >= 15 ? 'text-green-600' : ''
+                                        product.days_until_stockout < 14 ? 'text-red-600' :
+                                        product.days_until_stockout > 180 ? 'text-orange-600' : ''
                                       )}>
-                                        {product.margin_pct.toFixed(1)}%
+                                        {product.days_until_stockout > 900 ? '∞' : product.days_until_stockout}
                                       </span>
-                                    ) : (
-                                      <span className="text-muted-foreground">—</span>
-                                    )}
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    {product.profit_per_unit !== null ? (
-                                      <span className={cn(product.profit_per_unit < 0 ? 'text-red-600' : '')}>
-                                        {product.profit_per_unit.toLocaleString('ru-RU')} ₽
-                                      </span>
-                                    ) : (
-                                      <span className="text-muted-foreground">—</span>
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    {recConfig ? (
-                                      <div className="space-y-1">
-                                        <Badge className={cn('gap-1', recConfig.className)}>
-                                          {recConfig.icon}
-                                          {recConfig.label}
-                                        </Badge>
-                                        {product.assortment_reason && (
-                                          <div className="text-xs text-muted-foreground max-w-[200px] truncate" title={product.assortment_reason}>
-                                            {product.assortment_reason}
-                                          </div>
-                                        )}
-                                      </div>
-                                    ) : (
-                                      <span className="text-muted-foreground">—</span>
-                                    )}
-                                  </TableCell>
+                                    </TableCell>
+                                  )}
+                                  {visibleColumns.includes('margin_pct') && (
+                                    <TableCell className="text-right">
+                                      {product.margin_pct !== null ? (
+                                        <span className={cn(
+                                          product.margin_pct < 0 ? 'text-red-600' :
+                                          product.margin_pct < 10 ? 'text-yellow-600' :
+                                          product.margin_pct >= 15 ? 'text-green-600' : ''
+                                        )}>
+                                          {product.margin_pct.toFixed(1)}%
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground">—</span>
+                                      )}
+                                    </TableCell>
+                                  )}
+                                  {visibleColumns.includes('profit_per_unit') && (
+                                    <TableCell className="text-right">
+                                      {product.profit_per_unit !== null ? (
+                                        <span className={cn(product.profit_per_unit < 0 ? 'text-red-600' : '')}>
+                                          {product.profit_per_unit.toLocaleString('ru-RU')} ₽
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground">—</span>
+                                      )}
+                                    </TableCell>
+                                  )}
+                                  {visibleColumns.includes('recommendation') && (
+                                    <TableCell>
+                                      {recConfig ? (
+                                        <div className="space-y-1">
+                                          <Badge className={cn('gap-1', recConfig.className)}>
+                                            {recConfig.icon}
+                                            {recConfig.label}
+                                          </Badge>
+                                          {product.assortment_reason && (
+                                            <div className="text-xs text-muted-foreground max-w-[200px] truncate" title={product.assortment_reason}>
+                                              {product.assortment_reason}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="text-muted-foreground">—</span>
+                                      )}
+                                    </TableCell>
+                                  )}
                                 </TableRow>
                               );
                             })
