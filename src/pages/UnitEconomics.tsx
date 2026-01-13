@@ -9,13 +9,15 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { CategorySelect } from '@/components/ui/category-select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useCosts } from '@/hooks/useCosts';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { useUserRole } from '@/hooks/useUserRole';
 import { PRODUCT_CATEGORIES } from '@/lib/categories';
 import { downloadUnitEconExport } from '@/lib/excel/unitEconExport';
+import { downloadUnitEconTemplate } from '@/lib/excel/unitEconTemplate';
 import { getDefaultVisibleColumns, UNIT_ECON_COLUMNS } from '@/lib/unitEconColumns';
-import { Plus, Upload, Search, Calculator, TrendingUp, Package, Download } from 'lucide-react';
+import { Plus, Upload, Search, Calculator, TrendingUp, Package, Download, FileDown, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 
 const STORAGE_KEY = 'unit-econ-visible-columns';
@@ -90,21 +92,39 @@ export default function UnitEconomics() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              className="gap-2"
-              onClick={() => {
-                if (costs.length === 0) {
-                  toast.error('Нет данных для экспорта');
-                  return;
-                }
-                downloadUnitEconExport(costs);
-                toast.success('Экспорт выполнен');
-              }}
-            >
-              <Download className="h-4 w-4" />
-              Экспорт Excel
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <Download className="h-4 w-4" />
+                  Скачать
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem 
+                  onClick={() => {
+                    if (costs.length === 0) {
+                      toast.error('Нет данных для экспорта');
+                      return;
+                    }
+                    downloadUnitEconExport(costs);
+                    toast.success('Экспорт выполнен');
+                  }}
+                >
+                  <FileDown className="h-4 w-4 mr-2" />
+                  Экспорт данных
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => {
+                    downloadUnitEconTemplate(costs.length > 0 ? costs : undefined);
+                    toast.success('Шаблон скачан');
+                  }}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Скачать шаблон {costs.length > 0 ? `(${costs.length} артикулов)` : '(пустой)'}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Dialog open={importOpen} onOpenChange={setImportOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" className="gap-2">
