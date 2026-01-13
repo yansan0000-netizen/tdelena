@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
 import { UnitEconInput } from '@/hooks/useCosts';
 import { useUserRole } from '@/hooks/useUserRole';
 import { UNIT_ECON_COLUMNS, UnitEconColumn } from '@/lib/unitEconColumns';
@@ -16,6 +17,8 @@ interface CostsTableProps {
   costs: UnitEconInput[];
   loading: boolean;
   visibleColumns: string[];
+  selectedArticles?: string[];
+  onSelectionChange?: (articles: string[]) => void;
 }
 
 type SortDirection = 'asc' | 'desc' | null;
@@ -25,9 +28,17 @@ interface SortState {
   direction: SortDirection;
 }
 
-export function CostsTable({ costs, loading, visibleColumns }: CostsTableProps) {
+export function CostsTable({ 
+  costs, 
+  loading, 
+  visibleColumns,
+  selectedArticles = [],
+  onSelectionChange,
+}: CostsTableProps) {
   const { shouldHideCost } = useUserRole();
   const [sort, setSort] = useState<SortState>({ column: null, direction: null });
+
+  const isSelectable = !!onSelectionChange;
 
   // Filter columns based on visibility and role
   const displayColumns = UNIT_ECON_COLUMNS.filter(col => {
@@ -35,6 +46,28 @@ export function CostsTable({ costs, loading, visibleColumns }: CostsTableProps) 
     if (col.hideForRole === 'hidden_cost' && shouldHideCost) return false;
     return true;
   });
+
+  // Selection handlers
+  const allSelected = costs.length > 0 && selectedArticles.length === costs.length;
+  const someSelected = selectedArticles.length > 0 && selectedArticles.length < costs.length;
+
+  const handleSelectAll = () => {
+    if (!onSelectionChange) return;
+    if (allSelected) {
+      onSelectionChange([]);
+    } else {
+      onSelectionChange(costs.map(c => c.article));
+    }
+  };
+
+  const handleSelectOne = (article: string) => {
+    if (!onSelectionChange) return;
+    if (selectedArticles.includes(article)) {
+      onSelectionChange(selectedArticles.filter(a => a !== article));
+    } else {
+      onSelectionChange([...selectedArticles, article]);
+    }
+  };
 
   // Handle column header click for sorting
   const handleSort = (columnKey: string) => {
@@ -232,6 +265,20 @@ export function CostsTable({ costs, loading, visibleColumns }: CostsTableProps) 
           <Table>
             <TableHeader>
               <TableRow>
+                {isSelectable && (
+                  <TableHead className="w-[40px]">
+                    <Checkbox
+                      checked={allSelected}
+                      ref={(el) => {
+                        if (el) {
+                          (el as HTMLButtonElement & { indeterminate: boolean }).indeterminate = someSelected;
+                        }
+                      }}
+                      onCheckedChange={handleSelectAll}
+                      aria-label="Выбрать все"
+                    />
+                  </TableHead>
+                )}
                 {displayColumns.map(column => (
                   <TableHead 
                     key={column.key}
@@ -255,7 +302,19 @@ export function CostsTable({ costs, loading, visibleColumns }: CostsTableProps) 
             </TableHeader>
             <TableBody>
               {sortedCosts.map((cost) => (
-                <TableRow key={cost.id}>
+                <TableRow 
+                  key={cost.id}
+                  className={selectedArticles.includes(cost.article) ? 'bg-muted/50' : ''}
+                >
+                  {isSelectable && (
+                    <TableCell className="w-[40px]">
+                      <Checkbox
+                        checked={selectedArticles.includes(cost.article)}
+                        onCheckedChange={() => handleSelectOne(cost.article)}
+                        aria-label={`Выбрать ${cost.article}`}
+                      />
+                    </TableCell>
+                  )}
                   {displayColumns.map(column => (
                     <TableCell 
                       key={column.key}

@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { CostsTable } from '@/components/costs/CostsTable';
 import { CostImport } from '@/components/costs/CostImport';
 import { ColumnSelector } from '@/components/costs/ColumnSelector';
+import { BulkActionsBar } from '@/components/costs/BulkActionsBar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,13 +24,14 @@ import { toast } from 'sonner';
 const STORAGE_KEY = 'unit-econ-visible-columns';
 
 export default function UnitEconomics() {
-  const { costs, loading } = useCosts();
+  const { costs, loading, fetchCosts } = useCosts();
   const { settings, addCustomCategory } = useUserSettings();
   const { shouldHideCost } = useUserRole();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [showFilledOnly, setShowFilledOnly] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [selectedArticles, setSelectedArticles] = useState<string[]>([]);
   
   // Load visible columns from localStorage or use defaults
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
@@ -76,6 +78,14 @@ export default function UnitEconomics() {
   // Stats
   const filledCount = costs.filter(c => c.unit_cost_real_rub !== null).length;
   const totalCount = costs.length;
+
+  // Get selected costs objects for bulk actions
+  const selectedCosts = filteredCosts.filter(c => selectedArticles.includes(c.article));
+
+  // Handle bulk action completion
+  const handleBulkActionComplete = useCallback(() => {
+    fetchCosts();
+  }, [fetchCosts]);
 
   return (
     <AppLayout>
@@ -236,7 +246,21 @@ export default function UnitEconomics() {
         </Card>
 
         {/* Table */}
-        <CostsTable costs={filteredCosts} loading={loading} visibleColumns={visibleColumns} />
+        <CostsTable 
+          costs={filteredCosts} 
+          loading={loading} 
+          visibleColumns={visibleColumns}
+          selectedArticles={selectedArticles}
+          onSelectionChange={setSelectedArticles}
+        />
+
+        {/* Bulk Actions Bar */}
+        <BulkActionsBar
+          selectedArticles={selectedArticles}
+          selectedCosts={selectedCosts}
+          onClearSelection={() => setSelectedArticles([])}
+          onActionComplete={handleBulkActionComplete}
+        />
       </div>
     </AppLayout>
   );
