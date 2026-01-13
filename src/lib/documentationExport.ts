@@ -15,9 +15,13 @@ const documentationContent: DocSection[] = [
       "- XYZ Analiz: Klassifikatsiya po stabilnosti sprosa s nastraivaemymi porogami",
       "- Plan proizvodstva: Raschet na 1, 3 i 6 mesyatsev s uchetom globalnogo trenda",
       "- Rekomendatsii: Avtomaticheskie rekomendatsii po upravleniyu zapasami",
+      "- Analiz assortimenta: Vyyavlenie pribylnyh, ubytochnyh i zalezhavshihsya tovarov",
+      "- Kill-list: Upravlenie vyvodom tovarov s avto-lestnicey tsen",
       "- Yunit-ekonomika: Raschet sebestoimosti, marzhi, pribyli i stsenariev WB",
       "- Istoriya izmeneniy: Otslezhivanie vsekh izmeneniy v kartochkakh tovarov",
-      "- Prognozirovanie: Lineynaya regressiya, eksponentsialnoe sglazhivanie, skolzyashchaya srednyaya"
+      "- Prognozirovanie: Lineynaya regressiya, eksponentsialnoe sglazhivanie, skolzyashchaya srednyaya",
+      "- Multi-select i bulk actions: Massovye operatsii nad artikulami",
+      "- Sortirovka tablits: Klik po kolonke dlya sortirovki dannykh"
     ]
   },
   {
@@ -147,6 +151,8 @@ const documentationContent: DocSection[] = [
       "- Plan proizvodstva (Excel) - Prioritetnyy plan proizvodstva",
       "- Otchet analitiki (PDF) - Pechatnyy otchet s tsvetovoy kodirovkoy",
       "- Plan proizvodstva (PDF) - Pechatnyy plan proizvodstva",
+      "- Shablon yunit-ekonomiki (Excel) - Pustoy shablon ili s artikulami",
+      "- Eksport yunit-ekonomiki (Excel) - Polnye dannye po sebestoimosti",
       "",
       "Dostupnye filtry:",
       "- Po periodu (vybor konkretnyh mesyatsev)",
@@ -154,7 +160,13 @@ const documentationContent: DocSection[] = [
       "- Po gruppam ABC/XYZ",
       "- Po gruppam tovarov",
       "- Po konkretnym artikulam",
-      "- Po nalichyu na sklade"
+      "- Po nalichyu na sklade",
+      "",
+      "Sortirovka v tablitsakh:",
+      "- Nazhmite na zagolovok kolonki dlya sortirovki",
+      "- Pervyy klik: po vozrastaniyu (A-Ya, 0-9)",
+      "- Vtoroy klik: po ubyvaniyu (Ya-A, 9-0)",
+      "- Tretiy klik: sbros sortirovki"
     ]
   },
   {
