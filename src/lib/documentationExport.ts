@@ -11,8 +11,10 @@ const documentationContent: DocSection[] = [
     title: "1. OBZOR - Chto delaet sistema",
     content: [
       "Sistema analiziruet eksport prodazh iz 1S za neskolko mesyatsev i generiruet:",
+      "- DASHBOARD: Klyuchevye metriki biznesa - vyruchka, pribyl, marzha, dinamika prodazh, top-10 tovarov",
       "- ABC Analiz: Klassifikatsiya tovarov po vkladu v vyruchku (A=80%, B=15%, C=5%)",
       "- XYZ Analiz: Klassifikatsiya po stabilnosti sprosa s nastraivaemymi porogami",
+      "- ABC-XYZ Matritsa: Interaktivnaya matritsa 3x3 s klikabelnymi yacheykami",
       "- Plan proizvodstva: Raschet na 1, 3 i 6 mesyatsev s uchetom globalnogo trenda",
       "- Rekomendatsii: Avtomaticheskie rekomendatsii po upravleniyu zapasami",
       "- Analiz assortimenta: Vyyavlenie pribylnyh, ubytochnyh i zalezhavshihsya tovarov",
@@ -79,13 +81,23 @@ const documentationContent: DocSection[] = [
     ]
   },
   {
-    title: "6. MATRITSA REKOMENDATSIY ABC-XYZ",
+    title: "6. MATRITSA ABC-XYZ",
     content: [
-      "       |    X           |    Y              |    Z",
-      "-------|----------------|-------------------|------------------",
-      "   A   | Maks kontrol   | Regulyar popolnen | Analizirovat",
-      "   B   | Regulyar zakaz | Strakhovoy zapas  | Sokratit zapas",
-      "   C   | Min zakazy     | Sokratit assort   | Prekratit"
+      "Interaktivnaya matritsa 3x3 dlya bystrogo analiza:",
+      "",
+      "       |    X (stabilnyy)  |    Y (sredniy)    |    Z (nestabilnyy)",
+      "-------|-------------------|-------------------|-------------------",
+      "   A   | AX: Maks kontrol  | AY: Regulyar popol| AZ: Analizirovat",
+      "   B   | BX: Regulyar zakaz| BY: Strakhovoy zap| BZ: Sokratit zapas",
+      "   C   | CX: Min zakazy    | CY: Sokratit ass. | CZ: Vyvesti",
+      "",
+      "Tsvetovaya kodirovka:",
+      "- Zelenyy (AX, AY, BX): Luchshie tovary - razvivat",
+      "- Zheltyy (AZ, BY, CX): Kontrolirovat",
+      "- Oranzhevyy (BZ, CY): Sokrashchat",
+      "- Krasnyy (CZ): Vyvodit iz assortimenta",
+      "",
+      "Klik po yacheyke filtruet tablitsu tovarov."
     ]
   },
   {
