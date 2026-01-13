@@ -3,9 +3,20 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
-import { FileSpreadsheet, History, Plus, LogOut, BookOpen, Calculator, Settings, Shield, Package, Skull, BarChart3, LayoutDashboard } from 'lucide-react';
+import { 
+  FileSpreadsheet, History, Plus, LogOut, BookOpen, Calculator, 
+  Settings, Shield, Package, Skull, BarChart3, LayoutDashboard,
+  ChevronDown, Grid3X3
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -23,19 +34,30 @@ export function AppLayout({ children, fullWidth = false }: AppLayoutProps) {
     navigate('/auth');
   };
 
-  const navItems = [
+  // Main navigation items (always visible)
+  const mainNavItems = [
     { path: '/dashboard', label: 'Дашборд', icon: LayoutDashboard },
     { path: '/new', label: 'Новый расчёт', icon: Plus },
     { path: '/runs', label: 'История', icon: History },
-    // Hide assortment from hidden_cost users
-    ...(!shouldHideCost ? [{ path: '/assortment', label: 'Ассортимент', icon: BarChart3 }] : []),
-    { path: '/articles', label: 'Каталог', icon: Package },
+  ];
+
+  // Analysis section items (in dropdown)
+  const analysisItems = [
+    ...(!shouldHideCost ? [{ path: '/assortment', label: 'ABC-XYZ Матрица', icon: Grid3X3 }] : []),
+    { path: '/articles', label: 'Каталог артикулов', icon: Package },
     { path: '/kill-list', label: 'Kill-лист', icon: Skull },
     { path: '/unit-economics', label: 'Юнит-экономика', icon: Calculator },
+  ];
+
+  // Settings section items
+  const settingsItems = [
     { path: '/settings', label: 'Настройки', icon: Settings },
     { path: '/docs', label: 'Документация', icon: BookOpen },
-    ...(isAdmin ? [{ path: '/admin', label: 'Админ', icon: Shield }] : []),
+    ...(isAdmin ? [{ path: '/admin', label: 'Админ-панель', icon: Shield }] : []),
   ];
+
+  const isInAnalysis = analysisItems.some(item => location.pathname === item.path);
+  const isInSettings = settingsItems.some(item => location.pathname === item.path);
 
   return (
     <TooltipProvider delayDuration={100}>
@@ -53,7 +75,8 @@ export function AppLayout({ children, fullWidth = false }: AppLayoutProps) {
             {/* Navigation - centered */}
             <nav className="flex-1 flex items-center justify-center">
               <div className="inline-flex items-center gap-1 bg-muted/40 backdrop-blur-sm rounded-2xl px-2 py-1.5 border border-border/30">
-                {navItems.map((item) => (
+                {/* Main nav items */}
+                {mainNavItems.map((item) => (
                   <Tooltip key={item.path}>
                     <TooltipTrigger asChild>
                       <Link to={item.path}>
@@ -68,15 +91,89 @@ export function AppLayout({ children, fullWidth = false }: AppLayoutProps) {
                           )}
                         >
                           <item.icon className="h-4 w-4 flex-shrink-0" />
-                          <span className="hidden lg:inline text-sm">{item.label}</span>
+                          <span className="hidden md:inline text-sm">{item.label}</span>
                         </Button>
                       </Link>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" className="lg:hidden">
+                    <TooltipContent side="bottom" className="md:hidden">
                       <p>{item.label}</p>
                     </TooltipContent>
                   </Tooltip>
                 ))}
+
+                {/* Analysis dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={cn(
+                        'gap-2 rounded-xl transition-all duration-200 h-9 px-3',
+                        isInAnalysis
+                          ? 'bg-background text-primary font-medium shadow-sm border border-border/50' 
+                          : 'hover:bg-background/50 text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      <BarChart3 className="h-4 w-4 flex-shrink-0" />
+                      <span className="hidden md:inline text-sm">Анализ</span>
+                      <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="center" className="w-56">
+                    {analysisItems.map((item) => (
+                      <DropdownMenuItem 
+                        key={item.path}
+                        onClick={() => navigate(item.path)}
+                        className={cn(
+                          'cursor-pointer gap-2',
+                          location.pathname === item.path && 'bg-accent'
+                        )}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        {item.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Settings dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={cn(
+                        'gap-2 rounded-xl transition-all duration-200 h-9 px-3',
+                        isInSettings
+                          ? 'bg-background text-primary font-medium shadow-sm border border-border/50' 
+                          : 'hover:bg-background/50 text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      <Settings className="h-4 w-4 flex-shrink-0" />
+                      <span className="hidden md:inline text-sm">Ещё</span>
+                      <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="center" className="w-48">
+                    {settingsItems.map((item, index) => (
+                      <div key={item.path}>
+                        {index === settingsItems.length - 1 && isAdmin && (
+                          <DropdownMenuSeparator />
+                        )}
+                        <DropdownMenuItem 
+                          onClick={() => navigate(item.path)}
+                          className={cn(
+                            'cursor-pointer gap-2',
+                            location.pathname === item.path && 'bg-accent'
+                          )}
+                        >
+                          <item.icon className="h-4 w-4" />
+                          {item.label}
+                        </DropdownMenuItem>
+                      </div>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </nav>
 
