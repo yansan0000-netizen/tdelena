@@ -1288,6 +1288,12 @@ export default function Documentation() {
                           <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
                         </tr>
                         <tr className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="p-3 pl-6">ABC-XYZ матрица</td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
+                          <td className="p-3 text-center"><Ban className="h-4 w-4 text-red-400 mx-auto" /></td>
+                        </tr>
+                        <tr className="border-b border-border/30 hover:bg-muted/20">
                           <td className="p-3 pl-6">Kill-лист (управление)</td>
                           <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
                           <td className="p-3 text-center"><CheckCircle className="h-4 w-4 text-green-500 mx-auto" /></td>
