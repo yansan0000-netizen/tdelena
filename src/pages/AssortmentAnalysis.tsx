@@ -28,7 +28,10 @@ import {
   ShieldAlert,
   Maximize2,
   Minimize2,
-  X
+  X,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -57,6 +60,7 @@ export default function AssortmentAnalysis() {
   const [search, setSearch] = useState('');
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [sort, setSort] = useState<{ column: string; direction: 'asc' | 'desc' } | null>(null);
 
   // Handle escape key to exit fullscreen
   useEffect(() => {
@@ -102,6 +106,82 @@ export default function AssortmentAnalysis() {
       p.category?.toLowerCase().includes(s)
     );
   }, [products, search]);
+
+  // Sort products
+  const sortedProducts = useMemo(() => {
+    if (!sort) return filteredBySearch;
+    
+    return [...filteredBySearch].sort((a, b) => {
+      let aVal: any;
+      let bVal: any;
+      
+      switch (sort.column) {
+        case 'article':
+          aVal = a.article.toLowerCase();
+          bVal = b.article.toLowerCase();
+          break;
+        case 'category':
+          aVal = a.category?.toLowerCase() || '';
+          bVal = b.category?.toLowerCase() || '';
+          break;
+        case 'abc':
+          aVal = `${a.abc_group || 'Z'}${a.xyz_group || 'Z'}`;
+          bVal = `${b.abc_group || 'Z'}${b.xyz_group || 'Z'}`;
+          break;
+        case 'total_quantity':
+          aVal = a.total_quantity ?? 0;
+          bVal = b.total_quantity ?? 0;
+          break;
+        case 'total_revenue':
+          aVal = a.total_revenue ?? 0;
+          bVal = b.total_revenue ?? 0;
+          break;
+        case 'current_stock':
+          aVal = a.current_stock ?? 0;
+          bVal = b.current_stock ?? 0;
+          break;
+        case 'days_until_stockout':
+          aVal = a.days_until_stockout ?? 9999;
+          bVal = b.days_until_stockout ?? 9999;
+          break;
+        case 'margin_pct':
+          aVal = a.margin_pct ?? -9999;
+          bVal = b.margin_pct ?? -9999;
+          break;
+        case 'profit_per_unit':
+          aVal = a.profit_per_unit ?? -9999;
+          bVal = b.profit_per_unit ?? -9999;
+          break;
+        case 'recommendation':
+          const order: Record<string, number> = { expand: 1, keep: 2, reduce: 3, remove: 4 };
+          aVal = order[a.assortment_recommendation || ''] || 5;
+          bVal = order[b.assortment_recommendation || ''] || 5;
+          break;
+        default:
+          return 0;
+      }
+      
+      if (aVal < bVal) return sort.direction === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sort.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredBySearch, sort]);
+
+  const handleSort = (column: string) => {
+    setSort(prev => {
+      if (prev?.column === column) {
+        if (prev.direction === 'asc') return { column, direction: 'desc' };
+        if (prev.direction === 'desc') return null;
+      }
+      return { column, direction: 'asc' };
+    });
+  };
+
+  const getSortIcon = (column: string) => {
+    if (sort?.column !== column) return <ArrowUpDown className="h-4 w-4 opacity-40" />;
+    if (sort.direction === 'asc') return <ArrowUp className="h-4 w-4" />;
+    return <ArrowDown className="h-4 w-4" />;
+  };
 
   const toggleProduct = (id: string) => {
     setSelectedProducts(prev => {
@@ -373,24 +453,44 @@ export default function AssortmentAnalysis() {
                           <TableRow>
                             <TableHead className="w-10">
                               <Checkbox
-                                checked={selectedProducts.size === filteredBySearch.length && filteredBySearch.length > 0}
+                                checked={selectedProducts.size === sortedProducts.length && sortedProducts.length > 0}
                                 onCheckedChange={(checked) => checked ? selectAllVisible() : clearSelection()}
                               />
                             </TableHead>
-                            <TableHead>Артикул</TableHead>
-                            <TableHead>Категория</TableHead>
-                            <TableHead className="text-center">ABC</TableHead>
-                            <TableHead className="text-right">Продажи</TableHead>
-                            <TableHead className="text-right">Выручка</TableHead>
-                            <TableHead className="text-right">Остаток</TableHead>
-                            <TableHead className="text-right">Дней</TableHead>
-                            <TableHead className="text-right">Маржа</TableHead>
-                            <TableHead className="text-right">Прибыль/шт</TableHead>
-                            <TableHead>Рекомендация</TableHead>
+                            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('article')}>
+                              <div className="flex items-center gap-1">Артикул {getSortIcon('article')}</div>
+                            </TableHead>
+                            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('category')}>
+                              <div className="flex items-center gap-1">Категория {getSortIcon('category')}</div>
+                            </TableHead>
+                            <TableHead className="text-center cursor-pointer hover:bg-muted/50" onClick={() => handleSort('abc')}>
+                              <div className="flex items-center justify-center gap-1">ABC {getSortIcon('abc')}</div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('total_quantity')}>
+                              <div className="flex items-center justify-end gap-1">Продажи {getSortIcon('total_quantity')}</div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('total_revenue')}>
+                              <div className="flex items-center justify-end gap-1">Выручка {getSortIcon('total_revenue')}</div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('current_stock')}>
+                              <div className="flex items-center justify-end gap-1">Остаток {getSortIcon('current_stock')}</div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('days_until_stockout')}>
+                              <div className="flex items-center justify-end gap-1">Дней {getSortIcon('days_until_stockout')}</div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('margin_pct')}>
+                              <div className="flex items-center justify-end gap-1">Маржа {getSortIcon('margin_pct')}</div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('profit_per_unit')}>
+                              <div className="flex items-center justify-end gap-1">Прибыль/шт {getSortIcon('profit_per_unit')}</div>
+                            </TableHead>
+                            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('recommendation')}>
+                              <div className="flex items-center gap-1">Рекомендация {getSortIcon('recommendation')}</div>
+                            </TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {filteredBySearch.map((product) => {
+                          {sortedProducts.map((product) => {
                             const recConfig = product.assortment_recommendation 
                               ? recommendationConfig[product.assortment_recommendation] 
                               : null;
@@ -509,31 +609,51 @@ export default function AssortmentAnalysis() {
                           <TableRow>
                             <TableHead className="w-10">
                               <Checkbox
-                                checked={selectedProducts.size === filteredBySearch.length && filteredBySearch.length > 0}
+                                checked={selectedProducts.size === sortedProducts.length && sortedProducts.length > 0}
                                 onCheckedChange={(checked) => checked ? selectAllVisible() : clearSelection()}
                               />
                             </TableHead>
-                            <TableHead>Артикул</TableHead>
-                            <TableHead>Категория</TableHead>
-                            <TableHead className="text-center">ABC</TableHead>
-                            <TableHead className="text-right">Продажи</TableHead>
-                            <TableHead className="text-right">Выручка</TableHead>
-                            <TableHead className="text-right">Остаток</TableHead>
-                            <TableHead className="text-right">Дней</TableHead>
-                            <TableHead className="text-right">Маржа</TableHead>
-                            <TableHead className="text-right">Прибыль/шт</TableHead>
-                            <TableHead>Рекомендация</TableHead>
+                            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('article')}>
+                              <div className="flex items-center gap-1">Артикул {getSortIcon('article')}</div>
+                            </TableHead>
+                            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('category')}>
+                              <div className="flex items-center gap-1">Категория {getSortIcon('category')}</div>
+                            </TableHead>
+                            <TableHead className="text-center cursor-pointer hover:bg-muted/50" onClick={() => handleSort('abc')}>
+                              <div className="flex items-center justify-center gap-1">ABC {getSortIcon('abc')}</div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('total_quantity')}>
+                              <div className="flex items-center justify-end gap-1">Продажи {getSortIcon('total_quantity')}</div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('total_revenue')}>
+                              <div className="flex items-center justify-end gap-1">Выручка {getSortIcon('total_revenue')}</div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('current_stock')}>
+                              <div className="flex items-center justify-end gap-1">Остаток {getSortIcon('current_stock')}</div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('days_until_stockout')}>
+                              <div className="flex items-center justify-end gap-1">Дней {getSortIcon('days_until_stockout')}</div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('margin_pct')}>
+                              <div className="flex items-center justify-end gap-1">Маржа {getSortIcon('margin_pct')}</div>
+                            </TableHead>
+                            <TableHead className="text-right cursor-pointer hover:bg-muted/50" onClick={() => handleSort('profit_per_unit')}>
+                              <div className="flex items-center justify-end gap-1">Прибыль/шт {getSortIcon('profit_per_unit')}</div>
+                            </TableHead>
+                            <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('recommendation')}>
+                              <div className="flex items-center gap-1">Рекомендация {getSortIcon('recommendation')}</div>
+                            </TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {filteredBySearch.length === 0 ? (
+                          {sortedProducts.length === 0 ? (
                             <TableRow>
                               <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                                 {products.length === 0 ? 'Нет данных. Выберите прогон.' : 'Товары не найдены'}
                               </TableCell>
                             </TableRow>
                           ) : (
-                            filteredBySearch.slice(0, 100).map((product) => {
+                            sortedProducts.slice(0, 100).map((product) => {
                               const recConfig = product.assortment_recommendation 
                                 ? recommendationConfig[product.assortment_recommendation] 
                                 : null;

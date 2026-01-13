@@ -914,6 +914,37 @@ export default function Documentation() {
                 </div>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ArrowDownUp className="h-5 w-5 text-primary" />
+                  Сортировка таблиц
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Все таблицы поддерживают сортировку по колонкам. Кликните на заголовок для сортировки:
+                </p>
+                <div className="grid gap-2 text-sm">
+                  <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
+                    🔼 Первый клик — по возрастанию (A-Я, 0-9)
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
+                    🔽 Второй клик — по убыванию (Я-A, 9-0)
+                  </div>
+                  <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
+                    ↕️ Третий клик — сброс сортировки
+                  </div>
+                </div>
+                <div className="p-3 bg-primary/5 border border-primary/20 rounded-xl">
+                  <p className="text-sm">
+                    <strong>Совет:</strong> В таблице ассортимента можно сортировать по марже и прибыльности,
+                    чтобы быстро найти лучшие и худшие товары.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Settings Tab */}
