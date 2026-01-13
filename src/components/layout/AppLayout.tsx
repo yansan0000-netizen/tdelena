@@ -4,10 +4,11 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { 
-  FileSpreadsheet, History, Plus, LogOut, BookOpen, Calculator, 
+  History, Plus, LogOut, BookOpen, Calculator, 
   Settings, Shield, Package, Skull, BarChart3, LayoutDashboard,
   ChevronDown, Grid3X3
 } from 'lucide-react';
+import logo from '@/assets/logo.png';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
@@ -66,10 +67,12 @@ export function AppLayout({ children, fullWidth = false }: AppLayoutProps) {
         <header className="sticky top-0 z-50 bg-background/70 backdrop-blur-xl border-b border-border/30">
           <div className="container flex h-16 items-center gap-4">
             {/* Logo */}
-            <Link to="/" className="flex-shrink-0 group">
-              <div className="h-10 w-10 rounded-2xl gradient-primary flex items-center justify-center shadow-glass transition-transform group-hover:scale-105">
-                <FileSpreadsheet className="h-5 w-5 text-primary-foreground" />
-              </div>
+            <Link to="/dashboard" className="flex-shrink-0 group">
+              <img 
+                src={logo} 
+                alt="TD Elena" 
+                className="h-10 w-auto object-contain transition-transform group-hover:scale-105" 
+              />
             </Link>
 
             {/* Navigation - centered */}
