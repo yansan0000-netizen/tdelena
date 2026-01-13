@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { toast } from "sonner";
+import { KillListImportItem } from "@/lib/killListTypes";
 
 export interface ArticleCatalogItem {
   id: string;
@@ -198,6 +199,80 @@ export function useArticleCatalog() {
     },
   });
 
+  // Bulk upsert articles to kill list from Excel import
+  const bulkUpsertToKillList = async (
+    items: KillListImportItem[]
+  ): Promise<{ success: number; failed: number }> => {
+    if (!user?.id) throw new Error("User not authenticated");
+
+    let success = 0;
+    let failed = 0;
+
+    // Process in batches of 50
+    const batchSize = 50;
+    for (let i = 0; i < items.length; i += batchSize) {
+      const batch = items.slice(i, i + batchSize);
+      
+      // First, fetch existing articles to merge custom_prices
+      const articles = batch.map(item => item.article);
+      const { data: existingArticles } = await supabase
+        .from("article_catalog")
+        .select("article, custom_prices")
+        .eq("user_id", user.id)
+        .in("article", articles);
+
+      const existingMap = new Map(
+        (existingArticles || []).map(a => [a.article, a.custom_prices as Record<string, number> || {}])
+      );
+
+      const upsertData = batch.map(item => {
+        // Merge custom prices with existing ones
+        const existingPrices = existingMap.get(item.article) || {};
+        const mergedPrices = {
+          ...existingPrices,
+          ...(item.custom_prices || {}),
+        };
+
+        return {
+          user_id: user.id,
+          article: item.article,
+          name: item.name || null,
+          avg_sale_price: item.avg_sale_price || null,
+          kill_list_reason: item.kill_list_reason || null,
+          is_in_kill_list: true,
+          kill_list_added_at: new Date().toISOString(),
+          custom_prices: Object.keys(mergedPrices).length > 0 ? mergedPrices : null,
+        };
+      });
+
+      const { error } = await supabase
+        .from("article_catalog")
+        .upsert(upsertData, {
+          onConflict: "user_id,article",
+          ignoreDuplicates: false,
+        });
+
+      if (error) {
+        console.error("Batch upsert error:", error);
+        failed += batch.length;
+      } else {
+        success += batch.length;
+      }
+    }
+
+    // Invalidate cache after all batches
+    queryClient.invalidateQueries({ queryKey: ["article-catalog"] });
+
+    if (success > 0) {
+      toast.success(`Добавлено ${success} артикулов в kill-лист`);
+    }
+    if (failed > 0) {
+      toast.error(`Не удалось добавить ${failed} артикулов`);
+    }
+
+    return { success, failed };
+  };
+
   return {
     articles,
     killListArticles,
@@ -210,6 +285,7 @@ export function useArticleCatalog() {
     addCustomPriceField,
     removeCustomPriceField,
     syncFromRun,
+    bulkUpsertToKillList,
   };
 }
 
