@@ -37,6 +37,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Search, RefreshCw, Eye, EyeOff, Skull, Package, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
+import { HiddenArticlesImport } from "@/components/catalog/HiddenArticlesImport";
 
 export default function ArticleCatalog() {
   const { articles, isLoading, updateArticle, updateMultipleArticles, syncFromRun } = useArticleCatalog();
@@ -259,10 +260,10 @@ export default function ArticleCatalog() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Синхронизация артикулов</CardTitle>
             <CardDescription>
-              Загрузите артикулы из завершённого отчёта в каталог
+              Загрузите артикулы из завершённого отчёта в каталог или импортируйте список скрытых
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex gap-3">
+          <CardContent className="flex flex-wrap gap-3">
             <Select value={selectedRunId} onValueChange={setSelectedRunId}>
               <SelectTrigger className="w-[300px]">
                 <SelectValue placeholder="Выберите отчёт" />
@@ -282,6 +283,7 @@ export default function ArticleCatalog() {
               <RefreshCw className={`h-4 w-4 mr-2 ${syncFromRun.isPending ? 'animate-spin' : ''}`} />
               Синхронизировать
             </Button>
+            <HiddenArticlesImport />
           </CardContent>
         </Card>
 
