@@ -107,40 +107,65 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
       // Get unit economics for this user
       const { data: unitEcon, error: econError } = await supabase
         .from('unit_econ_inputs')
-        .select('article, margin_pct, profit_per_unit, unit_cost_real_rub, name, category')
+        .select('article, margin_pct, profit_per_unit, unit_cost_real_rub, retail_price_rub, wholesale_price_rub, name, category')
         .eq('user_id', user.id);
 
       if (econError) throw econError;
 
-      // Create lookup map
-      const econMap = new Map(
+      // Helper to extract base article (e.g., "М319114П" from "М319114Пзм")
+      const getBaseArticle = (article: string): string => {
+        const normalized = article.toLowerCase().trim();
+        // Extract base part: letters/digits up to first lowercase suffix
+        const match = normalized.match(/^([а-яa-z]?\d{5,6}[а-яa-z]?)/i);
+        return match ? match[1] : normalized.slice(0, 8);
+      };
+
+      // Create lookup maps: exact match first, then base article match
+      const exactEconMap = new Map(
         unitEcon.map(e => [e.article.toLowerCase().trim(), e])
       );
+      
+      // Group by base article for fuzzy matching
+      const baseEconMap = new Map<string, typeof unitEcon[0]>();
+      unitEcon.forEach(e => {
+        const base = getBaseArticle(e.article);
+        // Prefer entry with unit_cost_real_rub
+        if (!baseEconMap.has(base) || (e.unit_cost_real_rub && !baseEconMap.get(base)?.unit_cost_real_rub)) {
+          baseEconMap.set(base, e);
+        }
+      });
 
       // Merge and calculate recommendations
       const merged: AssortmentProduct[] = analytics.map(a => {
-        const econ = econMap.get(a.article.toLowerCase().trim());
+        const articleKey = a.article.toLowerCase().trim();
+        const baseKey = getBaseArticle(a.article);
         
-        // Calculate margin from available data if not set
-        let marginPct = econ?.margin_pct ?? null;
-        let profitPerUnit = econ?.profit_per_unit ?? null;
+        // Try exact match first, then base article match
+        let econ = exactEconMap.get(articleKey) || baseEconMap.get(baseKey) || null;
+        
+        // Calculate margin from available data
+        let marginPct: number | null = null;
+        let profitPerUnit: number | null = null;
         const unitCost = econ?.unit_cost_real_rub ?? null;
         
-        // If margin not set but we have cost and price, calculate it
-        if (marginPct === null && unitCost !== null && unitCost > 0) {
-          // Use avg_price from sales as selling price if no retail price
-          const sellingPrice = a.avg_price || 0;
-          if (sellingPrice > 0) {
-            profitPerUnit = sellingPrice - unitCost;
-            marginPct = (profitPerUnit / sellingPrice) * 100;
-          }
+        // Use selling price: prefer retail_price_rub, then avg_price from sales
+        const sellingPrice = econ?.retail_price_rub || a.avg_price || 0;
+        
+        if (econ?.margin_pct !== null && econ?.margin_pct !== undefined) {
+          // Use stored margin if available
+          marginPct = econ.margin_pct;
+          profitPerUnit = econ.profit_per_unit ?? (sellingPrice > 0 && unitCost ? sellingPrice - unitCost : null);
+        } else if (unitCost !== null && unitCost > 0 && sellingPrice > 0) {
+          // Calculate margin from cost and price
+          profitPerUnit = sellingPrice - unitCost;
+          marginPct = (profitPerUnit / sellingPrice) * 100;
         }
         
         const totalProfit = profitPerUnit !== null && a.total_quantity 
           ? profitPerUnit * a.total_quantity 
           : null;
 
-        // Calculate assortment recommendation
+        // Calculate assortment recommendation based on data
         let assortmentRecommendation: AssortmentProduct['assortment_recommendation'] = null;
         let assortmentReason = '';
 
@@ -149,12 +174,16 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
         const isLowRevenue = a.abc_group === 'C';
         const isStable = a.xyz_group === 'X';
         const isProfitable = marginPct !== null && marginPct >= 15;
-        const isLowMargin = marginPct !== null && marginPct < 10;
+        const isLowMargin = marginPct !== null && marginPct >= 0 && marginPct < 10;
         const isNegativeMargin = marginPct !== null && marginPct < 0;
-        const hasExcessStock = a.days_until_stockout > 180;
-        const isRunningOut = a.days_until_stockout < 14;
+        const hasExcessStock = a.days_until_stockout !== null && a.days_until_stockout > 180;
+        const isRunningOut = a.days_until_stockout !== null && a.days_until_stockout > 0 && a.days_until_stockout < 14;
+        const hasNoCostData = unitCost === null;
 
-        if (isHighRevenue && isProfitable && isStable) {
+        if (isNegativeMargin) {
+          assortmentRecommendation = 'remove';
+          assortmentReason = 'Убыточный товар — рассмотреть вывод или пересмотр цены';
+        } else if (isHighRevenue && isProfitable && isStable) {
           assortmentRecommendation = 'expand';
           assortmentReason = 'Высокая выручка, прибыльный, стабильный спрос — расширять линейку';
         } else if (isHighRevenue && isRunningOut) {
@@ -163,21 +192,18 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
         } else if (isLowRevenue && hasExcessStock) {
           assortmentRecommendation = 'remove';
           assortmentReason = 'Низкая выручка, избыток на складе — вывести из ассортимента';
-        } else if (isNegativeMargin) {
-          assortmentRecommendation = 'remove';
-          assortmentReason = 'Убыточный товар — рассмотреть вывод или пересмотр цены';
         } else if (isLowMargin && isLowRevenue) {
           assortmentRecommendation = 'reduce';
           assortmentReason = 'Низкая маржа и выручка — сократить остатки';
         } else if (isMediumRevenue && isProfitable) {
           assortmentRecommendation = 'keep';
           assortmentReason = 'Стабильный середняк — поддерживать';
-        } else if (isHighRevenue) {
+        } else if (isHighRevenue && !hasNoCostData) {
           assortmentRecommendation = 'keep';
           assortmentReason = 'Ключевой товар — контролировать';
-        } else {
+        } else if (hasNoCostData && isHighRevenue) {
           assortmentRecommendation = null;
-          assortmentReason = '';
+          assortmentReason = 'Нет данных о себестоимости — заполните юнит-экономику';
         }
 
         return {
