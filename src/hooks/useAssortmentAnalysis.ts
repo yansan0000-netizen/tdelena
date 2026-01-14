@@ -120,9 +120,23 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
       // Merge and calculate recommendations
       const merged: AssortmentProduct[] = analytics.map(a => {
         const econ = econMap.get(a.article.toLowerCase().trim());
-        const marginPct = econ?.margin_pct ?? null;
-        const profitPerUnit = econ?.profit_per_unit ?? null;
-        const totalProfit = profitPerUnit && a.total_quantity 
+        
+        // Calculate margin from available data if not set
+        let marginPct = econ?.margin_pct ?? null;
+        let profitPerUnit = econ?.profit_per_unit ?? null;
+        const unitCost = econ?.unit_cost_real_rub ?? null;
+        
+        // If margin not set but we have cost and price, calculate it
+        if (marginPct === null && unitCost !== null && unitCost > 0) {
+          // Use avg_price from sales as selling price if no retail price
+          const sellingPrice = a.avg_price || 0;
+          if (sellingPrice > 0) {
+            profitPerUnit = sellingPrice - unitCost;
+            marginPct = (profitPerUnit / sellingPrice) * 100;
+          }
+        }
+        
+        const totalProfit = profitPerUnit !== null && a.total_quantity 
           ? profitPerUnit * a.total_quantity 
           : null;
 
@@ -187,7 +201,7 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
           recommendation_priority: a.recommendation_priority,
           margin_pct: marginPct,
           profit_per_unit: profitPerUnit,
-          unit_cost: econ?.unit_cost_real_rub ?? null,
+          unit_cost: unitCost,
           total_profit: totalProfit,
           assortment_recommendation: assortmentRecommendation,
           assortment_reason: assortmentReason,
@@ -225,9 +239,11 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
     killListCandidates: filteredProducts.filter(p => p.assortment_recommendation === 'remove').length,
     totalRevenue: filteredProducts.reduce((sum, p) => sum + p.total_revenue, 0),
     totalProfit: filteredProducts.reduce((sum, p) => sum + (p.total_profit || 0), 0),
-    avgMargin: filteredProducts.length > 0
-      ? filteredProducts.reduce((sum, p) => sum + (p.margin_pct || 0), 0) / filteredProducts.filter(p => p.margin_pct !== null).length
-      : 0,
+    avgMargin: (() => {
+      const productsWithMargin = filteredProducts.filter(p => p.margin_pct !== null);
+      if (productsWithMargin.length === 0) return 0;
+      return productsWithMargin.reduce((sum, p) => sum + (p.margin_pct || 0), 0) / productsWithMargin.length;
+    })(),
     categoryBreakdown: [],
     abcBreakdown: [
       { group: 'A', count: filteredProducts.filter(p => p.abc_group === 'A').length, revenue: filteredProducts.filter(p => p.abc_group === 'A').reduce((s, p) => s + p.total_revenue, 0) },
