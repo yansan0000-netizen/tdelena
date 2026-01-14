@@ -32,6 +32,7 @@ export function CostImport({ onSuccess }: CostImportProps) {
     const arrayBuffer = await file.arrayBuffer();
     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
     
+    // Use Map to deduplicate by article - later rows override earlier ones
     const articles: Map<string, Partial<UnitEconFormData & { article: string }>> = new Map();
     
     // Process all sheets
@@ -64,15 +65,16 @@ export function CostImport({ onSuccess }: CostImportProps) {
       // Process rows
       for (const row of jsonData) {
         const articleValue = row[articleHeader];
-        if (!articleValue || typeof articleValue !== 'string') continue;
+        if (!articleValue) continue;
         
-        const article = articleValue.toString().trim();
+        // Normalize article: convert to string, trim, handle numbers
+        const article = String(articleValue).trim();
         if (!article) continue;
         
-        // Get or create article entry
+        // Get or create article entry - merge values from all rows with same article
         const existing = articles.get(article) || { article };
         
-        // Map values
+        // Map values - only update if value is not null/undefined/empty
         for (const [header, field] of Object.entries(headerMap)) {
           const value = row[header];
           if (value !== null && value !== undefined && value !== '') {
@@ -81,8 +83,11 @@ export function CostImport({ onSuccess }: CostImportProps) {
             } else if (typeof value === 'number') {
               (existing as Record<string, unknown>)[field] = value;
             } else if (typeof value === 'string') {
-              const num = parseFloat(value.replace(',', '.').replace(/\s/g, ''));
-              (existing as Record<string, unknown>)[field] = isNaN(num) ? value : num;
+              const trimmed = value.trim();
+              if (trimmed) {
+                const num = parseFloat(trimmed.replace(',', '.').replace(/\s/g, ''));
+                (existing as Record<string, unknown>)[field] = isNaN(num) ? trimmed : num;
+              }
             }
           }
         }
@@ -91,6 +96,7 @@ export function CostImport({ onSuccess }: CostImportProps) {
       }
     }
     
+    console.log(`Parsed ${articles.size} unique articles from Excel`);
     return Array.from(articles.values()) as Partial<UnitEconInputInsert & { article: string }>[];
   }, []);
 
