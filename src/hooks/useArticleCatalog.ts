@@ -51,7 +51,8 @@ export function useArticleCatalog() {
 
   const killListArticles = articles.filter(a => a.is_in_kill_list);
   const visibleArticles = articles.filter(a => a.is_visible && !a.is_in_kill_list);
-  const hiddenArticles = articles.filter(a => !a.is_visible || a.is_in_kill_list);
+  // Hidden articles = only those with is_visible=false (excluding kill list items)
+  const hiddenArticles = articles.filter(a => !a.is_visible && !a.is_in_kill_list);
 
   const updateArticle = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: ArticleCatalogUpdate }) => {

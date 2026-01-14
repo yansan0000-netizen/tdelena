@@ -35,9 +35,9 @@ export function AppLayout({ children, fullWidth = false }: AppLayoutProps) {
     navigate('/auth');
   };
 
-  // Main navigation items (always visible)
+  // Main navigation items - Dashboard hidden for hidden_cost role
   const mainNavItems = [
-    { path: '/dashboard', label: 'Дашборд', icon: LayoutDashboard },
+    ...(!shouldHideCost ? [{ path: '/dashboard', label: 'Дашборд', icon: LayoutDashboard }] : []),
     { path: '/new', label: 'Новый расчёт', icon: Plus },
     { path: '/runs', label: 'История', icon: History },
   ];
