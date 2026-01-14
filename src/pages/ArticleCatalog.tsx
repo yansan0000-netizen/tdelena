@@ -101,7 +101,7 @@ export default function ArticleCatalog() {
         result = result.filter(a => a.is_visible && !a.is_in_kill_list);
         break;
       case "hidden":
-        result = result.filter(a => !a.is_visible);
+        result = result.filter(a => !a.is_visible && !a.is_in_kill_list);
         break;
       case "kill-list":
         result = result.filter(a => a.is_in_kill_list);
@@ -114,7 +114,7 @@ export default function ArticleCatalog() {
   const stats = useMemo(() => ({
     total: articles.length,
     visible: articles.filter(a => a.is_visible && !a.is_in_kill_list).length,
-    hidden: articles.filter(a => !a.is_visible).length,
+    hidden: articles.filter(a => !a.is_visible && !a.is_in_kill_list).length,
     killList: articles.filter(a => a.is_in_kill_list).length,
   }), [articles]);
 
