@@ -41,7 +41,8 @@ export function useArticleCatalog() {
         .from("article_catalog")
         .select("*")
         .eq("user_id", user.id)
-        .order("article", { ascending: true });
+        .order("article", { ascending: true })
+        .limit(10000); // Override default 1000 limit
 
       if (error) throw error;
       return data as ArticleCatalogItem[];
