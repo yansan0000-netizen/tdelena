@@ -16,7 +16,7 @@ import * as XLSX from "xlsx";
 
 interface ExcludedArticlesImportProps {
   currentExcluded: string[];
-  onImport: (articles: string[]) => void;
+  onImport: (newArticles: string[]) => void;
 }
 
 export function ExcludedArticlesImport({ currentExcluded, onImport }: ExcludedArticlesImportProps) {
@@ -102,11 +102,10 @@ export function ExcludedArticlesImport({ currentExcluded, onImport }: ExcludedAr
   const handleImport = () => {
     if (articles.length === 0) return;
     
-    // Merge with existing excluded articles
-    const merged = [...currentExcluded, ...articles];
-    onImport(merged);
+    // Pass only new articles to import (not merged)
+    onImport(articles);
     setImported(true);
-    toast.success(`Добавлено ${articles.length} артикулов в исключения`);
+    toast.success(`Скрыто ${articles.length} артикулов`);
   };
 
   const handleClose = () => {
@@ -158,10 +157,10 @@ export function ExcludedArticlesImport({ currentExcluded, onImport }: ExcludedAr
             <div className="rounded-lg border p-4 space-y-3">
               <div className="flex items-center gap-2 text-green-600">
                 <CheckCircle2 className="h-5 w-5" />
-                <span className="font-medium">Артикулы добавлены</span>
+                <span className="font-medium">Артикулы скрыты</span>
               </div>
               <p className="text-sm text-muted-foreground">
-                Не забудьте сохранить настройки!
+                Изменения применены автоматически
               </p>
             </div>
           )}
@@ -176,7 +175,7 @@ export function ExcludedArticlesImport({ currentExcluded, onImport }: ExcludedAr
               onClick={handleImport} 
               disabled={articles.length === 0}
             >
-              Добавить {articles.length} артикулов
+              Скрыть {articles.length} артикулов
             </Button>
           )}
         </DialogFooter>
