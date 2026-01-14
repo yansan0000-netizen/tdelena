@@ -84,10 +84,10 @@ export function useDashboard(runId: string | null) {
 
       if (analyticsError) throw analyticsError;
 
-      // Get unit economics for margins
+      // Get unit economics for margins - include cost/price for dynamic calculation
       const { data: unitEcon, error: econError } = await supabase
         .from('unit_econ_inputs')
-        .select('article, margin_pct, profit_per_unit, name')
+        .select('article, margin_pct, profit_per_unit, name, unit_cost_real_rub, retail_price_rub')
         .eq('user_id', user.id);
 
       if (econError) throw econError;
@@ -103,9 +103,26 @@ export function useDashboard(runId: string | null) {
       // Get run info
       const run = runs.find(r => r.id === runId);
 
-      // Create lookup map for unit economics
+      // Create lookup map for unit economics with dynamic margin/profit calculation
       const econMap = new Map(
-        unitEcon.map(e => [e.article.toLowerCase().trim(), e])
+        unitEcon.map(e => {
+          const unitCost = e.unit_cost_real_rub || 0;
+          const sellingPrice = e.retail_price_rub || 0;
+          
+          // Use stored margin/profit or calculate from cost/price
+          let marginPct = e.margin_pct;
+          let profitPerUnit = e.profit_per_unit;
+          
+          if ((marginPct === null || marginPct === undefined) && unitCost > 0 && sellingPrice > 0) {
+            profitPerUnit = sellingPrice - unitCost;
+            marginPct = (profitPerUnit / sellingPrice) * 100;
+          }
+          
+          return [
+            e.article.toLowerCase().trim(),
+            { ...e, margin_pct: marginPct, profit_per_unit: profitPerUnit }
+          ];
+        })
       );
 
       // Calculate KPIs
