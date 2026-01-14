@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { useUserSettings, defaultSettings } from '@/hooks/useUserSettings';
 import { useArticleCatalog } from '@/hooks/useArticleCatalog';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { TAX_MODES } from '@/lib/categories';
 import { Settings as SettingsIcon, Save, Loader2, DollarSign, TrendingUp, Package, Percent, EyeOff, Plus, X, Check, ChevronsUpDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +27,8 @@ export default function Settings() {
   const { settings, loading, updateSettings } = useUserSettings();
   const { articles, hiddenArticles, updateArticle, updateMultipleArticles, isLoading: catalogLoading } = useArticleCatalog();
   const { costs, loading: costsLoading } = useCosts();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [formData, setFormData] = useState(defaultSettings);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -161,24 +166,40 @@ export default function Settings() {
     });
   };
 
-  // Handle import of hidden articles
+  // Handle import of hidden articles - upsert to create if not exists
   const handleImportHiddenArticles = async (importedArticles: string[]) => {
-    // Find catalog items for these articles
-    const catalogItems = articles.filter(a => importedArticles.includes(a.article) && a.is_visible);
+    if (!importedArticles.length) return;
     
-    if (catalogItems.length === 0) {
-      toast.info('Все артикулы уже скрыты или не найдены в каталоге');
+    const userId = user?.id;
+    if (!userId) {
+      toast.error('Не удалось определить пользователя');
       return;
     }
     
-    updateMultipleArticles.mutate({
-      ids: catalogItems.map(a => a.id),
-      updates: { is_visible: false }
-    }, {
-      onSuccess: () => {
-        toast.success(`Скрыто ${catalogItems.length} артикулов`);
-      }
-    });
+    // Create upsert data for all imported articles
+    const articlesToUpsert = importedArticles.map(article => ({
+      user_id: userId,
+      article: article.trim(),
+      is_visible: false
+    }));
+    
+    const { error } = await supabase
+      .from('article_catalog')
+      .upsert(articlesToUpsert, {
+        onConflict: 'user_id,article',
+        ignoreDuplicates: false
+      });
+      
+    if (error) {
+      console.error('Upsert error:', error);
+      toast.error('Ошибка при скрытии артикулов');
+      return;
+    }
+    
+    // Invalidate catalog query to refresh data
+    queryClient.invalidateQueries({ queryKey: ['article-catalog'] });
+    
+    toast.success(`Скрыто ${importedArticles.length} артикулов`);
   };
 
 
