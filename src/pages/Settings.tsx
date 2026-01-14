@@ -17,6 +17,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { RecommendationRulesPanel } from '@/components/recommendations/RecommendationRulesPanel';
+import { ExcludedArticlesImport } from '@/components/settings/ExcludedArticlesImport';
 
 export default function Settings() {
   const { settings, loading, updateSettings } = useUserSettings();
@@ -503,6 +504,13 @@ export default function Settings() {
                     </Command>
                   </PopoverContent>
                 </Popover>
+                <ExcludedArticlesImport 
+                  currentExcluded={formData.excluded_articles}
+                  onImport={(articles) => {
+                    setFormData(prev => ({ ...prev, excluded_articles: articles }));
+                    setHasChanges(true);
+                  }}
+                />
               </div>
               
               {formData.excluded_articles.length > 0 ? (
