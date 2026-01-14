@@ -8,6 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { useUserSettings, defaultSettings } from '@/hooks/useUserSettings';
+import { useArticleCatalog } from '@/hooks/useArticleCatalog';
 import { TAX_MODES } from '@/lib/categories';
 import { Settings as SettingsIcon, Save, Loader2, DollarSign, TrendingUp, Package, Percent, EyeOff, Plus, X, Check, ChevronsUpDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +22,7 @@ import { ExcludedArticlesImport } from '@/components/settings/ExcludedArticlesIm
 
 export default function Settings() {
   const { settings, loading, updateSettings } = useUserSettings();
+  const { articles, hiddenArticles, updateArticle, updateMultipleArticles, isLoading: catalogLoading } = useArticleCatalog();
   const { costs, loading: costsLoading } = useCosts();
   const [formData, setFormData] = useState(defaultSettings);
   const [saving, setSaving] = useState(false);
@@ -28,12 +30,17 @@ export default function Settings() {
   const [excludedArticleOpen, setExcludedArticleOpen] = useState(false);
   const [excludedArticleSearch, setExcludedArticleSearch] = useState('');
 
-  // Get available articles from costs that are not yet excluded
+  // Get hidden article names from catalog
+  const hiddenArticlesList = useMemo(() => {
+    return hiddenArticles.map(a => a.article);
+  }, [hiddenArticles]);
+
+  // Get available articles from catalog that are not yet hidden
   const availableArticles = useMemo(() => {
-    return costs
-      .filter(c => !formData.excluded_articles.includes(c.article))
-      .map(c => ({ article: c.article, name: c.name }));
-  }, [costs, formData.excluded_articles]);
+    return articles
+      .filter(a => a.is_visible && !a.is_in_kill_list)
+      .map(a => ({ article: a.article, name: a.name, id: a.id }));
+  }, [articles]);
 
   // Filter articles by search
   const filteredArticles = useMemo(() => {
@@ -44,7 +51,6 @@ export default function Settings() {
       a.name?.toLowerCase().includes(search)
     );
   }, [availableArticles, excludedArticleSearch]);
-  const [newExcludedArticle, setNewExcludedArticle] = useState('');
 
   // Load settings into form
   useEffect(() => {
@@ -111,28 +117,68 @@ export default function Settings() {
     }
   };
 
-  const handleAddExcludedArticle = (article: string) => {
-    const trimmed = article.trim();
+  // Add article to hidden list via article_catalog
+  const handleAddExcludedArticle = (articleName: string) => {
+    const trimmed = articleName.trim();
     if (!trimmed) return;
-    if (formData.excluded_articles.includes(trimmed)) {
-      toast.error('Артикул уже добавлен');
+    
+    const catalogItem = articles.find(a => a.article === trimmed);
+    if (!catalogItem) {
+      toast.error('Артикул не найден в каталоге');
       return;
     }
-    setFormData(prev => ({
-      ...prev,
-      excluded_articles: [...prev.excluded_articles, trimmed],
-    }));
+    
+    if (!catalogItem.is_visible) {
+      toast.error('Артикул уже скрыт');
+      return;
+    }
+    
+    updateArticle.mutate({
+      id: catalogItem.id,
+      updates: { is_visible: false }
+    }, {
+      onSuccess: () => {
+        toast.success(`Артикул ${trimmed} скрыт`);
+      }
+    });
+    
     setExcludedArticleSearch('');
     setExcludedArticleOpen(false);
-    setHasChanges(true);
   };
 
-  const handleRemoveExcludedArticle = (article: string) => {
-    setFormData(prev => ({
-      ...prev,
-      excluded_articles: prev.excluded_articles.filter(a => a !== article),
-    }));
-    setHasChanges(true);
+  // Remove article from hidden list (show it again)
+  const handleRemoveExcludedArticle = (articleName: string) => {
+    const catalogItem = hiddenArticles.find(a => a.article === articleName);
+    if (!catalogItem) return;
+    
+    updateArticle.mutate({
+      id: catalogItem.id,
+      updates: { is_visible: true }
+    }, {
+      onSuccess: () => {
+        toast.success(`Артикул ${articleName} снова виден`);
+      }
+    });
+  };
+
+  // Handle import of hidden articles
+  const handleImportHiddenArticles = async (importedArticles: string[]) => {
+    // Find catalog items for these articles
+    const catalogItems = articles.filter(a => importedArticles.includes(a.article) && a.is_visible);
+    
+    if (catalogItems.length === 0) {
+      toast.info('Все артикулы уже скрыты или не найдены в каталоге');
+      return;
+    }
+    
+    updateMultipleArticles.mutate({
+      ids: catalogItems.map(a => a.id),
+      updates: { is_visible: false }
+    }, {
+      onSuccess: () => {
+        toast.success(`Скрыто ${catalogItems.length} артикулов`);
+      }
+    });
   };
 
 
@@ -477,7 +523,7 @@ export default function Settings() {
                       />
                       <CommandList>
                         <CommandEmpty>
-                          {costsLoading ? 'Загрузка...' : 'Артикулы не найдены'}
+                          {catalogLoading ? 'Загрузка...' : 'Артикулы не найдены'}
                         </CommandEmpty>
                         <CommandGroup>
                           {filteredArticles.slice(0, 50).map((item) => (
@@ -505,17 +551,14 @@ export default function Settings() {
                   </PopoverContent>
                 </Popover>
                 <ExcludedArticlesImport 
-                  currentExcluded={formData.excluded_articles}
-                  onImport={(articles) => {
-                    setFormData(prev => ({ ...prev, excluded_articles: articles }));
-                    setHasChanges(true);
-                  }}
+                  currentExcluded={hiddenArticlesList}
+                  onImport={handleImportHiddenArticles}
                 />
               </div>
               
-              {formData.excluded_articles.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {formData.excluded_articles.map((article) => (
+              {hiddenArticlesList.length > 0 ? (
+                <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
+                  {hiddenArticlesList.map((article) => (
                     <Badge key={article} variant="secondary" className="gap-1 pr-1">
                       {article}
                       <button
@@ -529,7 +572,7 @@ export default function Settings() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  Нет исключённых артикулов
+                  Нет скрытых артикулов. Добавьте артикулы выше или импортируйте из Excel.
                 </p>
               )}
               
