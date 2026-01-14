@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useDashboard } from '@/hooks/useDashboard';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -49,6 +50,14 @@ export default function Dashboard() {
   const { shouldHideCost } = useUserRole();
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const { runs, data, isLoading } = useDashboard(selectedRunId);
+  const navigate = useNavigate();
+
+  // Redirect hidden_cost users away from dashboard
+  useEffect(() => {
+    if (shouldHideCost) {
+      navigate('/runs', { replace: true });
+    }
+  }, [shouldHideCost, navigate]);
 
   // Auto-select latest run
   useEffect(() => {
