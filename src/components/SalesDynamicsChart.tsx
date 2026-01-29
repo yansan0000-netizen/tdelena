@@ -1,10 +1,11 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useTransition, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
@@ -32,6 +33,23 @@ import {
 } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, TrendingUp, BarChart3, PieChart as PieChartIcon, GitCompare, Sparkles } from 'lucide-react';
+
+// Helper to format period as "Месяц Год" (e.g., "Янв 24")
+const MONTH_NAMES = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+
+function formatPeriodLabel(value: string): string {
+  if (value.includes('-')) {
+    const [year, month] = value.split('-');
+    const monthIdx = parseInt(month) - 1;
+    return `${MONTH_NAMES[monthIdx] || month} ${year.slice(-2)}`;
+  }
+  // Handle "январь 2024" format
+  const parts = value.split(' ');
+  if (parts.length >= 2) {
+    return `${parts[0].slice(0, 3)} ${parts[1].slice(-2)}`;
+  }
+  return value;
+}
 
 interface SalesDynamicsChartProps {
   runId: string;
@@ -604,8 +622,60 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="space-y-6 animate-in fade-in duration-300">
+        {/* Skeleton for filters */}
+        <Card>
+          <CardHeader className="pb-3">
+            <Skeleton className="h-5 w-24" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Skeleton className="h-4 w-20 mb-2" />
+                <div className="flex gap-2">
+                  <Skeleton className="h-6 w-10" />
+                  <Skeleton className="h-6 w-10" />
+                  <Skeleton className="h-6 w-10" />
+                </div>
+              </div>
+              <div>
+                <Skeleton className="h-4 w-20 mb-2" />
+                <div className="flex gap-2">
+                  <Skeleton className="h-6 w-10" />
+                  <Skeleton className="h-6 w-10" />
+                  <Skeleton className="h-6 w-10" />
+                </div>
+              </div>
+              <div>
+                <Skeleton className="h-4 w-20 mb-2" />
+                <Skeleton className="h-6 w-full" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        {/* Skeleton for chart */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-5 w-48" />
+          </CardHeader>
+          <CardContent>
+            <div className="h-[400px] flex items-center justify-center">
+              <div className="space-y-4 w-full">
+                <div className="flex items-end gap-2 h-[300px]">
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <Skeleton 
+                      key={i} 
+                      className="flex-1 rounded-t" 
+                      style={{ height: `${Math.random() * 60 + 40}%` }} 
+                    />
+                  ))}
+                </div>
+                <Skeleton className="h-4 w-full" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -833,12 +903,16 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
                     <AreaChart data={filteredPeriodData}>
                       <defs>
                         <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                          <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
+                          <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.05} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis dataKey="period" className="text-xs" />
+                      <XAxis 
+                        dataKey="period" 
+                        className="text-xs"
+                        tickFormatter={formatPeriodLabel}
+                      />
                       <YAxis tickFormatter={formatValue} className="text-xs" />
                       <Tooltip
                         formatter={(value: number) => [
@@ -853,13 +927,18 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
                         dataKey={dataType}
                         stroke="hsl(var(--primary))"
                         fill="url(#colorValue)"
+                        fillOpacity={1}
                         strokeWidth={2}
                       />
                     </AreaChart>
                   ) : chartType === 'line' ? (
                     <LineChart data={filteredPeriodData}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis dataKey="period" className="text-xs" />
+                      <XAxis 
+                        dataKey="period" 
+                        className="text-xs"
+                        tickFormatter={formatPeriodLabel}
+                      />
                       <YAxis tickFormatter={formatValue} className="text-xs" />
                       <Tooltip
                         formatter={(value: number) => [
@@ -880,7 +959,11 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
                   ) : (
                     <BarChart data={filteredPeriodData}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis dataKey="period" className="text-xs" />
+                      <XAxis 
+                        dataKey="period" 
+                        className="text-xs"
+                        tickFormatter={formatPeriodLabel}
+                      />
                       <YAxis tickFormatter={formatValue} className="text-xs" />
                       <Tooltip
                         formatter={(value: number) => [

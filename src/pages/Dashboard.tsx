@@ -243,17 +243,27 @@ export default function Dashboard() {
                       <AreaChart data={data.periodRevenues}>
                         <defs>
                           <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                            <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
+                            <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.05} />
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                         <XAxis 
                           dataKey="period" 
-                          tick={{ fontSize: 12 }}
+                          tick={{ fontSize: 11 }}
                           tickFormatter={(value) => {
+                            // Parse period like "январь 2024" or "2024-01"
+                            if (value.includes('-')) {
+                              const [year, month] = value.split('-');
+                              const monthNames = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+                              const monthIdx = parseInt(month) - 1;
+                              return `${monthNames[monthIdx] || month} ${year.slice(-2)}`;
+                            }
                             const parts = value.split(' ');
-                            return parts[0]?.slice(0, 3) || value;
+                            if (parts.length >= 2) {
+                              return `${parts[0].slice(0, 3)} ${parts[1].slice(-2)}`;
+                            }
+                            return value;
                           }}
                         />
                         <YAxis 
@@ -284,6 +294,7 @@ export default function Dashboard() {
                           stroke="hsl(var(--primary))"
                           strokeWidth={2}
                           fill="url(#colorRevenue)"
+                          fillOpacity={1}
                         />
                       </AreaChart>
                     </ResponsiveContainer>
