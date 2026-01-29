@@ -18,6 +18,8 @@ export const ASSORTMENT_COLUMNS: AssortmentColumn[] = [
   { key: 'name', label: 'Наименование', category: 'basic', align: 'left', defaultVisible: false },
   { key: 'category', label: 'Категория', category: 'basic', align: 'left', defaultVisible: true },
   { key: 'abc', label: 'ABC/XYZ', category: 'basic', align: 'center', defaultVisible: true },
+  { key: 'season', label: 'Сезон', category: 'basic', align: 'center', defaultVisible: true },
+  { key: 'trend', label: 'Тренд', category: 'basic', align: 'center', defaultVisible: false },
   
   // Sales
   { key: 'total_quantity', label: 'Продажи', category: 'sales', align: 'right', isNumeric: true, defaultVisible: true },
@@ -33,6 +35,11 @@ export const ASSORTMENT_COLUMNS: AssortmentColumn[] = [
   { key: 'margin_pct', label: 'Маржа, %', category: 'economics', align: 'right', isPercent: true, defaultVisible: true },
   { key: 'profit_per_unit', label: 'Прибыль/шт', category: 'economics', align: 'right', isCurrency: true, hideForRole: 'hidden_cost', defaultVisible: true },
   { key: 'unit_cost', label: 'Себестоимость', category: 'economics', align: 'right', isCurrency: true, hideForRole: 'hidden_cost', defaultVisible: false },
+  
+  // Forecasting
+  { key: 'forecast_linear', label: 'Прогноз (лин.)', category: 'sales', align: 'right', isNumeric: true, defaultVisible: false },
+  { key: 'forecast_exponential', label: 'Прогноз (эксп.)', category: 'sales', align: 'right', isNumeric: true, defaultVisible: false },
+  { key: 'forecast_consensus', label: 'Прогноз (конс.)', category: 'sales', align: 'right', isNumeric: true, defaultVisible: false },
   
   // Recommendation
   { key: 'recommendation', label: 'Рекомендация', category: 'recommendation', align: 'left', defaultVisible: true },

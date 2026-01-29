@@ -1,4 +1,13 @@
 import * as XLSX from 'xlsx';
+import { 
+  getAllForecasts, 
+  detectSeasonality, 
+  getSeasonLabel, 
+  getTrendLabel,
+  getForecastMethodLabel,
+  MonthlyData,
+  Season 
+} from '../forecasting';
 
 export interface AnalyticsRow {
   article: string;
@@ -22,6 +31,13 @@ export interface AnalyticsRow {
   plan_3m: number;
   plan_6m: number;
   recommendation: string;
+  // New forecast fields
+  forecast_linear?: number;
+  forecast_exponential?: number;
+  forecast_moving_avg?: number;
+  forecast_consensus?: number;
+  trend?: 'up' | 'down' | 'stable';
+  season?: Season;
 }
 
 export interface PeriodSalesData {
@@ -96,9 +112,70 @@ export function generateAnalyticsReport(
   // Enrich with costs if available
   const enrichedData = costs ? enrichAnalyticsWithCosts(data, costs) : data;
   const hasCosts = costs && costs.length > 0;
+  
+  // Calculate forecasts for each article if we have period data
+  const forecastMap = new Map<string, {
+    linear: number;
+    exponential: number;
+    movingAvg: number;
+    consensus: number;
+    trend: 'up' | 'down' | 'stable';
+    season: Season;
+  }>();
+  
+  if (periodSales && periodSales.length > 0) {
+    // Group period sales by article
+    const articlePeriodData = new Map<string, MonthlyData[]>();
+    periodSales.forEach(ps => {
+      if (!articlePeriodData.has(ps.article)) {
+        articlePeriodData.set(ps.article, []);
+      }
+      const existing = articlePeriodData.get(ps.article)!;
+      // Aggregate by period
+      const periodEntry = existing.find(e => e.period === ps.period);
+      if (periodEntry) {
+        periodEntry.quantity += ps.quantity;
+        periodEntry.revenue = (periodEntry.revenue || 0) + ps.revenue;
+      } else {
+        existing.push({ period: ps.period, quantity: ps.quantity, revenue: ps.revenue });
+      }
+    });
+    
+    // Sort periods and calculate forecasts
+    articlePeriodData.forEach((periods, article) => {
+      const sortedPeriods = periods.sort((a, b) => a.period.localeCompare(b.period));
+      const forecasts = getAllForecasts(sortedPeriods, 1);
+      const seasonality = detectSeasonality(sortedPeriods);
+      
+      forecastMap.set(article, {
+        linear: forecasts.linear.forecast,
+        exponential: forecasts.exponential.forecast,
+        movingAvg: forecasts.movingAverage.forecast,
+        consensus: forecasts.consensusForecast,
+        trend: forecasts.recommended.trend,
+        season: seasonality.season,
+      });
+    });
+  }
 
-  // Main data sheet
-  const reportData = enrichedData.map(row => {
+  // Sort data: group by article (without size), then sort sizes descending
+  const sortedData = [...enrichedData].sort((a, b) => {
+    // First sort by base article (without size)
+    const aBase = a.article.replace(/[\/\-]\d+$/, '');
+    const bBase = b.article.replace(/[\/\-]\d+$/, '');
+    if (aBase !== bBase) {
+      return aBase.localeCompare(bBase, 'ru');
+    }
+    // Then sort by size descending (larger sizes first)
+    const aSize = parseInt(a.size || '0') || 0;
+    const bSize = parseInt(b.size || '0') || 0;
+    return bSize - aSize;
+  });
+
+  // Main data sheet with forecasts
+  const reportData = sortedData.map(row => {
+    const forecast = forecastMap.get(row.article);
+    
     const baseData: Record<string, unknown> = {
       'Артикул': row.article,
       'Размер': row.size || '',
@@ -107,6 +184,8 @@ export function generateAnalyticsReport(
       'Код группы': row.group_code || '',
       'ABC': row.abc_group,
       'XYZ': row.xyz_group,
+      'Сезон': forecast ? getSeasonLabel(forecast.season) : '',
+      'Тренд': forecast ? getTrendLabel(forecast.trend) : '',
       'Рекомендация': row.recommendation,
       'Выручка': Math.round(row.total_revenue),
       'Доля выручки %': Math.round((row.revenue_share || 0) * 100) / 100,
@@ -118,7 +197,13 @@ export function generateAnalyticsReport(
       'Скор.продаж/день': Math.round((row.sales_velocity_day || 0) * 100) / 100,
       'Дней до 0': row.days_until_stockout,
       'CV %': Math.round((row.coefficient_of_variation || 0) * 10) / 10,
-      'План 1м': row.plan_1m,
+      // Original plan
+      'План 1м (базовый)': row.plan_1m,
+      // Forecast plans
+      'План (лин.регрессия)': forecast?.linear ?? '',
+      'План (экспон.сгл.)': forecast?.exponential ?? '',
+      'План (скольз.ср.)': forecast?.movingAvg ?? '',
+      'План (консенсус)': forecast?.consensus ?? '',
       'План 3м': row.plan_3m,
       'План 6м': row.plan_6m,
     };
@@ -152,10 +237,33 @@ export function generateAnalyticsReport(
 
   const dataSheet = XLSX.utils.json_to_sheet(reportData);
   const baseCols = [
-    { wch: 25 }, { wch: 10 }, { wch: 20 }, { wch: 12 }, { wch: 10 },
-    { wch: 5 }, { wch: 5 }, { wch: 45 }, { wch: 12 }, { wch: 12 },
-    { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 },
-    { wch: 15 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 },
+    { wch: 25 }, // Артикул
+    { wch: 10 }, // Размер
+    { wch: 20 }, // Категория
+    { wch: 12 }, // Группа товаров
+    { wch: 10 }, // Код группы
+    { wch: 5 },  // ABC
+    { wch: 5 },  // XYZ
+    { wch: 12 }, // Сезон
+    { wch: 12 }, // Тренд
+    { wch: 45 }, // Рекомендация
+    { wch: 12 }, // Выручка
+    { wch: 12 }, // Доля выручки
+    { wch: 12 }, // Накопл. доля
+    { wch: 12 }, // Кол-во продаж
+    { wch: 10 }, // Остаток
+    { wch: 10 }, // Цена
+    { wch: 12 }, // Ср.мес.продажи
+    { wch: 15 }, // Скор.продаж/день
+    { wch: 10 }, // Дней до 0
+    { wch: 8 },  // CV %
+    { wch: 14 }, // План 1м (базовый)
+    { wch: 16 }, // План (лин.регрессия)
+    { wch: 14 }, // План (экспон.сгл.)
+    { wch: 14 }, // План (скольз.ср.)
+    { wch: 14 }, // План (консенсус)
+    { wch: 10 }, // План 3м
+    { wch: 10 }, // План 6м
   ];
   // Add columns for unit economics
   if (hasCosts) {
@@ -183,6 +291,59 @@ export function generateAnalyticsReport(
   ];
   const xyzSheet = XLSX.utils.json_to_sheet(xyzSummary);
   XLSX.utils.book_append_sheet(workbook, xyzSheet, 'XYZ Сводка');
+
+  // Forecasting methods explanation sheet
+  const forecastMethods = [
+    { 
+      'Метод': 'Линейная регрессия', 
+      'Колонка': 'План (лин.регрессия)', 
+      'Описание': 'Строит линию тренда по историческим данным. Лучше всего работает при устойчивом росте или падении спроса.',
+      'Когда использовать': 'Товары с выраженным трендом (рост или падение продаж)',
+    },
+    { 
+      'Метод': 'Экспоненциальное сглаживание', 
+      'Колонка': 'План (экспон.сгл.)', 
+      'Описание': 'Придаёт больший вес недавним продажам. Быстро адаптируется к изменениям спроса.',
+      'Когда использовать': 'Товары с переменным спросом, новинки, сезонные товары',
+    },
+    { 
+      'Метод': 'Скользящее среднее', 
+      'Колонка': 'План (скольз.ср.)', 
+      'Описание': 'Среднее за последние 3 месяца. Простой и надёжный метод для стабильных товаров.',
+      'Когда использовать': 'Стабильные товары группы X, базовый ассортимент',
+    },
+    { 
+      'Метод': 'Консенсус-прогноз', 
+      'Колонка': 'План (консенсус)', 
+      'Описание': 'Взвешенное среднее всех трёх методов. Учитывает уверенность каждого метода.',
+      'Когда использовать': 'Универсальный вариант, когда нет явных предпочтений',
+    },
+  ];
+  const forecastSheet = XLSX.utils.json_to_sheet(forecastMethods);
+  forecastSheet['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 60 }, { wch: 50 }];
+  XLSX.utils.book_append_sheet(workbook, forecastSheet, 'Методы прогноза');
+
+  // Seasonality summary
+  const seasonCounts = {
+    winter: 0,
+    spring: 0,
+    summer: 0,
+    autumn: 0,
+    all_year: 0,
+  };
+  forecastMap.forEach(f => {
+    seasonCounts[f.season]++;
+  });
+  const seasonSummary = [
+    { 'Сезон': 'Зима', 'Месяцы': 'Декабрь-Февраль', 'Кол-во артикулов': seasonCounts.winter },
+    { 'Сезон': 'Весна', 'Месяцы': 'Март-Май', 'Кол-во артикулов': seasonCounts.spring },
+    { 'Сезон': 'Лето', 'Месяцы': 'Июнь-Август', 'Кол-во артикулов': seasonCounts.summer },
+    { 'Сезон': 'Осень', 'Месяцы': 'Сентябрь-Ноябрь', 'Кол-во артикулов': seasonCounts.autumn },
+    { 'Сезон': 'Весь год', 'Месяцы': '-', 'Кол-во артикулов': seasonCounts.all_year },
+  ];
+  const seasonSheet = XLSX.utils.json_to_sheet(seasonSummary);
+  seasonSheet['!cols'] = [{ wch: 15 }, { wch: 20 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(workbook, seasonSheet, 'Сезонность');
 
   // Unit Economics summary if available
   if (hasCosts) {
