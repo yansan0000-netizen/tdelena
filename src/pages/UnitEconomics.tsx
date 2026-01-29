@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { CostsTable } from '@/components/costs/CostsTable';
@@ -7,18 +7,23 @@ import { ColumnSelector } from '@/components/costs/ColumnSelector';
 import { BulkActionsBar } from '@/components/costs/BulkActionsBar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { CategorySelect } from '@/components/ui/category-select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { useCosts } from '@/hooks/useCosts';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useArticleCatalog } from '@/hooks/useArticleCatalog';
+import { useRuns } from '@/hooks/useRuns';
+import { supabase } from '@/integrations/supabase/client';
 import { PRODUCT_CATEGORIES } from '@/lib/categories';
 import { downloadUnitEconExport } from '@/lib/excel/unitEconExport';
 import { downloadUnitEconTemplate } from '@/lib/excel/unitEconTemplate';
 import { getDefaultVisibleColumns, UNIT_ECON_COLUMNS } from '@/lib/unitEconColumns';
-import { Plus, Upload, Search, Calculator, TrendingUp, Package, Download, FileDown, ChevronDown } from 'lucide-react';
+import { Plus, Upload, Search, Calculator, TrendingUp, Package, Download, FileDown, ChevronDown, EyeOff, ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
 
 const STORAGE_KEY = 'unit-econ-visible-columns';
@@ -27,11 +32,47 @@ export default function UnitEconomics() {
   const { costs, loading, fetchCosts } = useCosts();
   const { settings, addCustomCategory } = useUserSettings();
   const { shouldHideCost } = useUserRole();
+  const { articles: catalogArticles, hiddenArticles, killListArticles } = useArticleCatalog();
+  const { runs } = useRuns();
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [showFilledOnly, setShowFilledOnly] = useState(false);
+  const [hideInactive, setHideInactive] = useState(false);
+  const [showOrderOnly, setShowOrderOnly] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [selectedArticles, setSelectedArticles] = useState<string[]>([]);
+  const [orderArticles, setOrderArticles] = useState<Set<string>>(new Set());
+  
+  // Fetch articles that need ordering from the latest run
+  useEffect(() => {
+    const fetchOrderArticles = async () => {
+      const latestRun = runs.find(r => r.status === 'DONE');
+      if (!latestRun) return;
+      
+      const { data } = await supabase
+        .from('sales_analytics')
+        .select('article')
+        .eq('run_id', latestRun.id)
+        .in('recommendation_action', ['order_urgent', 'order_regular', 'order_careful']);
+      
+      if (data) {
+        setOrderArticles(new Set(data.map(d => d.article)));
+      }
+    };
+    
+    if (runs.length > 0) {
+      fetchOrderArticles();
+    }
+  }, [runs]);
+  
+  // Build set of hidden/inactive articles
+  const inactiveArticlesSet = useMemo(() => {
+    const set = new Set<string>();
+    hiddenArticles.forEach(a => set.add(a.article));
+    killListArticles.forEach(a => set.add(a.article));
+    return set;
+  }, [hiddenArticles, killListArticles]);
   
   // Load visible columns from localStorage or use defaults
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
@@ -63,21 +104,31 @@ export default function UnitEconomics() {
   };
 
   // Filter costs
-  const filteredCosts = costs.filter(cost => {
-    const matchesSearch = !searchQuery || 
-      cost.article.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (cost.name?.toLowerCase() || '').includes(searchQuery.toLowerCase());
-    
-    const matchesCategory = !categoryFilter || cost.category === categoryFilter;
-    
-    const matchesFilled = !showFilledOnly || cost.unit_cost_real_rub !== null;
-    
-    return matchesSearch && matchesCategory && matchesFilled;
-  });
+  const filteredCosts = useMemo(() => {
+    return costs.filter(cost => {
+      const matchesSearch = !searchQuery || 
+        cost.article.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (cost.name?.toLowerCase() || '').includes(searchQuery.toLowerCase());
+      
+      const matchesCategory = !categoryFilter || cost.category === categoryFilter;
+      
+      const matchesFilled = !showFilledOnly || cost.unit_cost_real_rub !== null;
+      
+      // Filter out hidden/inactive articles
+      const matchesActive = !hideInactive || !inactiveArticlesSet.has(cost.article);
+      
+      // Filter to show only articles needing order
+      const matchesOrder = !showOrderOnly || orderArticles.has(cost.article);
+      
+      return matchesSearch && matchesCategory && matchesFilled && matchesActive && matchesOrder;
+    });
+  }, [costs, searchQuery, categoryFilter, showFilledOnly, hideInactive, inactiveArticlesSet, showOrderOnly, orderArticles]);
 
   // Stats
   const filledCount = costs.filter(c => c.unit_cost_real_rub !== null).length;
   const totalCount = costs.length;
+  const inactiveCount = costs.filter(c => inactiveArticlesSet.has(c.article)).length;
+  const orderCount = costs.filter(c => orderArticles.has(c.article)).length;
 
   // Get selected costs objects for bulk actions
   const selectedCosts = filteredCosts.filter(c => selectedArticles.includes(c.article));
@@ -241,6 +292,34 @@ export default function UnitEconomics() {
               >
                 Только заполненные
               </Button>
+              <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-background">
+                <Checkbox 
+                  id="hideInactive" 
+                  checked={hideInactive}
+                  onCheckedChange={(checked) => setHideInactive(checked === true)}
+                />
+                <Label htmlFor="hideInactive" className="text-sm cursor-pointer flex items-center gap-1.5">
+                  <EyeOff className="h-3.5 w-3.5" />
+                  Скрыть неактивные
+                  {inactiveCount > 0 && (
+                    <span className="text-xs text-muted-foreground">({inactiveCount})</span>
+                  )}
+                </Label>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2 border rounded-md bg-background">
+                <Checkbox 
+                  id="showOrderOnly" 
+                  checked={showOrderOnly}
+                  onCheckedChange={(checked) => setShowOrderOnly(checked === true)}
+                />
+                <Label htmlFor="showOrderOnly" className="text-sm cursor-pointer flex items-center gap-1.5">
+                  <ShoppingCart className="h-3.5 w-3.5" />
+                  Требуют заказа
+                  {orderCount > 0 && (
+                    <span className="text-xs text-muted-foreground">({orderCount})</span>
+                  )}
+                </Label>
+              </div>
             </div>
           </CardContent>
         </Card>
