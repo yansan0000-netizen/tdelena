@@ -68,6 +68,13 @@ export interface UnitEconFormData {
   usn_tax_pct: number | null;
   vat_pct: number | null;
   
+  // Calculated fields from import
+  unit_cost_real_rub: number | null;
+  wholesale_price_rub: number | null;
+  retail_price_rub: number | null;
+  margin_pct: number | null;
+  profit_per_unit: number | null;
+  
   // Legacy fields (kept for compatibility)
   delivery_rub: number | null;
   non_purchase_pct: number | null;
@@ -139,6 +146,11 @@ export const defaultFormData: UnitEconFormData = {
   tax_mode: 'income_expenses',
   usn_tax_pct: 7,
   vat_pct: 0,
+  unit_cost_real_rub: null,
+  wholesale_price_rub: null,
+  retail_price_rub: null,
+  margin_pct: null,
+  profit_per_unit: null,
   delivery_rub: null,
   non_purchase_pct: null,
   investments_rub: null,
@@ -308,14 +320,17 @@ export const excelColumnMap: Record<string, keyof UnitEconFormData> = {
   'наценка опт': 'wholesale_markup_pct',
   'wholesale_markup_pct': 'wholesale_markup_pct',
   
-  // Unit cost - now correctly mapped
-  'себестоимость': 'fabric_cost_total',
-  'себестоимость единицы': 'fabric_cost_total',
-  'реальная себестоимость, руб': 'fabric_cost_total',
+// Unit cost - FIXED: map to correct field
+  'себестоимость': 'unit_cost_real_rub',
+  'себестоимость единицы': 'unit_cost_real_rub',
+  'реальная себестоимость, руб': 'unit_cost_real_rub',
   
-  // Wholesale price - NEW mappings from Excel
-  'текущая оптовая цена': 'buyer_price_with_spp',
-  'оптовая цена с учетом оптовой наценки, руб': 'buyer_price_with_spp',
+  // Wholesale price - FIXED: map to correct field
+  'текущая оптовая цена': 'wholesale_price_rub',
+  'оптовая цена с учетом оптовой наценки, руб': 'wholesale_price_rub',
+  
+  // Retail price - NEW mapping
+  'розничная цена (оптовая+15%), руб': 'retail_price_rub',
   
   // WB pricing
   'цена без спп': 'price_no_spp',
@@ -329,7 +344,7 @@ export const excelColumnMap: Record<string, keyof UnitEconFormData> = {
   'planned_retail_after_discount': 'planned_retail_after_discount',
   'розничная до скидки': 'retail_before_discount',
   'retail_before_discount': 'retail_before_discount',
-  'розничная цена (оптовая+15%), руб': 'retail_before_discount',
+  // Note: 'розничная цена (оптовая+15%), руб' maps to retail_price_rub in line 322
   'скидка': 'approved_discount_pct',
   'скидка %': 'approved_discount_pct',
   'approved_discount_pct': 'approved_discount_pct',
@@ -366,10 +381,10 @@ export const excelColumnMap: Record<string, keyof UnitEconFormData> = {
   'вложения': 'investments_rub',
   'investments_rub': 'investments_rub',
   
-  // Margin from Excel - NEW
-  'маржинальность': 'admin_overhead_pct',
-  'маржинальность,%': 'admin_overhead_pct',
-  'чистая прибыль, руб': 'scenario_plan_profit',
+  // Margin and profit from Excel - FIXED: map to correct fields
+  'маржинальность': 'margin_pct',
+  'маржинальность,%': 'margin_pct',
+  'чистая прибыль, руб': 'profit_per_unit',
   
   // Scenarios
   'мин цена': 'scenario_min_price',
