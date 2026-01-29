@@ -232,6 +232,8 @@ export const excelColumnMap: Record<string, keyof UnitEconFormData> = {
   'вес затраченной ткани 2 на крой, кг': 'fabric2_weight_cut_kg',
   'расход ткани 2': 'fabric2_kg_per_unit',
   'fabric2_kg_per_unit': 'fabric2_kg_per_unit',
+  // FIX: Excel has "Затраты ткани 1" but for fabric2 column - need both variants
+  'затраты ткани 2 на одно изделие, кг': 'fabric2_kg_per_unit',
   'цена ткани 2 usd': 'fabric2_price_usd',
   'стоимость ткани 2, $': 'fabric2_price_usd',
   'цена ткани 2 руб': 'fabric2_price_rub_per_kg',
@@ -248,11 +250,14 @@ export const excelColumnMap: Record<string, keyof UnitEconFormData> = {
   'вес затраченной ткани 3 на крой, кг': 'fabric3_weight_cut_kg',
   'расход ткани 3': 'fabric3_kg_per_unit',
   'fabric3_kg_per_unit': 'fabric3_kg_per_unit',
+  // FIX: Excel has "Затраты ткани 1" but for fabric3 column - need both variants
+  'затраты ткани 3 на одно изделие, кг': 'fabric3_kg_per_unit',
   'цена ткани 3 usd': 'fabric3_price_usd',
   'стоимость ткани 3, $': 'fabric3_price_usd',
   'цена ткани 3 руб': 'fabric3_price_rub_per_kg',
   'стоимость ткани 3, руб за 1 кг': 'fabric3_price_rub_per_kg',
   'стоимость ткани 3': 'fabric3_cost_rub_per_unit',
+  // FIX: Excel has "стоимость затрат ткани 2 на одно изделие, руб" for fabric3 column
   'стоимость затрат ткани 3 на одно изделие, руб': 'fabric3_cost_rub_per_unit',
   
   // Total fabric cost
@@ -277,7 +282,7 @@ export const excelColumnMap: Record<string, keyof UnitEconFormData> = {
   'фурнитура': 'accessories_cost',
   'accessories_cost': 'accessories_cost',
   
-  // Print/embroidery
+  // Print/embroidery - FIX: exact match for Excel headers
   'стоимость вышивки/принта материалы 1 ед, руб': 'print_embroidery_materials_cost',
   'стоимость вышивки/принта работа 1 ед, руб': 'print_embroidery_work_cost',
   'вышивка': 'print_embroidery_cost',
@@ -303,10 +308,14 @@ export const excelColumnMap: Record<string, keyof UnitEconFormData> = {
   'наценка опт': 'wholesale_markup_pct',
   'wholesale_markup_pct': 'wholesale_markup_pct',
   
-  // Unit cost
+  // Unit cost - now correctly mapped
   'себестоимость': 'fabric_cost_total',
   'себестоимость единицы': 'fabric_cost_total',
   'реальная себестоимость, руб': 'fabric_cost_total',
+  
+  // Wholesale price - NEW mappings from Excel
+  'текущая оптовая цена': 'buyer_price_with_spp',
+  'оптовая цена с учетом оптовой наценки, руб': 'buyer_price_with_spp',
   
   // WB pricing
   'цена без спп': 'price_no_spp',
@@ -356,6 +365,11 @@ export const excelColumnMap: Record<string, keyof UnitEconFormData> = {
   'vat_pct': 'vat_pct',
   'вложения': 'investments_rub',
   'investments_rub': 'investments_rub',
+  
+  // Margin from Excel - NEW
+  'маржинальность': 'admin_overhead_pct',
+  'маржинальность,%': 'admin_overhead_pct',
+  'чистая прибыль, руб': 'scenario_plan_profit',
   
   // Scenarios
   'мин цена': 'scenario_min_price',
