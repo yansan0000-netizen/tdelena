@@ -226,18 +226,42 @@ export function useCosts() {
     if (!user) return;
     
     setLoading(true);
-    const { data, error } = await supabase
-      .from('unit_econ_inputs')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('article', { ascending: true });
     
-    if (error) {
-      console.error('Error fetching costs:', error);
+    // Fetch all records using pagination to overcome 1000 row limit
+    const allData: UnitEconInput[] = [];
+    const pageSize = 1000;
+    let offset = 0;
+    let hasMore = true;
+    
+    try {
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('unit_econ_inputs')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('article', { ascending: true })
+          .range(offset, offset + pageSize - 1);
+        
+        if (error) {
+          console.error('Error fetching costs:', error);
+          toast.error('Ошибка загрузки данных юнит-экономики');
+          hasMore = false;
+        } else if (data && data.length > 0) {
+          allData.push(...(data as UnitEconInput[]));
+          offset += pageSize;
+          hasMore = data.length === pageSize;
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      setCosts(allData);
+      console.log(`Loaded ${allData.length} unit economics records`);
+    } catch (err) {
+      console.error('Error fetching costs:', err);
       toast.error('Ошибка загрузки данных юнит-экономики');
-    } else {
-      setCosts(data as UnitEconInput[]);
     }
+    
     setLoading(false);
   }, [user]);
 
