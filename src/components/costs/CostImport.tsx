@@ -6,6 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useCosts, UnitEconInputInsert } from '@/hooks/useCosts';
 import { excelColumnMap, UnitEconFormData } from '@/lib/unitEconTypes';
+import { supabase } from '@/integrations/supabase/client';
 import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Loader2, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -14,7 +15,7 @@ interface CostImportProps {
 }
 
 export function CostImport({ onSuccess }: CostImportProps) {
-  const { bulkUpsert, deleteAllCosts } = useCosts();
+  const { bulkUpsert } = useCosts();
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -168,15 +169,31 @@ export function CostImport({ onSuccess }: CostImportProps) {
     setResult(null);
     
     try {
-      // If clear before import is enabled, delete all existing records first
+      // If clear before import is enabled, call Edge Function for guaranteed deletion
       if (clearBeforeImport) {
         setProgress(15);
-        const deleted = await deleteAllCosts();
-        if (!deleted) {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+          setError('Требуется авторизация');
+          setImporting(false);
+          return;
+        }
+        
+        const { data, error: clearError } = await supabase.functions.invoke('clear-unit-econ', {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`
+          }
+        });
+        
+        if (clearError) {
+          console.error('Clear error:', clearError);
           setError('Не удалось очистить базу данных перед импортом.');
           setImporting(false);
           return;
         }
+        
+        console.log('Cleared database:', data);
       }
       
       // Parse Excel
