@@ -207,21 +207,38 @@ export function useDashboard(runId: string | null) {
         });
       });
 
-      const periodRevenues: PeriodRevenue[] = Array.from(periodMap.entries())
+      // Filter out invalid periods like "1970-01"
+      const validPeriodMap = new Map<string, { revenue: number; quantity: number }>();
+      periodMap.forEach((value, key) => {
+        if (key && !key.startsWith('1970') && key !== '1970-01') {
+          validPeriodMap.set(key, value);
+        }
+      });
+
+      const periodRevenues: PeriodRevenue[] = Array.from(validPeriodMap.entries())
         .map(([period, data]) => ({
           period,
           revenue: data.revenue,
           quantity: data.quantity,
         }))
         .sort((a, b) => {
-          // Sort by period (month year format)
+          // Sort by period - handle both "YYYY-MM" and "месяц год" formats
           const monthOrder: Record<string, number> = {
             'январь': 1, 'февраль': 2, 'март': 3, 'апрель': 4,
             'май': 5, 'июнь': 6, 'июль': 7, 'август': 8,
             'сентябрь': 9, 'октябрь': 10, 'ноябрь': 11, 'декабрь': 12,
           };
           
-          const parseDate = (p: string) => {
+          const parseDate = (p: string): number => {
+            // Handle YYYY-MM format (e.g., "2024-01")
+            if (p.includes('-')) {
+              const [year, month] = p.split('-');
+              const y = parseInt(year) || 0;
+              const m = parseInt(month) || 0;
+              return y * 12 + m;
+            }
+            
+            // Handle Russian month format (e.g., "январь 2024")
             const parts = p.toLowerCase().split(' ');
             if (parts.length >= 2) {
               const month = monthOrder[parts[0]] || 0;
