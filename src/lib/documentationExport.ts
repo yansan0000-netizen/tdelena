@@ -243,7 +243,17 @@ const documentationContent: DocSection[] = [
       "- Priemka = Otpravleno * stoimost_priemki",
       "- Komissiya = Vyruchka * komissiya%",
       "- Nalog = Vyruchka * nalog% (USN ili NDS)",
-      "- Pribyl = Vyruchka - Vse zatraty"
+      "- Pribyl = Vyruchka - Vse zatraty",
+      "",
+      "IMPORT DANNYKH:",
+      "- Zagruzka iz Excel s avtomaticheskim mappingom kolonok",
+      "- Galochka 'Ochistit pered importom' - udalyaet starye dannye",
+      "- Deduplikatsiya po artikulu - odin artikul = odna zapis",
+      "",
+      "OCHISTKA BAZY:",
+      "- Knopka 'Ochistit bazu' v shapke stranitsy",
+      "- Udalyaet VSE zapisi yunit-ekonomiki polzovatelya",
+      "- Trebuet podtverzhdeniya pered udaleniem"
     ]
   },
   {
