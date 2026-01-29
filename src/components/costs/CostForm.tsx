@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -139,6 +140,82 @@ export function CostForm({ formData, onChange, isNew }: CostFormProps) {
   const handleAddMaterialCategory = async (category: string) => {
     return addCustomCategory('material', category);
   };
+
+  // Auto-calculate fabric costs when inputs change
+  useEffect(() => {
+    const fxRate = formData.fx_rate || 90;
+    const unitsInCut = formData.units_in_cut;
+    
+    if (!unitsInCut || unitsInCut <= 0) return;
+    
+    let updated = false;
+    const newData = { ...formData };
+    
+    // Calculate for each fabric
+    for (const i of [1, 2, 3] as const) {
+      const prefix = `fabric${i}` as const;
+      const weightCutKg = formData[`${prefix}_weight_cut_kg`];
+      const priceRubPerKg = formData[`${prefix}_price_rub_per_kg`];
+      const priceUsd = formData[`${prefix}_price_usd`];
+      
+      if (weightCutKg && weightCutKg > 0) {
+        // Calculate kg per unit
+        const kgPerUnit = weightCutKg / unitsInCut;
+        const currentKgPerUnit = formData[`${prefix}_kg_per_unit`];
+        if (currentKgPerUnit !== kgPerUnit) {
+          (newData as any)[`${prefix}_kg_per_unit`] = Math.round(kgPerUnit * 10000) / 10000;
+          updated = true;
+        }
+        
+        // Calculate price per kg from USD if needed
+        let effectivePricePerKg = priceRubPerKg;
+        if (!effectivePricePerKg && priceUsd) {
+          effectivePricePerKg = priceUsd * fxRate;
+          if (formData[`${prefix}_price_rub_per_kg`] !== effectivePricePerKg) {
+            (newData as any)[`${prefix}_price_rub_per_kg`] = Math.round(effectivePricePerKg * 100) / 100;
+            updated = true;
+          }
+        }
+        
+        // Calculate cost per unit
+        if (effectivePricePerKg && effectivePricePerKg > 0) {
+          const costPerUnit = kgPerUnit * effectivePricePerKg;
+          const currentCost = formData[`${prefix}_cost_rub_per_unit`];
+          if (currentCost !== Math.round(costPerUnit * 100) / 100) {
+            (newData as any)[`${prefix}_cost_rub_per_unit`] = Math.round(costPerUnit * 100) / 100;
+            updated = true;
+          }
+        }
+      }
+    }
+    
+    // Calculate total fabric cost
+    const cost1 = newData.fabric1_cost_rub_per_unit || 0;
+    const cost2 = newData.fabric2_cost_rub_per_unit || 0;
+    const cost3 = newData.fabric3_cost_rub_per_unit || 0;
+    const totalFabricCost = cost1 + cost2 + cost3;
+    
+    if (totalFabricCost > 0 && formData.fabric_cost_total !== totalFabricCost) {
+      newData.fabric_cost_total = totalFabricCost;
+      updated = true;
+    }
+    
+    if (updated) {
+      onChange(newData);
+    }
+  }, [
+    formData.units_in_cut,
+    formData.fx_rate,
+    formData.fabric1_weight_cut_kg,
+    formData.fabric1_price_usd,
+    formData.fabric1_price_rub_per_kg,
+    formData.fabric2_weight_cut_kg,
+    formData.fabric2_price_usd,
+    formData.fabric2_price_rub_per_kg,
+    formData.fabric3_weight_cut_kg,
+    formData.fabric3_price_usd,
+    formData.fabric3_price_rub_per_kg,
+  ]);
   // Calculate WB logistics values
   const wbCalculations = useMemo(() => {
     if (!formData.sell_on_wb) return null;

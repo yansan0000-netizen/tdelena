@@ -91,13 +91,102 @@ export interface UnitEconInput {
 
 export type UnitEconInputInsert = Omit<UnitEconInput, 'id' | 'created_at' | 'updated_at'>;
 
-// Calculate derived fields
+// Calculate fabric costs for a single fabric
+export function calculateFabricCost(
+  weightCutKg: number | null,
+  unitsInCut: number | null,
+  priceRubPerKg: number | null,
+  priceUsd: number | null,
+  fxRate: number | null
+): { kgPerUnit: number | null; costPerUnit: number | null } {
+  // Calculate kg per unit
+  let kgPerUnit: number | null = null;
+  if (weightCutKg && unitsInCut && unitsInCut > 0) {
+    kgPerUnit = weightCutKg / unitsInCut;
+  }
+  
+  // Calculate price per kg - prefer RUB, fallback to USD conversion
+  let pricePerKg: number | null = priceRubPerKg;
+  if (!pricePerKg && priceUsd && fxRate) {
+    pricePerKg = priceUsd * fxRate;
+  }
+  
+  // Calculate cost per unit
+  let costPerUnit: number | null = null;
+  if (kgPerUnit !== null && pricePerKg) {
+    costPerUnit = Math.round(kgPerUnit * pricePerKg * 100) / 100;
+  }
+  
+  return { kgPerUnit, costPerUnit };
+}
+
+// Calculate all fabric costs and total
+export function calculateAllFabricCosts(input: Partial<UnitEconInputInsert>): {
+  fabric1_kg_per_unit: number | null;
+  fabric1_cost_rub_per_unit: number | null;
+  fabric2_kg_per_unit: number | null;
+  fabric2_cost_rub_per_unit: number | null;
+  fabric3_kg_per_unit: number | null;
+  fabric3_cost_rub_per_unit: number | null;
+  fabric_cost_total: number | null;
+} {
+  const fxRate = input.fx_rate || 90;
+  const unitsInCut = (input as any).units_in_cut;
+  
+  const fabric1 = calculateFabricCost(
+    (input as any).fabric1_weight_cut_kg,
+    unitsInCut,
+    (input as any).fabric1_price_rub_per_kg,
+    (input as any).fabric1_price_usd,
+    fxRate
+  );
+  
+  const fabric2 = calculateFabricCost(
+    (input as any).fabric2_weight_cut_kg,
+    unitsInCut,
+    (input as any).fabric2_price_rub_per_kg,
+    (input as any).fabric2_price_usd,
+    fxRate
+  );
+  
+  const fabric3 = calculateFabricCost(
+    (input as any).fabric3_weight_cut_kg,
+    unitsInCut,
+    (input as any).fabric3_price_rub_per_kg,
+    (input as any).fabric3_price_usd,
+    fxRate
+  );
+  
+  // Use calculated costs if available, otherwise use manually entered costs
+  const cost1 = fabric1.costPerUnit ?? (input as any).fabric1_cost_rub_per_unit ?? 0;
+  const cost2 = fabric2.costPerUnit ?? (input as any).fabric2_cost_rub_per_unit ?? 0;
+  const cost3 = fabric3.costPerUnit ?? (input as any).fabric3_cost_rub_per_unit ?? 0;
+  
+  const fabricCostTotal = cost1 + cost2 + cost3;
+  
+  return {
+    fabric1_kg_per_unit: fabric1.kgPerUnit,
+    fabric1_cost_rub_per_unit: fabric1.costPerUnit,
+    fabric2_kg_per_unit: fabric2.kgPerUnit,
+    fabric2_cost_rub_per_unit: fabric2.costPerUnit,
+    fabric3_kg_per_unit: fabric3.kgPerUnit,
+    fabric3_cost_rub_per_unit: fabric3.costPerUnit,
+    fabric_cost_total: fabricCostTotal > 0 ? fabricCostTotal : null,
+  };
+}
+
+// Calculate derived fields including margin and profit
 export function calculateDerivedFields(input: Partial<UnitEconInputInsert>): {
   unit_cost_real_rub: number;
   wholesale_price_rub: number;
   retail_price_rub: number;
+  margin_pct: number;
+  profit_per_unit: number;
 } {
-  const fabricCostTotal = input.fabric_cost_total || 0;
+  // First calculate fabric costs
+  const fabricCosts = calculateAllFabricCosts(input);
+  const fabricCostTotal = fabricCosts.fabric_cost_total ?? input.fabric_cost_total ?? 0;
+  
   const sewingCost = input.sewing_cost || 0;
   const cuttingCost = input.cutting_cost || 0;
   const accessoriesCost = input.accessories_cost || 0;
@@ -115,10 +204,16 @@ export function calculateDerivedFields(input: Partial<UnitEconInputInsert>): {
   const wholesalePrice = Math.ceil(unitCostReal * (1 + wholesaleMarkupPct / 100) / 10) * 10;
   const retailPrice = wholesalePrice * 1.15;
   
+  // Calculate margin and profit
+  const profitPerUnit = wholesalePrice - unitCostReal;
+  const marginPct = wholesalePrice > 0 ? (profitPerUnit / wholesalePrice) * 100 : 0;
+  
   return {
     unit_cost_real_rub: Math.round(unitCostReal * 100) / 100,
     wholesale_price_rub: wholesalePrice,
     retail_price_rub: Math.round(retailPrice * 100) / 100,
+    margin_pct: Math.round(marginPct * 100) / 100,
+    profit_per_unit: Math.round(profitPerUnit * 100) / 100,
   };
 }
 
@@ -171,6 +266,9 @@ export function useCosts() {
   const upsertCost = useCallback(async (input: Partial<UnitEconInputInsert> & { article: string }): Promise<boolean> => {
     if (!user) return false;
     
+    // Calculate fabric costs first
+    const fabricCosts = calculateAllFabricCosts(input);
+    
     // Calculate derived fields
     const derived = calculateDerivedFields(input);
     
@@ -186,6 +284,14 @@ export function useCosts() {
     
     const record = {
       ...input,
+      // Apply auto-calculated fabric costs (only if user didn't override)
+      ...(fabricCosts.fabric1_kg_per_unit !== null ? { fabric1_kg_per_unit: fabricCosts.fabric1_kg_per_unit } : {}),
+      ...(fabricCosts.fabric1_cost_rub_per_unit !== null ? { fabric1_cost_rub_per_unit: fabricCosts.fabric1_cost_rub_per_unit } : {}),
+      ...(fabricCosts.fabric2_kg_per_unit !== null ? { fabric2_kg_per_unit: fabricCosts.fabric2_kg_per_unit } : {}),
+      ...(fabricCosts.fabric2_cost_rub_per_unit !== null ? { fabric2_cost_rub_per_unit: fabricCosts.fabric2_cost_rub_per_unit } : {}),
+      ...(fabricCosts.fabric3_kg_per_unit !== null ? { fabric3_kg_per_unit: fabricCosts.fabric3_kg_per_unit } : {}),
+      ...(fabricCosts.fabric3_cost_rub_per_unit !== null ? { fabric3_cost_rub_per_unit: fabricCosts.fabric3_cost_rub_per_unit } : {}),
+      ...(fabricCosts.fabric_cost_total !== null ? { fabric_cost_total: fabricCosts.fabric_cost_total } : {}),
       ...derived,
       user_id: user.id,
       calculation_date: new Date().toISOString().split('T')[0],
@@ -238,9 +344,19 @@ export function useCosts() {
     const batchSize = 100;
     for (let i = 0; i < inputs.length; i += batchSize) {
       const batch = inputs.slice(i, i + batchSize).map(input => {
+        // Calculate fabric costs first
+        const fabricCosts = calculateAllFabricCosts(input);
         const derived = calculateDerivedFields(input);
         return {
           ...input,
+          // Apply auto-calculated fabric costs
+          ...(fabricCosts.fabric1_kg_per_unit !== null ? { fabric1_kg_per_unit: fabricCosts.fabric1_kg_per_unit } : {}),
+          ...(fabricCosts.fabric1_cost_rub_per_unit !== null ? { fabric1_cost_rub_per_unit: fabricCosts.fabric1_cost_rub_per_unit } : {}),
+          ...(fabricCosts.fabric2_kg_per_unit !== null ? { fabric2_kg_per_unit: fabricCosts.fabric2_kg_per_unit } : {}),
+          ...(fabricCosts.fabric2_cost_rub_per_unit !== null ? { fabric2_cost_rub_per_unit: fabricCosts.fabric2_cost_rub_per_unit } : {}),
+          ...(fabricCosts.fabric3_kg_per_unit !== null ? { fabric3_kg_per_unit: fabricCosts.fabric3_kg_per_unit } : {}),
+          ...(fabricCosts.fabric3_cost_rub_per_unit !== null ? { fabric3_cost_rub_per_unit: fabricCosts.fabric3_cost_rub_per_unit } : {}),
+          ...(fabricCosts.fabric_cost_total !== null ? { fabric_cost_total: fabricCosts.fabric_cost_total } : {}),
           ...derived,
           user_id: user.id,
           calculation_date: new Date().toISOString().split('T')[0],
