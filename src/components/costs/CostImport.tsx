@@ -39,7 +39,16 @@ export function CostImport({ onSuccess }: CostImportProps) {
     'usn_tax_pct',
     'vat_pct',
     'approved_discount_pct',
+    'margin_pct',
   ]);
+  
+  // Positional overrides for columns with KNOWN typos in Excel headers
+  // These columns have header "Затраты ткани 1..." but are actually for fabric2/fabric3
+  const positionBasedOverrides: Record<number, keyof UnitEconFormData> = {
+    14: 'fabric2_kg_per_unit',      // Index 14: "Затраты ткани 1 на одно изделие, кг" (should be fabric2)
+    20: 'fabric3_kg_per_unit',      // Index 20: "Затраты ткани 1 на одно изделие, кг" (should be fabric3)
+    23: 'fabric3_cost_rub_per_unit', // Index 23: "Стоимость затрат ткани 2 на одно изделие, руб" (should be fabric3)
+  };
 
   const parseExcel = useCallback(async (file: File): Promise<Partial<UnitEconInputInsert & { article: string }>[]> => {
     const arrayBuffer = await file.arrayBuffer();
@@ -60,14 +69,19 @@ export function CostImport({ onSuccess }: CostImportProps) {
       // Get headers from first row
       const headers = Object.keys(jsonData[0] || {});
       
-      // Build header map using only excelColumnMap (header-based matching only)
+      // Build header map using excelColumnMap (header-based matching)
+      // Then apply positional overrides for columns with known typos
       const headerMap: Record<string, keyof UnitEconFormData> = {};
       
-      headers.forEach((h) => {
+      headers.forEach((h, index) => {
         const normalized = h.toLowerCase().trim();
         
-        // Try exact match from excelColumnMap
-        if (excelColumnMap[normalized]) {
+        // First check if this position has a known override (for typo columns)
+        if (positionBasedOverrides[index]) {
+          headerMap[h] = positionBasedOverrides[index];
+          console.log(`Position override [${index}]: "${h}" -> ${positionBasedOverrides[index]}`);
+        } else if (excelColumnMap[normalized]) {
+          // Otherwise use header-based matching
           headerMap[h] = excelColumnMap[normalized];
           console.log(`Header mapping: "${h}" -> ${excelColumnMap[normalized]}`);
         }

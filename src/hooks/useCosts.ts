@@ -392,6 +392,14 @@ export function useCosts() {
         // Calculate fabric costs first
         const fabricCosts = calculateAllFabricCosts(input);
         const derived = calculateDerivedFields(input);
+        
+        // Check if import already has calculated values - prefer imported over auto-calculated
+        const hasImportedCost = (input as any).unit_cost_real_rub !== null && (input as any).unit_cost_real_rub !== undefined;
+        const hasImportedWholesale = (input as any).wholesale_price_rub !== null && (input as any).wholesale_price_rub !== undefined;
+        const hasImportedRetail = (input as any).retail_price_rub !== null && (input as any).retail_price_rub !== undefined;
+        const hasImportedMargin = (input as any).margin_pct !== null && (input as any).margin_pct !== undefined;
+        const hasImportedProfit = (input as any).profit_per_unit !== null && (input as any).profit_per_unit !== undefined;
+        
         return {
           ...input,
           // Apply auto-calculated fabric costs
@@ -402,7 +410,12 @@ export function useCosts() {
           ...(fabricCosts.fabric3_kg_per_unit !== null ? { fabric3_kg_per_unit: fabricCosts.fabric3_kg_per_unit } : {}),
           ...(fabricCosts.fabric3_cost_rub_per_unit !== null ? { fabric3_cost_rub_per_unit: fabricCosts.fabric3_cost_rub_per_unit } : {}),
           ...(fabricCosts.fabric_cost_total !== null ? { fabric_cost_total: fabricCosts.fabric_cost_total } : {}),
-          ...derived,
+          // Use imported values if present, otherwise use calculated
+          unit_cost_real_rub: hasImportedCost ? (input as any).unit_cost_real_rub : derived.unit_cost_real_rub,
+          wholesale_price_rub: hasImportedWholesale ? (input as any).wholesale_price_rub : derived.wholesale_price_rub,
+          retail_price_rub: hasImportedRetail ? (input as any).retail_price_rub : derived.retail_price_rub,
+          margin_pct: hasImportedMargin ? (input as any).margin_pct : derived.margin_pct,
+          profit_per_unit: hasImportedProfit ? (input as any).profit_per_unit : derived.profit_per_unit,
           user_id: user.id,
           calculation_date: new Date().toISOString().split('T')[0],
         };
