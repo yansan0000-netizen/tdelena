@@ -74,6 +74,19 @@ export function CostImport({ onSuccess }: CostImportProps) {
     // 41: profit (calculated, skip)
   };
 
+  // Fields that should be stored as percentages (e.g., 15% stored as 15, not 0.15)
+  const percentageFields: Set<keyof UnitEconFormData> = new Set([
+    'admin_overhead_pct',
+    'wholesale_markup_pct',
+    'spp_pct',
+    'wb_commission_pct',
+    'buyout_pct',
+    'non_purchase_pct',
+    'usn_tax_pct',
+    'vat_pct',
+    'approved_discount_pct',
+  ]);
+
   const parseExcel = useCallback(async (file: File): Promise<Partial<UnitEconInputInsert & { article: string }>[]> => {
     const arrayBuffer = await file.arrayBuffer();
     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
@@ -134,10 +147,24 @@ export function CostImport({ onSuccess }: CostImportProps) {
         for (const [header, field] of Object.entries(headerMap)) {
           const value = row[header];
           if (value !== null && value !== undefined && value !== '') {
+            let parsedValue: unknown = value;
+            
             if (typeof value === 'boolean') {
-              (existing as Record<string, unknown>)[field] = value;
+              parsedValue = value;
             } else if (typeof value === 'number') {
-              (existing as Record<string, unknown>)[field] = value;
+              // Check if this is a percentage field
+              // XLSX often parses percentages as decimals (0.15 instead of 15%)
+              if (percentageFields.has(field)) {
+                // If value is less than 1, it's likely a decimal percentage
+                if (value > 0 && value < 1) {
+                  parsedValue = value * 100;
+                  console.log(`Converted decimal percentage for ${field}: ${value} -> ${parsedValue}`);
+                } else {
+                  parsedValue = value;
+                }
+              } else {
+                parsedValue = value;
+              }
             } else if (typeof value === 'string') {
               const trimmed = value.trim();
               if (trimmed) {
@@ -145,13 +172,15 @@ export function CostImport({ onSuccess }: CostImportProps) {
                 const percentMatch = trimmed.match(/^([\d.,]+)\s*%$/);
                 if (percentMatch) {
                   const num = parseFloat(percentMatch[1].replace(',', '.').replace(/\s/g, ''));
-                  (existing as Record<string, unknown>)[field] = isNaN(num) ? trimmed : num;
+                  parsedValue = isNaN(num) ? trimmed : num;
                 } else {
                   const num = parseFloat(trimmed.replace(',', '.').replace(/\s/g, ''));
-                  (existing as Record<string, unknown>)[field] = isNaN(num) ? trimmed : num;
+                  parsedValue = isNaN(num) ? trimmed : num;
                 }
               }
             }
+            
+            (existing as Record<string, unknown>)[field] = parsedValue;
           }
         }
         
