@@ -20,7 +20,7 @@ export function CostImport({ onSuccess }: CostImportProps) {
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<{ success: number; failed: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [clearBeforeImport, setClearBeforeImport] = useState(false);
+  const [clearBeforeImport, setClearBeforeImport] = useState(true);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
