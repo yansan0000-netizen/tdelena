@@ -361,13 +361,34 @@ export function useCosts() {
   const bulkUpsert = useCallback(async (inputs: (Partial<UnitEconInputInsert> & { article: string })[]): Promise<{ success: number; failed: number }> => {
     if (!user) return { success: 0, failed: inputs.length };
     
+    // Deduplicate inputs by article - keep last occurrence (merging values)
+    const deduplicatedMap = new Map<string, Partial<UnitEconInputInsert> & { article: string }>();
+    for (const input of inputs) {
+      const existing = deduplicatedMap.get(input.article);
+      if (existing) {
+        // Merge: later values override earlier ones, but keep non-null values
+        const merged = { ...existing };
+        for (const [key, value] of Object.entries(input)) {
+          if (value !== null && value !== undefined && value !== '') {
+            (merged as Record<string, unknown>)[key] = value;
+          }
+        }
+        deduplicatedMap.set(input.article, merged);
+      } else {
+        deduplicatedMap.set(input.article, { ...input });
+      }
+    }
+    
+    const uniqueInputs = Array.from(deduplicatedMap.values());
+    console.log(`Bulk upsert: ${inputs.length} total, ${uniqueInputs.length} unique articles`);
+    
     let success = 0;
     let failed = 0;
     
     // Process in batches to avoid hitting limits
     const batchSize = 100;
-    for (let i = 0; i < inputs.length; i += batchSize) {
-      const batch = inputs.slice(i, i + batchSize).map(input => {
+    for (let i = 0; i < uniqueInputs.length; i += batchSize) {
+      const batch = uniqueInputs.slice(i, i + batchSize).map(input => {
         // Calculate fabric costs first
         const fabricCosts = calculateAllFabricCosts(input);
         const derived = calculateDerivedFields(input);
