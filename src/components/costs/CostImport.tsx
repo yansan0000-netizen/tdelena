@@ -28,52 +28,6 @@ export function CostImport({ onSuccess }: CostImportProps) {
     }
   };
 
-  // Position-based column mapping for known Excel template structure
-  const positionBasedMapping: Record<number, keyof UnitEconFormData> = {
-    0: 'article',
-    1: 'name',
-    2: 'category',
-    3: 'buyer_price_with_spp', // Текущая оптовая цена
-    4: 'product_url',
-    // 5 is empty
-    6: 'units_in_cut',
-    7: 'fabric1_name',
-    8: 'fabric1_weight_cut_kg',
-    9: 'fabric1_kg_per_unit',
-    10: 'fabric1_price_usd',
-    11: 'fabric1_price_rub_per_kg',
-    12: 'fabric1_cost_rub_per_unit',
-    13: 'fabric2_name',
-    14: 'fabric2_weight_cut_kg',
-    15: 'fabric2_kg_per_unit', // Excel has typo "Затраты ткани 1" but it's fabric2
-    16: 'fabric2_price_usd',
-    17: 'fabric2_price_rub_per_kg',
-    18: 'fabric2_cost_rub_per_unit',
-    19: 'fabric3_name',
-    20: 'fabric3_weight_cut_kg',
-    21: 'fabric3_kg_per_unit', // Excel has typo "Затраты ткани 1" but it's fabric3
-    22: 'fabric3_price_usd',
-    23: 'fabric3_price_rub_per_kg',
-    24: 'fabric3_cost_rub_per_unit', // Excel has typo "стоимость затрат ткани 2" but it's fabric3
-    25: 'fx_rate',
-    26: 'fabric_cost_total',
-    27: 'sewing_cost',
-    28: 'cutting_cost',
-    29: 'accessories_cost',
-    30: 'print_embroidery_materials_cost',
-    31: 'print_embroidery_work_cost',
-    32: 'competitor_url',
-    33: 'competitor_price',
-    34: 'admin_overhead_pct',
-    // 35: unit_cost_real_rub (calculated, skip)
-    36: 'wholesale_markup_pct',
-    // 37: wholesale_price_rub (calculated, skip)
-    38: 'retail_before_discount',
-    // 39 is empty
-    // 40: margin_pct (calculated, skip)
-    // 41: profit (calculated, skip)
-  };
-
   // Fields that should be stored as percentages (e.g., 15% stored as 15, not 0.15)
   const percentageFields: Set<keyof UnitEconFormData> = new Set([
     'admin_overhead_pct',
@@ -106,20 +60,16 @@ export function CostImport({ onSuccess }: CostImportProps) {
       // Get headers from first row
       const headers = Object.keys(jsonData[0] || {});
       
-      // Build header map - try exact match first, then position-based fallback
+      // Build header map using only excelColumnMap (header-based matching only)
       const headerMap: Record<string, keyof UnitEconFormData> = {};
       
-      headers.forEach((h, idx) => {
+      headers.forEach((h) => {
         const normalized = h.toLowerCase().trim();
         
-        // First try exact match from excelColumnMap
+        // Try exact match from excelColumnMap
         if (excelColumnMap[normalized]) {
           headerMap[h] = excelColumnMap[normalized];
-        } 
-        // Then try position-based mapping for known template
-        else if (positionBasedMapping[idx]) {
-          headerMap[h] = positionBasedMapping[idx];
-          console.log(`Position-based mapping: column ${idx} "${h}" -> ${positionBasedMapping[idx]}`);
+          console.log(`Header mapping: "${h}" -> ${excelColumnMap[normalized]}`);
         }
       });
       
