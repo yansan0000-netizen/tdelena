@@ -12,7 +12,10 @@ interface CostCalculationsProps {
     margin_pct: number;
     profit_per_unit: number;
   };
-  formData: UnitEconFormData;
+  formData: UnitEconFormData & {
+    margin_pct?: number | null;
+    profit_per_unit?: number | null;
+  };
 }
 
 export function CostCalculations({ calculations, formData }: CostCalculationsProps) {
@@ -134,6 +137,31 @@ export function CostCalculations({ calculations, formData }: CostCalculationsPro
             </div>
           </div>
         </div>
+
+        {/* Imported margin & profit - shown if available */}
+        {!shouldHideCost && (formData.margin_pct !== null || formData.profit_per_unit !== null) && (
+          <div className="space-y-2 p-3 bg-success/10 border border-success/20 rounded-lg">
+            <h4 className="text-sm font-medium text-success">Импортированные данные</h4>
+            <div className="space-y-1 text-sm">
+              {formData.margin_pct !== null && formData.margin_pct !== undefined && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Маржинальность</span>
+                  <Badge variant="outline" className="text-success">
+                    {formData.margin_pct.toFixed(2)}%
+                  </Badge>
+                </div>
+              )}
+              {formData.profit_per_unit !== null && formData.profit_per_unit !== undefined && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Чистая прибыль/ед.</span>
+                  <Badge variant="outline" className="text-success">
+                    {formData.profit_per_unit.toLocaleString('ru-RU')} ₽
+                  </Badge>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Margin info - hidden for hidden_cost role */}
         {!shouldHideCost && (
