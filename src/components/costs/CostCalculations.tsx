@@ -9,6 +9,8 @@ interface CostCalculationsProps {
     unit_cost_real_rub: number;
     wholesale_price_rub: number;
     retail_price_rub: number;
+    margin_pct: number;
+    profit_per_unit: number;
   };
   formData: UnitEconFormData;
 }
