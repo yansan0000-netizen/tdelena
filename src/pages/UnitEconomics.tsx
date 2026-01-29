@@ -23,7 +23,7 @@ import { PRODUCT_CATEGORIES } from '@/lib/categories';
 import { downloadUnitEconExport } from '@/lib/excel/unitEconExport';
 import { downloadUnitEconTemplate } from '@/lib/excel/unitEconTemplate';
 import { getDefaultVisibleColumns, UNIT_ECON_COLUMNS } from '@/lib/unitEconColumns';
-import { Plus, Upload, Search, Calculator, TrendingUp, Package, Download, FileDown, ChevronDown, EyeOff, ShoppingCart, Trash2 } from 'lucide-react';
+import { Plus, Upload, Search, Calculator, TrendingUp, Package, Download, FileDown, ChevronDown, EyeOff, ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
 
 const STORAGE_KEY = 'unit-econ-visible-columns';
@@ -43,7 +43,7 @@ export default function UnitEconomics() {
   const [importOpen, setImportOpen] = useState(false);
   const [selectedArticles, setSelectedArticles] = useState<string[]>([]);
   const [orderArticles, setOrderArticles] = useState<Set<string>>(new Set());
-  const [clearing, setClearing] = useState(false);
+  
   
   // Fetch articles that need ordering from the latest run
   useEffect(() => {
@@ -139,42 +139,6 @@ export default function UnitEconomics() {
     fetchCosts();
   }, [fetchCosts]);
 
-  // Handle clear database via Edge Function
-  const handleClearDatabase = async () => {
-    if (!confirm('Вы уверены, что хотите удалить ВСЕ записи юнит-экономики? Это действие нельзя отменить.')) {
-      return;
-    }
-    
-    setClearing(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        toast.error('Требуется авторизация');
-        return;
-      }
-      
-      const { data, error } = await supabase.functions.invoke('clear-unit-econ', {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`
-        }
-      });
-      
-      if (error) {
-        console.error('Clear error:', error);
-        toast.error('Ошибка при очистке базы');
-        return;
-      }
-      
-      toast.success(`База очищена! Удалено записей: ${data?.deleted || 0}`);
-      fetchCosts();
-    } catch (err) {
-      console.error('Clear error:', err);
-      toast.error('Ошибка при очистке базы');
-    } finally {
-      setClearing(false);
-    }
-  };
 
   return (
     <AppLayout>
@@ -224,15 +188,6 @@ export default function UnitEconomics() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button 
-              variant="destructive" 
-              onClick={handleClearDatabase}
-              disabled={clearing || totalCount === 0}
-              className="gap-2"
-            >
-              <Trash2 className="h-4 w-4" />
-              {clearing ? 'Очистка...' : 'Очистить базу'}
-            </Button>
             <Dialog open={importOpen} onOpenChange={setImportOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" className="gap-2">
