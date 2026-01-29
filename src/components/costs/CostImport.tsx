@@ -2,9 +2,11 @@ import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { useCosts, UnitEconInputInsert } from '@/hooks/useCosts';
 import { excelColumnMap, UnitEconFormData } from '@/lib/unitEconTypes';
-import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Loader2, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface CostImportProps {
@@ -12,12 +14,13 @@ interface CostImportProps {
 }
 
 export function CostImport({ onSuccess }: CostImportProps) {
-  const { bulkUpsert } = useCosts();
+  const { bulkUpsert, deleteAllCosts } = useCosts();
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<{ success: number; failed: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [clearBeforeImport, setClearBeforeImport] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -165,6 +168,17 @@ export function CostImport({ onSuccess }: CostImportProps) {
     setResult(null);
     
     try {
+      // If clear before import is enabled, delete all existing records first
+      if (clearBeforeImport) {
+        setProgress(15);
+        const deleted = await deleteAllCosts();
+        if (!deleted) {
+          setError('Не удалось очистить базу данных перед импортом.');
+          setImporting(false);
+          return;
+        }
+      }
+      
       // Parse Excel
       setProgress(30);
       const data = await parseExcel(file);
@@ -237,6 +251,22 @@ export function CostImport({ onSuccess }: CostImportProps) {
             )}
           </div>
         </label>
+      </div>
+
+      <div className="flex items-center space-x-2 p-3 bg-muted/50 rounded-lg border">
+        <Checkbox
+          id="clear-before-import"
+          checked={clearBeforeImport}
+          onCheckedChange={(checked) => setClearBeforeImport(checked === true)}
+          disabled={importing}
+        />
+        <Label 
+          htmlFor="clear-before-import" 
+          className="text-sm cursor-pointer flex items-center gap-2"
+        >
+          <Trash2 className="h-4 w-4 text-destructive" />
+          Удалить все существующие записи перед импортом
+        </Label>
       </div>
 
       {importing && (

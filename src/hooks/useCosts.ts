@@ -536,6 +536,25 @@ export function useCosts() {
     });
   }, [user]);
 
+  const deleteAllCosts = useCallback(async (): Promise<boolean> => {
+    if (!user) return false;
+    
+    const { error } = await supabase
+      .from('unit_econ_inputs')
+      .delete()
+      .eq('user_id', user.id);
+    
+    if (error) {
+      console.error('Error deleting all costs:', error);
+      toast.error('Ошибка удаления записей');
+      return false;
+    }
+    
+    toast.success('Все записи удалены');
+    setCosts([]);
+    return true;
+  }, [user]);
+
   return {
     costs,
     loading,
@@ -543,6 +562,7 @@ export function useCosts() {
     getCostByArticle,
     upsertCost,
     deleteCost,
+    deleteAllCosts,
     bulkUpsert,
     getCostsWithAnalytics,
   };
