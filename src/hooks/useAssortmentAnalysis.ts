@@ -1,6 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { 
+  getAllForecasts, 
+  detectSeasonality, 
+  Season,
+  MonthlyData 
+} from '@/lib/forecasting';
 
 export interface AssortmentSummary {
   totalProducts: number;
@@ -54,6 +60,12 @@ export interface AssortmentProduct {
   total_profit: number | null;
   assortment_recommendation: 'expand' | 'keep' | 'reduce' | 'remove' | null;
   assortment_reason: string | null;
+  // Forecasting
+  season: Season | null;
+  trend: 'up' | 'down' | 'stable' | null;
+  forecast_linear: number | null;
+  forecast_exponential: number | null;
+  forecast_consensus: number | null;
 }
 
 export interface AssortmentFilters {
@@ -65,6 +77,7 @@ export interface AssortmentFilters {
   profitabilityMin: number | null;
   profitabilityMax: number | null;
   recommendation: string | null;
+  season: Season | null;
 }
 
 export function useAssortmentAnalysis(filters: AssortmentFilters) {
@@ -104,6 +117,14 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
 
       if (analyticsError) throw analyticsError;
 
+      // Get raw period data for forecasting
+      const { data: rawData, error: rawError } = await supabase
+        .from('sales_data_raw')
+        .select('article, period, quantity, revenue')
+        .eq('run_id', filters.runId);
+
+      if (rawError) throw rawError;
+
       // Get unit economics for this user
       const { data: unitEcon, error: econError } = await supabase
         .from('unit_econ_inputs')
@@ -111,6 +132,46 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
         .eq('user_id', user.id);
 
       if (econError) throw econError;
+
+      // Build period data map for forecasting
+      const articlePeriodMap = new Map<string, MonthlyData[]>();
+      rawData?.forEach(r => {
+        if (!articlePeriodMap.has(r.article)) {
+          articlePeriodMap.set(r.article, []);
+        }
+        const periods = articlePeriodMap.get(r.article)!;
+        const existing = periods.find(p => p.period === r.period);
+        if (existing) {
+          existing.quantity += r.quantity || 0;
+          existing.revenue = (existing.revenue || 0) + (r.revenue || 0);
+        } else {
+          periods.push({ period: r.period, quantity: r.quantity || 0, revenue: r.revenue || 0 });
+        }
+      });
+
+      // Sort periods and calculate forecasts
+      const forecastMap = new Map<string, {
+        season: Season;
+        trend: 'up' | 'down' | 'stable';
+        linear: number;
+        exponential: number;
+        consensus: number;
+      }>();
+
+      articlePeriodMap.forEach((periods, article) => {
+        const sorted = periods.sort((a, b) => a.period.localeCompare(b.period));
+        if (sorted.length >= 2) {
+          const forecasts = getAllForecasts(sorted, 1);
+          const seasonality = detectSeasonality(sorted);
+          forecastMap.set(article, {
+            season: seasonality.season,
+            trend: forecasts.recommended.trend,
+            linear: forecasts.linear.forecast,
+            exponential: forecasts.exponential.forecast,
+            consensus: forecasts.consensusForecast,
+          });
+        }
+      });
 
       // Helper to extract base article (e.g., "М319114П" from "М319114Пзм")
       const getBaseArticle = (article: string): string => {
@@ -142,6 +203,9 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
         
         // Try exact match first, then base article match
         let econ = exactEconMap.get(articleKey) || baseEconMap.get(baseKey) || null;
+        
+        // Get forecast data
+        const forecast = forecastMap.get(a.article);
         
         // Calculate margin from available data
         let marginPct: number | null = null;
@@ -231,6 +295,12 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
           total_profit: totalProfit,
           assortment_recommendation: assortmentRecommendation,
           assortment_reason: assortmentReason,
+          // Forecasting fields
+          season: forecast?.season || null,
+          trend: forecast?.trend || null,
+          forecast_linear: forecast?.linear || null,
+          forecast_exponential: forecast?.exponential || null,
+          forecast_consensus: forecast?.consensus || null,
         };
       });
 
@@ -249,6 +319,7 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
     if (filters.profitabilityMin !== null && (p.margin_pct === null || p.margin_pct < filters.profitabilityMin)) return false;
     if (filters.profitabilityMax !== null && (p.margin_pct === null || p.margin_pct > filters.profitabilityMax)) return false;
     if (filters.recommendation && p.assortment_recommendation !== filters.recommendation) return false;
+    if (filters.season && p.season !== filters.season) return false;
     return true;
   });
 

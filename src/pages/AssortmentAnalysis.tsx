@@ -59,6 +59,7 @@ export default function AssortmentAnalysis() {
     profitabilityMin: null,
     profitabilityMax: null,
     recommendation: null,
+    season: null,
   });
   const [search, setSearch] = useState('');
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
