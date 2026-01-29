@@ -248,12 +248,7 @@ const documentationContent: DocSection[] = [
       "IMPORT DANNYKH:",
       "- Zagruzka iz Excel s avtomaticheskim mappingom kolonok",
       "- Galochka 'Ochistit pered importom' - udalyaet starye dannye",
-      "- Deduplikatsiya po artikulu - odin artikul = odna zapis",
-      "",
-      "OCHISTKA BAZY:",
-      "- Knopka 'Ochistit bazu' v shapke stranitsy",
-      "- Udalyaet VSE zapisi yunit-ekonomiki polzovatelya",
-      "- Trebuet podtverzhdeniya pered udaleniem"
+      "- Deduplikatsiya po artikulu - odin artikul = odna zapis"
     ]
   },
   {
