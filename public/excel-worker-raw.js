@@ -1,3 +1,7 @@
+// Web Worker for Excel processing - 1C Raw Mode
+// Uses Cloudflare CDN for stable XLSX library loading
+importScripts('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+
 /**
  * Streaming Excel Worker - AGGREGATED mode
  * Aggregates by article+size in memory, sends one row per unique combination
@@ -458,7 +462,7 @@ function findPeriodColumnsFromHeaders(headers, startIdx) {
  * Key difference: aggregates by article+size, sends periodQuantities/periodRevenues as objects
  */
 async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
-  sendProgress('Загрузка библиотеки XLSX...', 0);
+  sendProgress('Начало обработки файла...', 0);
 
   // Validate file signature (PK zip header for .xlsx)
   const signature = new Uint8Array(arrayBuffer.slice(0, 4));
@@ -466,9 +470,6 @@ async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
   if (!isZip) {
     throw new Error('Файл не является валидным Excel (.xlsx). Убедитесь, что файл не поврежден.');
   }
-
-  // Import XLSX
-  importScripts('https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js');
 
   sendProgress('Парсинг Excel файла...', 5);
 

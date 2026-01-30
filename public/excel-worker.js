@@ -1,6 +1,6 @@
 // Web Worker for Excel processing - Server-Side Report Generation Version
 // Uses base article aggregation for large files to reduce memory usage
-importScripts('https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js');
+importScripts('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
 
 // Constants
 const MONTH_NAMES_RU = {
