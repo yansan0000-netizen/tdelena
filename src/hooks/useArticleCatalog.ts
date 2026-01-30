@@ -37,15 +37,32 @@ export function useArticleCatalog() {
     queryFn: async () => {
       if (!user?.id) return [];
       
-      const { data, error } = await supabase
-        .from("article_catalog")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("article", { ascending: true })
-        .limit(10000); // Override default 1000 limit
+      // Fetch all articles using pagination to bypass Supabase 1000 row limit
+      const allArticles: ArticleCatalogItem[] = [];
+      const pageSize = 1000;
+      let from = 0;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from("article_catalog")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("article", { ascending: true })
+          .range(from, from + pageSize - 1);
 
-      if (error) throw error;
-      return data as ArticleCatalogItem[];
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allArticles.push(...(data as ArticleCatalogItem[]));
+          from += pageSize;
+          hasMore = data.length === pageSize;
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      return allArticles;
     },
     enabled: !!user?.id,
   });
