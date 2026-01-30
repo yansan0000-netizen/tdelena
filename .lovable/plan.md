@@ -1,161 +1,113 @@
 
 
-# План: Гарантированная очистка базы данных
+# План: Исправление загрузки XLSX в Web Workers
 
-## Текущая ситуация
+## Проблема
 
-1. **В базе 2960 записей** — это накопленные данные от нескольких импортов
-2. **Функция `deleteAllCosts()` существует** в `useCosts.ts` (строки 539-556)
-3. **Чекбокс уже включен по умолчанию** (`clearBeforeImport = true`)
-4. **Виртуализация** — это оптимизация отрисовки, НЕ проблема с данными. Просто показывает, что в списке много строк и отрисовываются только видимые.
+Web Worker `excel-worker-raw.js` не может загрузить библиотеку XLSX с CDN:
+```
+Failed to execute 'importScripts': The script at 'https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js' failed to load.
+```
 
-## Почему удаление не работает?
-
-Возможные причины:
-- Ошибка при вызове `deleteAllCosts()` не показывается пользователю
-- Сессия пользователя не активна в момент удаления
-- RLS блокирует удаление
-
----
+**Причины:**
+1. CDN `cdn.sheetjs.com` нестабилен или заблокирован
+2. В `excel-worker-raw.js` библиотека загружается **внутри функции** (строка 471), а не в начале файла
+3. Разные воркеры используют разные версии с разных CDN:
+   - `excel-worker.js` → `xlsx-0.20.2` с sheetjs.com
+   - `excel-worker-streaming.js` → `0.18.5` с cdnjs.cloudflare.com
+   - `excel-worker-raw.js` → `xlsx-0.20.0` с sheetjs.com (проблемный!)
 
 ## Решение
 
-### Шаг 1: Создать Edge Function для гарантированной очистки
-
-Создаю функцию `clear-unit-econ` которая использует `service_role` ключ для гарантированного удаления.
-
-Файл: `supabase/functions/clear-unit-econ/index.ts`
-
-### Шаг 2: Добавить кнопку "Очистить базу" на страницу
-
-Добавляю кнопку на страницу юнит-экономики для ручной очистки.
-
-Файл: `src/pages/UnitEconomics.tsx`
-
-### Шаг 3: Обновить импорт для использования Edge Function
-
-Меняю `CostImport.tsx` чтобы вызывать Edge Function вместо `deleteAllCosts()`.
-
-Файл: `src/components/costs/CostImport.tsx`
+Унифицировать все воркеры на **стабильный CDN Cloudflare** с последней доступной версией `0.18.5`, загружая библиотеку **в начале файла**.
 
 ---
 
 ## Файлы для изменения
 
-1. **Создать**: `supabase/functions/clear-unit-econ/index.ts` — Edge Function для очистки
-2. **Изменить**: `supabase/config.toml` — добавить конфигурацию функции
-3. **Изменить**: `src/pages/UnitEconomics.tsx` — добавить кнопку "Очистить базу"
-4. **Изменить**: `src/components/costs/CostImport.tsx` — использовать Edge Function
+### 1. `public/excel-worker-raw.js`
+
+**Изменения:**
+- Переместить `importScripts` в **начало файла** (строка 1)
+- Использовать стабильный CDN: `https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js`
+- Удалить `importScripts` из функции `processExcelRaw()` (строка 471)
+
+До:
+```javascript
+// Строка 471 внутри функции:
+importScripts('https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js');
+```
+
+После:
+```javascript
+// Строка 1 файла:
+importScripts('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+
+// Строка 471 — удалить вызов importScripts
+```
+
+### 2. `public/excel-worker.js`
+
+**Изменения:**
+- Обновить CDN на стабильный Cloudflare
+
+До:
+```javascript
+importScripts('https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js');
+```
+
+После:
+```javascript
+importScripts('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+```
+
+### 3. `public/excel-worker-streaming.js`
+
+Уже использует правильный CDN — **без изменений**:
+```javascript
+importScripts('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+```
 
 ---
 
 ## Техническая реализация
 
-### Edge Function (clear-unit-econ)
+### excel-worker-raw.js (основные изменения)
 
-```typescript
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+```javascript
+// Строка 1 — добавить загрузку библиотеки
+importScripts('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+// ...остальной код...
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
-
-  // Получаем токен пользователя
-  const authHeader = req.headers.get('Authorization')
-  if (!authHeader) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
-      status: 401, 
-      headers: corsHeaders 
-    })
-  }
-
-  // Используем service_role для гарантированного удаления
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  )
-
-  // Получаем user_id из токена
-  const token = authHeader.replace('Bearer ', '')
-  const { data: { user }, error: userError } = await supabase.auth.getUser(token)
+async function processExcelRaw(arrayBuffer, categoryFilter, maxDataRows) {
+  sendProgress('Загрузка библиотеки XLSX...', 0);
+  // УДАЛИТЬ строку 471: importScripts(...)
   
-  if (userError || !user) {
-    return new Response(JSON.stringify({ error: 'Invalid token' }), { 
-      status: 401, 
-      headers: corsHeaders 
-    })
-  }
-
-  console.log(`Clearing all unit_econ_inputs for user: ${user.id}`)
-
-  // Удаляем все записи пользователя
-  const { error, count } = await supabase
-    .from('unit_econ_inputs')
-    .delete()
-    .eq('user_id', user.id)
-
-  if (error) {
-    console.error('Delete error:', error)
-    return new Response(JSON.stringify({ error: error.message }), { 
-      status: 500, 
-      headers: corsHeaders 
-    })
-  }
-
-  console.log(`Deleted records for user ${user.id}`)
-  return new Response(JSON.stringify({ success: true, deleted: count }), { 
-    status: 200, 
-    headers: corsHeaders 
-  })
-})
+  // Validate file signature...
 ```
 
-### Кнопка "Очистить базу" (UnitEconomics.tsx)
+### excel-worker.js (одна строка)
 
-Добавлю кнопку в header страницы:
-
-```tsx
-<Button 
-  variant="destructive" 
-  onClick={handleClearDatabase}
-  className="gap-2"
->
-  <Trash2 className="h-4 w-4" />
-  Очистить базу
-</Button>
+```javascript
+// Строка 3 — изменить CDN
+importScripts('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
 ```
 
-### Обновление CostImport.tsx
+---
 
-Вместо `deleteAllCosts()` вызываю Edge Function:
+## Почему Cloudflare CDN лучше
 
-```typescript
-if (clearBeforeImport) {
-  const { data: { session } } = await supabase.auth.getSession();
-  const response = await supabase.functions.invoke('clear-unit-econ', {
-    headers: {
-      Authorization: `Bearer ${session?.access_token}`
-    }
-  });
-  
-  if (response.error) {
-    setError('Не удалось очистить базу данных');
-    return;
-  }
-}
-```
+1. **Стабильность** — Cloudflare имеет глобальную CDN сеть
+2. **Кеширование** — файлы кешируются на серверах по всему миру
+3. **Скорость** — быстрая загрузка из ближайшей точки присутствия
+4. **Версия 0.18.5** — проверена и работает стабильно
 
 ---
 
 ## Результат
 
-- База будет очищена гарантированно через Edge Function с service_role
-- Появится кнопка для ручной очистки базы
-- При следующем импорте останется ровно столько артикулов, сколько в Excel файле (~1755)
+- Все 3 воркера будут использовать единую стабильную версию XLSX
+- Загрузка отчётов будет работать без ошибок CDN
+- Не нужно хранить XLSX библиотеку локально (экономия размера проекта)
 
