@@ -76,13 +76,33 @@ export function useDashboard(runId: string | null) {
         return getEmptyDashboard();
       }
 
+      // Get article catalog to filter hidden/kill-list articles
+      const { data: catalogData, error: catalogError } = await supabase
+        .from('article_catalog')
+        .select('article, is_visible, is_in_kill_list')
+        .eq('user_id', user.id);
+
+      if (catalogError) throw catalogError;
+
+      // Build set of hidden articles (is_visible=false OR is_in_kill_list=true)
+      const hiddenArticles = new Set(
+        (catalogData || [])
+          .filter(c => !c.is_visible || c.is_in_kill_list)
+          .map(c => c.article.toLowerCase().trim())
+      );
+
       // Get sales analytics
-      const { data: analytics, error: analyticsError } = await supabase
+      const { data: allAnalytics, error: analyticsError } = await supabase
         .from('sales_analytics')
         .select('*')
         .eq('run_id', runId);
 
       if (analyticsError) throw analyticsError;
+
+      // Filter out hidden articles
+      const analytics = allAnalytics.filter(
+        a => !hiddenArticles.has(a.article.toLowerCase().trim())
+      );
 
       // Get unit economics for margins - include cost/price for dynamic calculation
       const { data: unitEcon, error: econError } = await supabase
@@ -92,13 +112,18 @@ export function useDashboard(runId: string | null) {
 
       if (econError) throw econError;
 
-      // Get raw data for period revenues
-      const { data: rawData, error: rawError } = await supabase
+      // Get raw data for period revenues (also filter by hidden articles)
+      const { data: allRawData, error: rawError } = await supabase
         .from('sales_data_raw')
-        .select('period, revenue, quantity')
+        .select('period, revenue, quantity, article')
         .eq('run_id', runId);
 
       if (rawError) throw rawError;
+
+      // Filter out hidden articles from raw data
+      const rawData = allRawData.filter(
+        r => !hiddenArticles.has(r.article.toLowerCase().trim())
+      );
 
       // Get run info
       const run = runs.find(r => r.id === runId);
