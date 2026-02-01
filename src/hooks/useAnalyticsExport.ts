@@ -116,7 +116,7 @@ export function useAnalyticsExport(runId: string | undefined) {
     while (true) {
       const { data, error } = await supabase
         .from('sales_data_raw')
-        .select('article, period, quantity, revenue')
+        .select('article, period, quantity, revenue, price')
         .eq('run_id', runId)
         .order('period', { ascending: true })
         .range(from, from + PAGE_SIZE - 1);
@@ -131,6 +131,7 @@ export function useAnalyticsExport(runId: string | undefined) {
         period: row.period,
         quantity: row.quantity || 0,
         revenue: row.revenue || 0,
+        price: row.price || undefined,
       }));
       
       all.push(...page);

@@ -45,6 +45,7 @@ export interface PeriodSalesData {
   period: string;
   quantity: number;
   revenue: number;
+  price?: number;
 }
 
 export interface UnitEconData {
@@ -121,23 +122,31 @@ export function generateAnalyticsReport(
     consensus: number;
     trend: 'up' | 'down' | 'stable';
     season: Season;
+    wholesalePrice: number;
   }>();
   
   if (periodSales && periodSales.length > 0) {
     // Group period sales by article
     const articlePeriodData = new Map<string, MonthlyData[]>();
+    const articleWholesalePrices = new Map<string, number[]>();
+    
     periodSales.forEach(ps => {
       if (!articlePeriodData.has(ps.article)) {
         articlePeriodData.set(ps.article, []);
+        articleWholesalePrices.set(ps.article, []);
       }
-      const existing = articlePeriodData.get(ps.article)!;
+      const periods = articlePeriodData.get(ps.article)!;
       // Aggregate by period
-      const periodEntry = existing.find(e => e.period === ps.period);
+      const periodEntry = periods.find(e => e.period === ps.period);
       if (periodEntry) {
         periodEntry.quantity += ps.quantity;
         periodEntry.revenue = (periodEntry.revenue || 0) + ps.revenue;
       } else {
-        existing.push({ period: ps.period, quantity: ps.quantity, revenue: ps.revenue });
+        periods.push({ period: ps.period, quantity: ps.quantity, revenue: ps.revenue });
+      }
+      // Collect wholesale prices
+      if (ps.price && ps.price > 0) {
+        articleWholesalePrices.get(ps.article)!.push(ps.price);
       }
     });
     
@@ -147,6 +156,12 @@ export function generateAnalyticsReport(
       const forecasts = getAllForecasts(sortedPeriods, 1);
       const seasonality = detectSeasonality(sortedPeriods);
       
+      // Calculate average wholesale price
+      const prices = articleWholesalePrices.get(article) || [];
+      const avgWholesalePrice = prices.length > 0 
+        ? prices.reduce((a, b) => a + b, 0) / prices.length 
+        : 0;
+      
       forecastMap.set(article, {
         linear: forecasts.linear.forecast,
         exponential: forecasts.exponential.forecast,
@@ -154,6 +169,7 @@ export function generateAnalyticsReport(
         consensus: forecasts.consensusForecast,
         trend: forecasts.recommended.trend,
         season: seasonality.season,
+        wholesalePrice: avgWholesalePrice,
       });
     });
   }
@@ -192,7 +208,8 @@ export function generateAnalyticsReport(
       'Накопл. доля %': Math.round((row.cumulative_share || 0) * 100) / 100,
       'Кол-во продаж': row.total_quantity,
       'Остаток': row.current_stock,
-      'Цена': Math.round((row.avg_price || 0) * 100) / 100,
+      'Цена (опт)': forecast?.wholesalePrice ? Math.round(forecast.wholesalePrice * 100) / 100 : '',
+      'Факт ср.цена': Math.round((row.avg_price || 0) * 100) / 100,
       'Ср.мес.продажи': Math.round((row.avg_monthly_qty || 0) * 10) / 10,
       'Скор.продаж/день': Math.round((row.sales_velocity_day || 0) * 100) / 100,
       'Дней до 0': row.days_until_stockout,

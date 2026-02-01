@@ -109,6 +109,21 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
     queryFn: async () => {
       if (!user || !filters.runId) return [];
 
+      // Get article catalog to filter hidden/kill-list articles
+      const { data: catalogData, error: catalogError } = await supabase
+        .from('article_catalog')
+        .select('article, is_visible, is_in_kill_list')
+        .eq('user_id', user.id);
+
+      if (catalogError) throw catalogError;
+
+      // Build set of hidden articles (is_visible=false OR is_in_kill_list=true)
+      const hiddenArticles = new Set(
+        (catalogData || [])
+          .filter(c => !c.is_visible || c.is_in_kill_list)
+          .map(c => c.article.toLowerCase().trim())
+      );
+
       // Get sales analytics
       const { data: analytics, error: analyticsError } = await supabase
         .from('sales_analytics')
@@ -116,6 +131,11 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
         .eq('run_id', filters.runId);
 
       if (analyticsError) throw analyticsError;
+
+      // Filter out hidden articles
+      const filteredAnalytics = analytics.filter(
+        a => !hiddenArticles.has(a.article.toLowerCase().trim())
+      );
 
       // Get raw period data for forecasting
       const { data: rawData, error: rawError } = await supabase
@@ -197,7 +217,7 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
       });
 
       // Merge and calculate recommendations
-      const merged: AssortmentProduct[] = analytics.map(a => {
+      const merged: AssortmentProduct[] = filteredAnalytics.map(a => {
         const articleKey = a.article.toLowerCase().trim();
         const baseKey = getBaseArticle(a.article);
         
