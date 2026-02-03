@@ -109,13 +109,25 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
     queryFn: async () => {
       if (!user || !filters.runId) return [];
 
-      // Get article catalog to filter hidden/kill-list articles
-      const { data: catalogData, error: catalogError } = await supabase
-        .from('article_catalog')
-        .select('article, is_visible, is_in_kill_list')
-        .eq('user_id', user.id);
-
-      if (catalogError) throw catalogError;
+      // Get article catalog with pagination to filter hidden/kill-list articles
+      const catalogData: { article: string; is_visible: boolean; is_in_kill_list: boolean }[] = [];
+      const CATALOG_PAGE_SIZE = 1000;
+      let catalogFrom = 0;
+      
+      while (true) {
+        const { data, error } = await supabase
+          .from('article_catalog')
+          .select('article, is_visible, is_in_kill_list')
+          .eq('user_id', user.id)
+          .range(catalogFrom, catalogFrom + CATALOG_PAGE_SIZE - 1);
+        
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        
+        catalogData.push(...data);
+        if (data.length < CATALOG_PAGE_SIZE) break;
+        catalogFrom += CATALOG_PAGE_SIZE;
+      }
 
       // Build set of hidden articles (is_visible=false OR is_in_kill_list=true)
       const hiddenArticles = new Set(
@@ -137,14 +149,26 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
         a => !hiddenArticles.has(a.article.toLowerCase().trim())
       );
 
-      // Get raw period data for forecasting (excluding placeholder period)
-      const { data: rawData, error: rawError } = await supabase
-        .from('sales_data_raw')
-        .select('article, period, quantity, revenue')
-        .eq('run_id', filters.runId)
-        .neq('period', '1970-01');
-
-      if (rawError) throw rawError;
+      // Get raw period data for forecasting with pagination (excluding placeholder period)
+      const rawData: { article: string; period: string; quantity: number | null; revenue: number | null }[] = [];
+      const RAW_PAGE_SIZE = 1000;
+      let rawFrom = 0;
+      
+      while (true) {
+        const { data, error } = await supabase
+          .from('sales_data_raw')
+          .select('article, period, quantity, revenue')
+          .eq('run_id', filters.runId)
+          .neq('period', '1970-01')
+          .range(rawFrom, rawFrom + RAW_PAGE_SIZE - 1);
+        
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        
+        rawData.push(...data);
+        if (data.length < RAW_PAGE_SIZE) break;
+        rawFrom += RAW_PAGE_SIZE;
+      }
 
       // Get unit economics for this user
       const { data: unitEcon, error: econError } = await supabase
