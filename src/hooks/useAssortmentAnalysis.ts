@@ -137,11 +137,12 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
         a => !hiddenArticles.has(a.article.toLowerCase().trim())
       );
 
-      // Get raw period data for forecasting
+      // Get raw period data for forecasting (excluding placeholder period)
       const { data: rawData, error: rawError } = await supabase
         .from('sales_data_raw')
         .select('article, period, quantity, revenue')
-        .eq('run_id', filters.runId);
+        .eq('run_id', filters.runId)
+        .neq('period', '1970-01');
 
       if (rawError) throw rawError;
 
