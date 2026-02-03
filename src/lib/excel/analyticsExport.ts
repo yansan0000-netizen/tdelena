@@ -114,6 +114,11 @@ export function generateAnalyticsReport(
   const enrichedData = costs ? enrichAnalyticsWithCosts(data, costs) : data;
   const hasCosts = costs && costs.length > 0;
   
+  // Filter out invalid periods like "1970-01"
+  const filteredPeriodSales = periodSales?.filter(ps => 
+    ps.period && !ps.period.startsWith('1970')
+  );
+  
   // Calculate forecasts for each article if we have period data
   const forecastMap = new Map<string, {
     linear: number;
@@ -125,12 +130,12 @@ export function generateAnalyticsReport(
     wholesalePrice: number;
   }>();
   
-  if (periodSales && periodSales.length > 0) {
+  if (filteredPeriodSales && filteredPeriodSales.length > 0) {
     // Group period sales by article
     const articlePeriodData = new Map<string, MonthlyData[]>();
     const articleWholesalePrices = new Map<string, number[]>();
     
-    periodSales.forEach(ps => {
+    filteredPeriodSales.forEach(ps => {
       if (!articlePeriodData.has(ps.article)) {
         articlePeriodData.set(ps.article, []);
         articleWholesalePrices.set(ps.article, []);
@@ -386,13 +391,13 @@ export function generateAnalyticsReport(
   }
 
   // Period sales dynamics sheet
-  if (periodSales && periodSales.length > 0) {
-    // Get unique periods and sort them
-    const periods = [...new Set(periodSales.map(p => p.period))].sort();
+  if (filteredPeriodSales && filteredPeriodSales.length > 0) {
+    // Get unique periods and sort them (1970-01 already filtered)
+    const periods = [...new Set(filteredPeriodSales.map(p => p.period))].sort();
     
     // Aggregate by period
     const periodAggregates = new Map<string, { quantity: number; revenue: number }>();
-    periodSales.forEach(p => {
+    filteredPeriodSales.forEach(p => {
       const existing = periodAggregates.get(p.period) || { quantity: 0, revenue: 0 };
       existing.quantity += p.quantity;
       existing.revenue += p.revenue;
@@ -415,7 +420,7 @@ export function generateAnalyticsReport(
 
     // Create pivot table: articles as rows, periods as columns
     const articlePeriodMap = new Map<string, Map<string, { qty: number; rev: number }>>();
-    periodSales.forEach(p => {
+    filteredPeriodSales.forEach(p => {
       if (!articlePeriodMap.has(p.article)) {
         articlePeriodMap.set(p.article, new Map());
       }

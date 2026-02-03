@@ -112,11 +112,12 @@ export function useDashboard(runId: string | null) {
 
       if (econError) throw econError;
 
-      // Get raw data for period revenues (also filter by hidden articles)
+      // Get raw data for period revenues (filter placeholder period)
       const { data: allRawData, error: rawError } = await supabase
         .from('sales_data_raw')
         .select('period, revenue, quantity, article')
-        .eq('run_id', runId);
+        .eq('run_id', runId)
+        .neq('period', '1970-01');
 
       if (rawError) throw rawError;
 

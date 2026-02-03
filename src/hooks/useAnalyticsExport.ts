@@ -118,6 +118,7 @@ export function useAnalyticsExport(runId: string | undefined) {
         .from('sales_data_raw')
         .select('article, period, quantity, revenue, price')
         .eq('run_id', runId)
+        .neq('period', '1970-01') // Filter out placeholder period
         .order('period', { ascending: true })
         .range(from, from + PAGE_SIZE - 1);
 
