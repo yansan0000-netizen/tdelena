@@ -51,6 +51,7 @@ export interface PeriodSalesData {
 export interface UnitEconData {
   article: string;
   unit_cost_real_rub: number | null;
+  wholesale_price_rub?: number | null;
 }
 
 export interface EnrichedAnalyticsRow extends AnalyticsRow {
@@ -127,18 +128,25 @@ export function generateAnalyticsReport(
     consensus: number;
     trend: 'up' | 'down' | 'stable';
     season: Season;
-    wholesalePrice: number;
   }>();
+  
+  // Build wholesale price map from costs (unit_econ_inputs.wholesale_price_rub)
+  const wholesalePriceMap = new Map<string, number>();
+  if (costs) {
+    costs.forEach(c => {
+      if (c.wholesale_price_rub && c.wholesale_price_rub > 0) {
+        wholesalePriceMap.set(c.article, c.wholesale_price_rub);
+      }
+    });
+  }
   
   if (filteredPeriodSales && filteredPeriodSales.length > 0) {
     // Group period sales by article
     const articlePeriodData = new Map<string, MonthlyData[]>();
-    const articleWholesalePrices = new Map<string, number[]>();
     
     filteredPeriodSales.forEach(ps => {
       if (!articlePeriodData.has(ps.article)) {
         articlePeriodData.set(ps.article, []);
-        articleWholesalePrices.set(ps.article, []);
       }
       const periods = articlePeriodData.get(ps.article)!;
       // Aggregate by period
@@ -149,10 +157,6 @@ export function generateAnalyticsReport(
       } else {
         periods.push({ period: ps.period, quantity: ps.quantity, revenue: ps.revenue });
       }
-      // Collect wholesale prices
-      if (ps.price && ps.price > 0) {
-        articleWholesalePrices.get(ps.article)!.push(ps.price);
-      }
     });
     
     // Sort periods and calculate forecasts
@@ -161,12 +165,6 @@ export function generateAnalyticsReport(
       const forecasts = getAllForecasts(sortedPeriods, 1);
       const seasonality = detectSeasonality(sortedPeriods);
       
-      // Calculate average wholesale price
-      const prices = articleWholesalePrices.get(article) || [];
-      const avgWholesalePrice = prices.length > 0 
-        ? prices.reduce((a, b) => a + b, 0) / prices.length 
-        : 0;
-      
       forecastMap.set(article, {
         linear: forecasts.linear.forecast,
         exponential: forecasts.exponential.forecast,
@@ -174,7 +172,6 @@ export function generateAnalyticsReport(
         consensus: forecasts.consensusForecast,
         trend: forecasts.recommended.trend,
         season: seasonality.season,
-        wholesalePrice: avgWholesalePrice,
       });
     });
   }
@@ -196,6 +193,7 @@ export function generateAnalyticsReport(
   // Main data sheet with forecasts
   const reportData = sortedData.map(row => {
     const forecast = forecastMap.get(row.article);
+    const wholesalePrice = wholesalePriceMap.get(row.article);
     
     const baseData: Record<string, unknown> = {
       'Артикул': row.article,
@@ -213,7 +211,7 @@ export function generateAnalyticsReport(
       'Накопл. доля %': Math.round((row.cumulative_share || 0) * 100) / 100,
       'Кол-во продаж': row.total_quantity,
       'Остаток': row.current_stock,
-      'Цена (опт)': forecast?.wholesalePrice ? Math.round(forecast.wholesalePrice * 100) / 100 : '',
+      'Цена (опт)': wholesalePrice ? Math.round(wholesalePrice * 100) / 100 : '',
       'Факт ср.цена': Math.round((row.avg_price || 0) * 100) / 100,
       'Ср.мес.продажи': Math.round((row.avg_monthly_qty || 0) * 10) / 10,
       'Скор.продаж/день': Math.round((row.sales_velocity_day || 0) * 100) / 100,

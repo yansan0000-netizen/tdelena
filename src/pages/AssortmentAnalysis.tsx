@@ -39,6 +39,7 @@ import { cn } from '@/lib/utils';
 import { AssortmentColumnSelector } from '@/components/assortment/AssortmentColumnSelector';
 import { ABCXYZMatrix } from '@/components/assortment/ABCXYZMatrix';
 import { ASSORTMENT_COLUMNS, getDefaultAssortmentColumns } from '@/lib/assortmentColumns';
+import { getSeasonLabel } from '@/lib/forecasting';
 
 const recommendationConfig: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
   expand: { label: 'Расширять', icon: <ArrowUpRight className="h-4 w-4" />, className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' },
@@ -701,7 +702,7 @@ export default function AssortmentAnalysis() {
                                 {visibleColumns.includes('season') && (
                                   <TableCell className="text-center">
                                     {product.season ? (
-                                      <Badge variant="outline">{product.season}</Badge>
+                                      <Badge variant="outline">{getSeasonLabel(product.season)}</Badge>
                                     ) : (
                                       <span className="text-muted-foreground">—</span>
                                     )}
@@ -854,6 +855,36 @@ export default function AssortmentAnalysis() {
                                 <div className="flex items-center justify-end gap-1">Прибыль/шт {getSortIcon('profit_per_unit')}</div>
                               </TableHead>
                             )}
+                            {visibleColumns.includes('unit_cost') && (
+                              <TableHead className="text-right">
+                                <div className="flex items-center justify-end gap-1">Себестоимость</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('season') && (
+                              <TableHead className="text-center">
+                                <div className="flex items-center justify-center gap-1">Сезон</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('trend') && (
+                              <TableHead className="text-center">
+                                <div className="flex items-center justify-center gap-1">Тренд</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('forecast_linear') && (
+                              <TableHead className="text-right">
+                                <div className="flex items-center justify-end gap-1">Прогноз (лин.)</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('forecast_exponential') && (
+                              <TableHead className="text-right">
+                                <div className="flex items-center justify-end gap-1">Прогноз (эксп.)</div>
+                              </TableHead>
+                            )}
+                            {visibleColumns.includes('forecast_consensus') && (
+                              <TableHead className="text-right">
+                                <div className="flex items-center justify-end gap-1">Прогноз (конс.)</div>
+                              </TableHead>
+                            )}
                             {visibleColumns.includes('recommendation') && (
                               <TableHead className="cursor-pointer hover:bg-muted/50" onClick={() => handleSort('recommendation')}>
                                 <div className="flex items-center gap-1">Рекомендация {getSortIcon('recommendation')}</div>
@@ -957,6 +988,59 @@ export default function AssortmentAnalysis() {
                                         <span className={cn(product.profit_per_unit < 0 ? 'text-red-600' : '')}>
                                           {product.profit_per_unit.toLocaleString('ru-RU')} ₽
                                         </span>
+                                      ) : (
+                                        <span className="text-muted-foreground">—</span>
+                                      )}
+                                    </TableCell>
+                                  )}
+                                  {visibleColumns.includes('unit_cost') && (
+                                    <TableCell className="text-right">
+                                      {product.unit_cost !== null ? (
+                                        `${product.unit_cost.toLocaleString('ru-RU')} ₽`
+                                      ) : (
+                                        <span className="text-muted-foreground">—</span>
+                                      )}
+                                    </TableCell>
+                                  )}
+                                  {visibleColumns.includes('season') && (
+                                    <TableCell className="text-center">
+                                      {product.season ? (
+                                        <Badge variant="outline">{getSeasonLabel(product.season)}</Badge>
+                                      ) : (
+                                        <span className="text-muted-foreground">—</span>
+                                      )}
+                                    </TableCell>
+                                  )}
+                                  {visibleColumns.includes('trend') && (
+                                    <TableCell className="text-center">
+                                      {product.trend === 'up' && <TrendingUp className="h-4 w-4 text-green-600 mx-auto" />}
+                                      {product.trend === 'down' && <TrendingDown className="h-4 w-4 text-red-600 mx-auto" />}
+                                      {product.trend === 'stable' && <Minus className="h-4 w-4 text-muted-foreground mx-auto" />}
+                                      {!product.trend && <span className="text-muted-foreground">—</span>}
+                                    </TableCell>
+                                  )}
+                                  {visibleColumns.includes('forecast_linear') && (
+                                    <TableCell className="text-right">
+                                      {product.forecast_linear !== null ? (
+                                        Math.round(product.forecast_linear).toLocaleString('ru-RU')
+                                      ) : (
+                                        <span className="text-muted-foreground">—</span>
+                                      )}
+                                    </TableCell>
+                                  )}
+                                  {visibleColumns.includes('forecast_exponential') && (
+                                    <TableCell className="text-right">
+                                      {product.forecast_exponential !== null ? (
+                                        Math.round(product.forecast_exponential).toLocaleString('ru-RU')
+                                      ) : (
+                                        <span className="text-muted-foreground">—</span>
+                                      )}
+                                    </TableCell>
+                                  )}
+                                  {visibleColumns.includes('forecast_consensus') && (
+                                    <TableCell className="text-right">
+                                      {product.forecast_consensus !== null ? (
+                                        Math.round(product.forecast_consensus).toLocaleString('ru-RU')
                                       ) : (
                                         <span className="text-muted-foreground">—</span>
                                       )}

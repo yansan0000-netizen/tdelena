@@ -341,11 +341,11 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
           assortment_recommendation: assortmentRecommendation,
           assortment_reason: assortmentReason,
           // Forecasting fields
-          season: forecast?.season || null,
-          trend: forecast?.trend || null,
-          forecast_linear: forecast?.linear || null,
-          forecast_exponential: forecast?.exponential || null,
-          forecast_consensus: forecast?.consensus || null,
+          season: forecast?.season ?? null,
+          trend: forecast?.trend ?? null,
+          forecast_linear: forecast?.linear ?? null,
+          forecast_exponential: forecast?.exponential ?? null,
+          forecast_consensus: forecast?.consensus ?? null,
         };
       });
 

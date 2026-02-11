@@ -91,7 +91,7 @@ export function useAnalyticsExport(runId: string | undefined) {
 
     const { data, error } = await supabase
       .from('unit_econ_inputs')
-      .select('article, unit_cost_real_rub')
+      .select('article, unit_cost_real_rub, wholesale_price_rub')
       .eq('user_id', user.id);
 
     if (error) {
