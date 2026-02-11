@@ -7,6 +7,8 @@ import {
   Season,
   MonthlyData 
 } from '@/lib/forecasting';
+import { getMonthsInSales } from '@/lib/recommendations';
+import type { RecommendationRule } from './useRecommendationRules';
 
 export interface AssortmentSummary {
   totalProducts: number;
@@ -103,21 +105,38 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
     enabled: !!user,
   });
 
+  // Fetch user's custom recommendation rules
+  const { data: customRules = [] } = useQuery({
+    queryKey: ['recommendation-rules-for-assortment', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('recommendation_rules')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_enabled', true)
+        .order('priority', { ascending: true });
+      if (error) throw error;
+      return data as RecommendationRule[];
+    },
+    enabled: !!user,
+  });
+
   // Get products with analytics + unit economics
   const { data: products = [], isLoading: productsLoading, refetch } = useQuery({
-    queryKey: ['assortment-products', filters.runId, user?.id],
+    queryKey: ['assortment-products', filters.runId, user?.id, customRules],
     queryFn: async () => {
       if (!user || !filters.runId) return [];
 
       // Get article catalog with pagination to filter hidden/kill-list articles
-      const catalogData: { article: string; is_visible: boolean; is_in_kill_list: boolean }[] = [];
+      const catalogData: { article: string; is_visible: boolean; is_in_kill_list: boolean; first_seen_at: string }[] = [];
       const CATALOG_PAGE_SIZE = 1000;
       let catalogFrom = 0;
       
       while (true) {
         const { data, error } = await supabase
           .from('article_catalog')
-          .select('article, is_visible, is_in_kill_list')
+          .select('article, is_visible, is_in_kill_list, first_seen_at')
           .eq('user_id', user.id)
           .range(catalogFrom, catalogFrom + CATALOG_PAGE_SIZE - 1);
         
@@ -135,6 +154,61 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
           .filter(c => !c.is_visible || c.is_in_kill_list)
           .map(c => c.article.toLowerCase().trim())
       );
+
+      // Build catalog map for first_seen_at lookup
+      const catalogMap = new Map(
+        catalogData.map(c => [c.article.toLowerCase().trim(), c])
+      );
+
+      // Helper: match article against custom recommendation rules
+      const applyCustomRules = (
+        article: string,
+        abcGroup: string | null,
+        xyzGroup: string | null,
+        daysUntilStockout: number,
+        marginPct: number | null,
+        isNew: boolean | null,
+      ): { action: string; priority: string; text: string; killList: boolean } | null => {
+        const catalogEntry = catalogMap.get(article.toLowerCase().trim());
+        const monthsInSales = catalogEntry ? getMonthsInSales(catalogEntry.first_seen_at) : 0;
+
+        for (const rule of customRules) {
+          let matches = true;
+
+          // Check ABC condition
+          if (rule.condition_abc && rule.condition_abc.length > 0) {
+            if (!abcGroup || !rule.condition_abc.includes(abcGroup)) matches = false;
+          }
+          // Check XYZ condition
+          if (rule.condition_xyz && rule.condition_xyz.length > 0) {
+            if (!xyzGroup || !rule.condition_xyz.includes(xyzGroup)) matches = false;
+          }
+          // Check months conditions
+          if (rule.condition_months_min !== null && monthsInSales < rule.condition_months_min) matches = false;
+          if (rule.condition_months_max !== null && monthsInSales > rule.condition_months_max) matches = false;
+          // Check margin conditions
+          if (rule.condition_margin_min !== null && (marginPct === null || marginPct < rule.condition_margin_min)) matches = false;
+          if (rule.condition_margin_max !== null && (marginPct === null || marginPct > rule.condition_margin_max)) matches = false;
+          // Check stockout days conditions
+          if (rule.condition_days_stockout_min !== null && daysUntilStockout < rule.condition_days_stockout_min) matches = false;
+          if (rule.condition_days_stockout_max !== null && daysUntilStockout > rule.condition_days_stockout_max) matches = false;
+          // Check is_new condition
+          if (rule.condition_is_new !== null) {
+            if (rule.condition_is_new === true && isNew !== true) matches = false;
+            if (rule.condition_is_new === false && isNew === true) matches = false;
+          }
+
+          if (matches) {
+            return {
+              action: rule.action,
+              priority: rule.action_priority,
+              text: rule.action_text || rule.name,
+              killList: rule.send_to_kill_list,
+            };
+          }
+        }
+        return null;
+      };
 
       // Get sales analytics
       const { data: analytics, error: analyticsError } = await supabase
@@ -173,7 +247,7 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
       // Get unit economics for this user
       const { data: unitEcon, error: econError } = await supabase
         .from('unit_econ_inputs')
-        .select('article, margin_pct, profit_per_unit, unit_cost_real_rub, retail_price_rub, wholesale_price_rub, name, category')
+        .select('article, margin_pct, profit_per_unit, unit_cost_real_rub, retail_price_rub, wholesale_price_rub, name, category, is_new')
         .eq('user_id', user.id);
 
       if (econError) throw econError;
@@ -315,6 +389,32 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
           assortmentReason = 'Нет данных о себестоимости — заполните юнит-экономику';
         }
 
+        // Apply custom recommendation rules (override defaults)
+        const isNewArticle = econ?.is_new ?? null;
+        const ruleMatch = applyCustomRules(
+          a.article,
+          a.abc_group,
+          a.xyz_group,
+          a.days_until_stockout || 0,
+          marginPct,
+          isNewArticle as boolean | null,
+        );
+
+        let finalRecommendation = a.recommendation;
+        let finalAction = a.recommendation_action;
+        let finalPriority = a.recommendation_priority;
+
+        if (ruleMatch) {
+          finalAction = ruleMatch.action;
+          finalPriority = ruleMatch.priority;
+          finalRecommendation = ruleMatch.text;
+          // Override assortment recommendation if kill-list
+          if (ruleMatch.killList) {
+            assortmentRecommendation = 'remove';
+            assortmentReason = ruleMatch.text;
+          }
+        }
+
         return {
           id: a.id,
           article: a.article,
@@ -331,9 +431,9 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
           plan_1m: a.plan_1m || 0,
           plan_3m: a.plan_3m || 0,
           plan_6m: a.plan_6m || 0,
-          recommendation: a.recommendation,
-          recommendation_action: a.recommendation_action,
-          recommendation_priority: a.recommendation_priority,
+          recommendation: finalRecommendation,
+          recommendation_action: finalAction,
+          recommendation_priority: finalPriority,
           margin_pct: marginPct,
           profit_per_unit: profitPerUnit,
           unit_cost: unitCost,
