@@ -126,10 +126,54 @@ export function enrichAnalyticsWithCosts(
   });
 }
 
+export interface CustomRule {
+  condition_abc: string[] | null;
+  condition_xyz: string[] | null;
+  condition_months_min: number | null;
+  condition_months_max: number | null;
+  condition_margin_min: number | null;
+  condition_margin_max: number | null;
+  condition_days_stockout_min: number | null;
+  condition_days_stockout_max: number | null;
+  condition_is_new: boolean | null;
+  action: string;
+  action_priority: string;
+  action_text: string | null;
+  name: string;
+  send_to_kill_list: boolean;
+}
+
+function applyCustomRulesToRow(
+  row: AnalyticsRow,
+  rules: CustomRule[],
+  enrichedRow?: EnrichedAnalyticsRow,
+): string {
+  for (const rule of rules) {
+    let matches = true;
+    if (rule.condition_abc?.length && !rule.condition_abc.includes(row.abc_group)) matches = false;
+    if (rule.condition_xyz?.length && !rule.condition_xyz.includes(row.xyz_group)) matches = false;
+    if (rule.condition_margin_min !== null) {
+      const margin = enrichedRow?.gross_margin_pct ?? null;
+      if (margin === null || margin < rule.condition_margin_min) matches = false;
+    }
+    if (rule.condition_margin_max !== null) {
+      const margin = enrichedRow?.gross_margin_pct ?? null;
+      if (margin === null || margin > rule.condition_margin_max) matches = false;
+    }
+    if (rule.condition_days_stockout_min !== null && row.days_until_stockout < rule.condition_days_stockout_min) matches = false;
+    if (rule.condition_days_stockout_max !== null && row.days_until_stockout > rule.condition_days_stockout_max) matches = false;
+    if (matches) {
+      return rule.action_text || rule.name;
+    }
+  }
+  return row.recommendation;
+}
+
 export function generateAnalyticsReport(
   data: AnalyticsRow[], 
   costs?: UnitEconData[],
-  periodSales?: PeriodSalesData[]
+  periodSales?: PeriodSalesData[],
+  customRules?: CustomRule[],
 ): Blob {
   const workbook = XLSX.utils.book_new();
 
@@ -224,6 +268,18 @@ export function generateAnalyticsReport(
     const baseKey = getBaseArticle(row.article);
     const wholesalePrice = wholesalePriceExact.get(articleKey) || wholesalePriceBase.get(baseKey);
     
+    // Apply custom rules to get updated recommendation
+    const enrichedRow = 'unit_cost_real_rub' in row ? row as EnrichedAnalyticsRow : undefined;
+    const recommendation = customRules && customRules.length > 0
+      ? applyCustomRulesToRow(row, customRules, enrichedRow)
+      : row.recommendation;
+    
+    // Calculate multi-month forecasts per method
+    const linearPerMonth = forecast?.linear ?? 0;
+    const exponentialPerMonth = forecast?.exponential ?? 0;
+    const movingAvgPerMonth = forecast?.movingAvg ?? 0;
+    const consensusPerMonth = forecast?.consensus ?? 0;
+    
     const baseData: Record<string, unknown> = {
       'Артикул': row.article,
       'Размер': row.size || '',
@@ -234,7 +290,7 @@ export function generateAnalyticsReport(
       'XYZ': row.xyz_group,
       'Сезон': forecast ? getSeasonLabel(forecast.season) : '',
       'Тренд': forecast ? getTrendLabel(forecast.trend) : '',
-      'Рекомендация': row.recommendation,
+      'Рекомендация': recommendation,
       'Выручка': Math.round(row.total_revenue),
       'Доля выручки %': Math.round((row.revenue_share || 0) * 100) / 100,
       'Накопл. доля %': Math.round((row.cumulative_share || 0) * 100) / 100,
@@ -246,15 +302,24 @@ export function generateAnalyticsReport(
       'Скор.продаж/день': Math.round((row.sales_velocity_day || 0) * 100) / 100,
       'Дней до 0': row.days_until_stockout,
       'CV %': Math.round((row.coefficient_of_variation || 0) * 10) / 10,
-      // Original plan
+      // Plan 1m per method
       'План 1м (базовый)': row.plan_1m,
-      // Forecast plans
-      'План (лин.регрессия)': forecast?.linear ?? '',
-      'План (экспон.сгл.)': forecast?.exponential ?? '',
-      'План (скольз.ср.)': forecast?.movingAvg ?? '',
-      'План (консенсус)': forecast?.consensus ?? '',
-      'План 3м': row.plan_3m,
-      'План 6м': row.plan_6m,
+      'План 1м (лин.регрессия)': forecast ? Math.round(linearPerMonth) : '',
+      'План 1м (эксп.сглаж.)': forecast ? Math.round(exponentialPerMonth) : '',
+      'План 1м (скольз.средн.)': forecast ? Math.round(movingAvgPerMonth) : '',
+      'План 1м (консенсус)': forecast ? Math.round(consensusPerMonth) : '',
+      // Plan 3m per method
+      'План 3м (базовый)': row.plan_3m,
+      'План 3м (лин.регрессия)': forecast ? Math.round(linearPerMonth * 3) : '',
+      'План 3м (эксп.сглаж.)': forecast ? Math.round(exponentialPerMonth * 3) : '',
+      'План 3м (скольз.средн.)': forecast ? Math.round(movingAvgPerMonth * 3) : '',
+      'План 3м (консенсус)': forecast ? Math.round(consensusPerMonth * 3) : '',
+      // Plan 6m per method
+      'План 6м (базовый)': row.plan_6m,
+      'План 6м (лин.регрессия)': forecast ? Math.round(linearPerMonth * 6) : '',
+      'План 6м (эксп.сглаж.)': forecast ? Math.round(exponentialPerMonth * 6) : '',
+      'План 6м (скольз.средн.)': forecast ? Math.round(movingAvgPerMonth * 6) : '',
+      'План 6м (консенсус)': forecast ? Math.round(consensusPerMonth * 6) : '',
     };
 
     // Add unit economics columns if available
@@ -301,18 +366,18 @@ export function generateAnalyticsReport(
     { wch: 12 }, // Накопл. доля
     { wch: 12 }, // Кол-во продаж
     { wch: 10 }, // Остаток
-    { wch: 10 }, // Цена
+    { wch: 10 }, // Цена (опт)
+    { wch: 12 }, // Факт ср.цена
     { wch: 12 }, // Ср.мес.продажи
     { wch: 15 }, // Скор.продаж/день
     { wch: 10 }, // Дней до 0
     { wch: 8 },  // CV %
-    { wch: 14 }, // План 1м (базовый)
-    { wch: 16 }, // План (лин.регрессия)
-    { wch: 14 }, // План (экспон.сгл.)
-    { wch: 14 }, // План (скольз.ср.)
-    { wch: 14 }, // План (консенсус)
-    { wch: 10 }, // План 3м
-    { wch: 10 }, // План 6м
+    // Plan 1m (5 cols)
+    { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 16 },
+    // Plan 3m (5 cols)
+    { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 16 },
+    // Plan 6m (5 cols)
+    { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 16 },
   ];
   // Add columns for unit economics
   if (hasCosts) {

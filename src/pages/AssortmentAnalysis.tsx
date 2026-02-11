@@ -371,6 +371,15 @@ export default function AssortmentAnalysis() {
 
                 {/* Filters */}
                 <div className="flex items-center gap-2">
+                  <div className="relative w-[180px]">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Артикул..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className="pl-8 h-9"
+                    />
+                  </div>
                   <Select
                     value={filters.category || 'all'}
                     onValueChange={(v) => setFilters(prev => ({ ...prev, category: v === 'all' ? null : v }))}
