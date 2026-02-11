@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { FileSpreadsheet, Loader2, Eye, EyeOff } from 'lucide-react';
 import { z } from 'zod';
 
-const REGISTRATION_CODE = 'planner_CVb428';
+const REGISTRATION_CODE = 'test2025';
 
 const loginSchema = z.object({
   email: z.string().email('Некорректный email'),
