@@ -198,8 +198,86 @@ export default function UnitEconomicsDetail() {
     const success = await upsertCost(formData);
     setSaving(false);
     
-    if (success && isNew) {
-      navigate(`/unit-economics/${encodeURIComponent(formData.article)}`);
+    if (success) {
+      // Reload fresh data from DB to reflect all recalculated fields
+      const freshData = await getCostByArticle(formData.article);
+      if (freshData) {
+        setProductId(freshData.id);
+        setFormData({
+          article: freshData.article,
+          name: freshData.name || '',
+          category: freshData.category || '',
+          product_url: freshData.product_url || '',
+          is_new: freshData.is_new || false,
+          is_recalculation: (freshData as any).is_recalculation || false,
+          units_in_cut: freshData.units_in_cut,
+          fabric1_name: freshData.fabric1_name || '',
+          fabric1_weight_cut_kg: freshData.fabric1_weight_cut_kg,
+          fabric1_kg_per_unit: freshData.fabric1_kg_per_unit,
+          fabric1_price_usd: freshData.fabric1_price_usd,
+          fabric1_price_rub_per_kg: freshData.fabric1_price_rub_per_kg,
+          fabric1_cost_rub_per_unit: freshData.fabric1_cost_rub_per_unit,
+          fabric2_name: freshData.fabric2_name || '',
+          fabric2_weight_cut_kg: freshData.fabric2_weight_cut_kg,
+          fabric2_kg_per_unit: freshData.fabric2_kg_per_unit,
+          fabric2_price_usd: freshData.fabric2_price_usd,
+          fabric2_price_rub_per_kg: freshData.fabric2_price_rub_per_kg,
+          fabric2_cost_rub_per_unit: freshData.fabric2_cost_rub_per_unit,
+          fabric3_name: freshData.fabric3_name || '',
+          fabric3_weight_cut_kg: freshData.fabric3_weight_cut_kg,
+          fabric3_kg_per_unit: freshData.fabric3_kg_per_unit,
+          fabric3_price_usd: freshData.fabric3_price_usd,
+          fabric3_price_rub_per_kg: freshData.fabric3_price_rub_per_kg,
+          fabric3_cost_rub_per_unit: freshData.fabric3_cost_rub_per_unit,
+          fabric_cost_total: freshData.fabric_cost_total,
+          sewing_cost: freshData.sewing_cost,
+          cutting_cost: freshData.cutting_cost,
+          accessories_cost: freshData.accessories_cost,
+          print_embroidery_cost: freshData.print_embroidery_cost,
+          print_embroidery_work_cost: (freshData as any).print_embroidery_work_cost,
+          print_embroidery_materials_cost: (freshData as any).print_embroidery_materials_cost,
+          fx_rate: freshData.fx_rate,
+          admin_overhead_pct: freshData.admin_overhead_pct,
+          wholesale_markup_pct: freshData.wholesale_markup_pct,
+          sell_on_wb: (freshData as any).sell_on_wb || false,
+          price_no_spp: (freshData as any).price_no_spp,
+          spp_pct: freshData.spp_pct,
+          planned_sales_month_qty: freshData.planned_sales_month_qty,
+          wb_commission_pct: freshData.wb_commission_pct,
+          buyout_pct: (freshData as any).buyout_pct ?? 90,
+          logistics_to_client: (freshData as any).logistics_to_client ?? 50,
+          logistics_return_fixed: (freshData as any).logistics_return_fixed ?? 50,
+          acceptance_rub: freshData.acceptance_rub,
+          tax_mode: (freshData as any).tax_mode || 'income_expenses',
+          usn_tax_pct: freshData.usn_tax_pct,
+          vat_pct: (freshData as any).vat_pct ?? 0,
+          delivery_rub: freshData.delivery_rub,
+          non_purchase_pct: freshData.non_purchase_pct,
+          investments_rub: freshData.investments_rub,
+          buyer_price_with_spp: freshData.buyer_price_with_spp,
+          planned_retail_after_discount: freshData.planned_retail_after_discount,
+          retail_before_discount: freshData.retail_before_discount,
+          approved_discount_pct: freshData.approved_discount_pct,
+          unit_cost_real_rub: (freshData as any).unit_cost_real_rub,
+          wholesale_price_rub: (freshData as any).wholesale_price_rub,
+          retail_price_rub: (freshData as any).retail_price_rub,
+          margin_pct: (freshData as any).margin_pct,
+          profit_per_unit: (freshData as any).profit_per_unit,
+          scenario_min_price: freshData.scenario_min_price,
+          scenario_min_profit: freshData.scenario_min_profit,
+          scenario_plan_price: freshData.scenario_plan_price,
+          scenario_plan_profit: freshData.scenario_plan_profit,
+          scenario_recommended_price: freshData.scenario_recommended_price,
+          scenario_desired_price: freshData.scenario_desired_price,
+          competitor_url: freshData.competitor_url || '',
+          competitor_price: freshData.competitor_price,
+          competitor_comment: (freshData as any).competitor_comment || '',
+        });
+      }
+      
+      if (isNew) {
+        navigate(`/unit-economics/${encodeURIComponent(formData.article)}`);
+      }
     }
   };
 
