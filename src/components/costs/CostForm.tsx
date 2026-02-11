@@ -167,11 +167,12 @@ export function CostForm({ formData, onChange, isNew }: CostFormProps) {
             updated = true;
           }
           
-          // Calculate price per kg from USD if needed
+          // Calculate price per kg - always recalculate from USD if USD is set
           let effectivePricePerKg = priceRubPerKg;
-          if (!effectivePricePerKg && priceUsd) {
-            effectivePricePerKg = priceUsd * fxRate;
-            const roundedPrice = Math.round(effectivePricePerKg * 100) / 100;
+          if (priceUsd) {
+            const calculatedFromUsd = priceUsd * fxRate;
+            const roundedPrice = Math.round(calculatedFromUsd * 100) / 100;
+            effectivePricePerKg = roundedPrice;
             if (formData[`${prefix}_price_rub_per_kg`] !== roundedPrice) {
               (newData as any)[`${prefix}_price_rub_per_kg`] = roundedPrice;
               updated = true;
