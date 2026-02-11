@@ -6,6 +6,7 @@ import {
   AnalyticsRow,
   UnitEconData,
   PeriodSalesData,
+  CustomRule,
   generateAnalyticsReport,
   generateProductionPlanReport,
   downloadBlob,
@@ -272,13 +273,29 @@ export function useAnalyticsExport(runId: string | undefined) {
     return analytics.length;
   }, [analyticsData, applyFilters]);
 
+  const fetchCustomRules = useCallback(async (): Promise<CustomRule[]> => {
+    if (!user) return [];
+    const { data, error } = await supabase
+      .from('recommendation_rules')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_enabled', true)
+      .order('priority', { ascending: true });
+    if (error) {
+      console.error('Error fetching custom rules:', error);
+      return [];
+    }
+    return (data ?? []) as CustomRule[];
+  }, [user]);
+
   const downloadReport = useCallback(async () => {
     setLoading(true);
     try {
-      const [data, costs, periodSales] = await Promise.all([
+      const [data, costs, periodSales, rules] = await Promise.all([
         fetchAnalyticsData(),
         fetchCostsData(),
         fetchPeriodSalesData(),
+        fetchCustomRules(),
       ]);
       
       if (!data || data.length === 0) {
@@ -294,7 +311,7 @@ export function useAnalyticsExport(runId: string | undefined) {
         return;
       }
 
-      const blob = generateAnalyticsReport(filteredData, costs || undefined, filteredPeriodSales || undefined);
+      const blob = generateAnalyticsReport(filteredData, costs || undefined, filteredPeriodSales || undefined, rules);
       downloadBlob(blob, `Отчёт_ABC_XYZ_${runId?.slice(0, 8)}.xlsx`);
       toast.success(`Отчёт скачан (${filteredData.length.toLocaleString('ru-RU')} строк)`);
     } catch (err) {
@@ -303,7 +320,7 @@ export function useAnalyticsExport(runId: string | undefined) {
     } finally {
       setLoading(false);
     }
-  }, [fetchAnalyticsData, fetchCostsData, fetchPeriodSalesData, applyFilters, runId]);
+  }, [fetchAnalyticsData, fetchCostsData, fetchPeriodSalesData, fetchCustomRules, applyFilters, runId]);
 
   const downloadProductionPlan = useCallback(async () => {
     setLoading(true);

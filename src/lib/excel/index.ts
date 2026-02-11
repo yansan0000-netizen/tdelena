@@ -7,3 +7,4 @@ export { normalizeArticleStrict, normalizeCategorySmart, findColIndexFlexible, e
 export * from './calculations';
 export { readExcelFile, sheetToArray, parsePeriodString, parseMonthYear, parseNumber, isQuantityColumn, isRevenueColumn, isStockColumn, findColumnByHeaders, detectArticleColumn, detectRevenueColumn, formatMonthYear, normalizeArticle, normalizeCategory } from './utils';
 export * from './logger';
+export type { CustomRule } from './analyticsExport';
