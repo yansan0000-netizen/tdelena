@@ -64,15 +64,37 @@ export interface EnrichedAnalyticsRow extends AnalyticsRow {
   capitalization: number | null;
 }
 
+/**
+ * Extract base article for fuzzy matching (e.g., "М319114Пзм" → "м319114п")
+ */
+function getBaseArticle(article: string): string {
+  const normalized = article.toLowerCase().trim();
+  const match = normalized.match(/^([а-яa-z]?\d{5,6}[а-яa-z]?)/i);
+  return match ? match[1] : normalized.slice(0, 8);
+}
+
 export function enrichAnalyticsWithCosts(
   analytics: AnalyticsRow[],
   costs: UnitEconData[]
 ): EnrichedAnalyticsRow[] {
-  const costsMap = new Map<string, number | null>();
-  costs.forEach(c => costsMap.set(c.article, c.unit_cost_real_rub));
+  // Exact match map
+  const exactCostMap = new Map<string, UnitEconData>();
+  costs.forEach(c => exactCostMap.set(c.article.toLowerCase().trim(), c));
+
+  // Base article match map (fuzzy)
+  const baseCostMap = new Map<string, UnitEconData>();
+  costs.forEach(c => {
+    const base = getBaseArticle(c.article);
+    if (!baseCostMap.has(base) || (c.unit_cost_real_rub && !baseCostMap.get(base)?.unit_cost_real_rub)) {
+      baseCostMap.set(base, c);
+    }
+  });
 
   return analytics.map(row => {
-    const unitCost = costsMap.get(row.article) || null;
+    const key = row.article.toLowerCase().trim();
+    const baseKey = getBaseArticle(row.article);
+    const costEntry = exactCostMap.get(key) || baseCostMap.get(baseKey) || null;
+    const unitCost = costEntry?.unit_cost_real_rub || null;
     const avgPriceActual = row.total_quantity > 0 
       ? row.total_revenue / row.total_quantity 
       : row.avg_price;
@@ -130,12 +152,17 @@ export function generateAnalyticsReport(
     season: Season;
   }>();
   
-  // Build wholesale price map from costs (unit_econ_inputs.wholesale_price_rub)
-  const wholesalePriceMap = new Map<string, number>();
+  // Build wholesale price maps: exact + fuzzy (base article)
+  const wholesalePriceExact = new Map<string, number>();
+  const wholesalePriceBase = new Map<string, number>();
   if (costs) {
     costs.forEach(c => {
       if (c.wholesale_price_rub && c.wholesale_price_rub > 0) {
-        wholesalePriceMap.set(c.article, c.wholesale_price_rub);
+        wholesalePriceExact.set(c.article.toLowerCase().trim(), c.wholesale_price_rub);
+        const base = getBaseArticle(c.article);
+        if (!wholesalePriceBase.has(base)) {
+          wholesalePriceBase.set(base, c.wholesale_price_rub);
+        }
       }
     });
   }
@@ -193,7 +220,9 @@ export function generateAnalyticsReport(
   // Main data sheet with forecasts
   const reportData = sortedData.map(row => {
     const forecast = forecastMap.get(row.article);
-    const wholesalePrice = wholesalePriceMap.get(row.article);
+    const articleKey = row.article.toLowerCase().trim();
+    const baseKey = getBaseArticle(row.article);
+    const wholesalePrice = wholesalePriceExact.get(articleKey) || wholesalePriceBase.get(baseKey);
     
     const baseData: Record<string, unknown> = {
       'Артикул': row.article,
