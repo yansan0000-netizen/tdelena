@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, forwardRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CategorySelect } from '@/components/ui/category-select';
@@ -31,12 +31,12 @@ interface BulkActionsBarProps {
   onActionComplete: () => void;
 }
 
-export function BulkActionsBar({
+export const BulkActionsBar = forwardRef<HTMLDivElement, BulkActionsBarProps>(function BulkActionsBar({
   selectedArticles,
   selectedCosts,
   onClearSelection,
   onActionComplete,
-}: BulkActionsBarProps) {
+}, ref) {
   const { deleteCost, bulkUpsert } = useCosts();
   const { settings, addCustomCategory } = useUserSettings();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -107,7 +107,7 @@ export function BulkActionsBar({
   if (selectedArticles.length === 0) return null;
 
   return (
-    <>
+    <div ref={ref}>
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4">
         <div className="bg-background border rounded-lg shadow-lg p-3 flex items-center gap-3">
           <Badge variant="secondary" className="text-sm font-medium">
@@ -219,6 +219,6 @@ export function BulkActionsBar({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </div>
   );
-}
+});

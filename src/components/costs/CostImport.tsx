@@ -65,6 +65,9 @@ export function CostImport({ onSuccess }: CostImportProps) {
     for (const sheetName of workbook.SheetNames) {
       const sheet = workbook.Sheets[sheetName];
       
+      // Read raw array to get original article values (XLSX may convert "324021Wb" to number 324021)
+      const rawRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: null, raw: false });
+      
       // Get raw data with headers
       const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null });
       
@@ -72,6 +75,13 @@ export function CostImport({ onSuccess }: CostImportProps) {
       
       // Get headers from first row
       const headers = Object.keys(jsonData[0] || {});
+      
+      // Find article column index in raw data
+      const headerRow = rawRows[0] as (string | null)[];
+      const articleColIdx = headerRow ? headerRow.findIndex(h => {
+        const n = String(h || '').toLowerCase().trim();
+        return n === 'артикул' || n === 'article';
+      }) : -1;
       
       // Build header map using excelColumnMap (header-based matching)
       // Then apply positional overrides for columns with known typos
@@ -100,12 +110,19 @@ export function CostImport({ onSuccess }: CostImportProps) {
       if (!articleHeader) continue;
       
       // Process rows
-      for (const row of jsonData) {
+      for (let rowIdx = 0; rowIdx < jsonData.length; rowIdx++) {
+        const row = jsonData[rowIdx];
         const articleValue = row[articleHeader];
         if (!articleValue) continue;
         
-        // Normalize article: convert to string, trim, handle numbers
-        const article = String(articleValue).trim();
+        // Use raw formatted string from raw rows if available (preserves "324021Wb" etc.)
+        let article: string;
+        if (articleColIdx >= 0 && rawRows[rowIdx + 1]) {
+          const rawVal = (rawRows[rowIdx + 1] as unknown[])[articleColIdx];
+          article = String(rawVal ?? articleValue).trim();
+        } else {
+          article = String(articleValue).trim();
+        }
         if (!article) continue;
         
         // Get or create article entry - merge values from all rows with same article
