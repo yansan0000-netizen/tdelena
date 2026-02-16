@@ -210,13 +210,23 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
         return null;
       };
 
-      // Get sales analytics
-      const { data: analytics, error: analyticsError } = await supabase
-        .from('sales_analytics')
-        .select('*')
-        .eq('run_id', filters.runId);
+      // Get sales analytics with pagination (bypass 1000 row limit)
+      const analytics: any[] = [];
+      let analyticsFrom = 0;
+      const ANALYTICS_PAGE_SIZE = 1000;
+      while (true) {
+        const { data, error: analyticsError } = await supabase
+          .from('sales_analytics')
+          .select('*')
+          .eq('run_id', filters.runId)
+          .range(analyticsFrom, analyticsFrom + ANALYTICS_PAGE_SIZE - 1);
+        if (analyticsError) throw analyticsError;
+        if (!data || data.length === 0) break;
+        analytics.push(...data);
+        if (data.length < ANALYTICS_PAGE_SIZE) break;
+        analyticsFrom += ANALYTICS_PAGE_SIZE;
+      }
 
-      if (analyticsError) throw analyticsError;
 
       // Filter out hidden articles
       const filteredAnalytics = analytics.filter(
