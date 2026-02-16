@@ -103,13 +103,22 @@ export function useDashboard(runId: string | null) {
           .map(c => c.article.toLowerCase().trim())
       );
 
-      // Get sales analytics
-      const { data: allAnalytics, error: analyticsError } = await supabase
-        .from('sales_analytics')
-        .select('*')
-        .eq('run_id', runId);
-
-      if (analyticsError) throw analyticsError;
+      // Get sales analytics with pagination (bypass 1000 row limit)
+      const allAnalytics: any[] = [];
+      let analyticsFrom = 0;
+      const ANALYTICS_PAGE_SIZE = 1000;
+      while (true) {
+        const { data, error: analyticsError } = await supabase
+          .from('sales_analytics')
+          .select('*')
+          .eq('run_id', runId)
+          .range(analyticsFrom, analyticsFrom + ANALYTICS_PAGE_SIZE - 1);
+        if (analyticsError) throw analyticsError;
+        if (!data || data.length === 0) break;
+        allAnalytics.push(...data);
+        if (data.length < ANALYTICS_PAGE_SIZE) break;
+        analyticsFrom += ANALYTICS_PAGE_SIZE;
+      }
 
       // Filter out hidden articles
       const analytics = allAnalytics.filter(

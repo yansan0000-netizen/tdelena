@@ -458,15 +458,24 @@ export function useCosts() {
   }[]> => {
     if (!user) return [];
     
-    // Fetch analytics for this run
-    const { data: analyticsData, error: analyticsError } = await supabase
-      .from('sales_analytics')
-      .select('article, total_quantity, total_revenue, current_stock, avg_price, abc_group, xyz_group, sales_velocity_day, days_until_stockout')
-      .eq('run_id', runId);
-    
-    if (analyticsError) {
-      console.error('Error fetching analytics:', analyticsError);
-      return [];
+    // Fetch analytics for this run with pagination (bypass 1000 row limit)
+    const analyticsData: any[] = [];
+    let analyticsFrom = 0;
+    const ANALYTICS_PAGE_SIZE = 1000;
+    while (true) {
+      const { data, error: analyticsError } = await supabase
+        .from('sales_analytics')
+        .select('article, total_quantity, total_revenue, current_stock, avg_price, abc_group, xyz_group, sales_velocity_day, days_until_stockout')
+        .eq('run_id', runId)
+        .range(analyticsFrom, analyticsFrom + ANALYTICS_PAGE_SIZE - 1);
+      if (analyticsError) {
+        console.error('Error fetching analytics:', analyticsError);
+        return [];
+      }
+      if (!data || data.length === 0) break;
+      analyticsData.push(...data);
+      if (data.length < ANALYTICS_PAGE_SIZE) break;
+      analyticsFrom += ANALYTICS_PAGE_SIZE;
     }
     
     // Fetch all costs for user

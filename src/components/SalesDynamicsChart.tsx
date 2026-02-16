@@ -107,15 +107,25 @@ export function SalesDynamicsChart({ runId }: SalesDynamicsChartProps) {
     const loadData = async () => {
       setLoading(true);
       
-      // Load analytics data for filter options
-      const { data: analytics } = await supabase
-        .from('sales_analytics')
-        .select('article, category, abc_group, xyz_group, product_group, total_revenue')
-        .eq('run_id', runId)
-        .order('total_revenue', { ascending: false });
+      // Load analytics data for filter options with pagination (bypass 1000 row limit)
+      const allAnalytics: any[] = [];
+      let analyticsFrom = 0;
+      const ANALYTICS_PAGE_SIZE = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from('sales_analytics')
+          .select('article, category, abc_group, xyz_group, product_group, total_revenue')
+          .eq('run_id', runId)
+          .order('total_revenue', { ascending: false })
+          .range(analyticsFrom, analyticsFrom + ANALYTICS_PAGE_SIZE - 1);
+        if (error || !data || data.length === 0) break;
+        allAnalytics.push(...data);
+        if (data.length < ANALYTICS_PAGE_SIZE) break;
+        analyticsFrom += ANALYTICS_PAGE_SIZE;
+      }
       
-      if (analytics) {
-        setArticleData(analytics);
+      if (allAnalytics.length > 0) {
+        setArticleData(allAnalytics);
       }
 
       // Load raw period data
