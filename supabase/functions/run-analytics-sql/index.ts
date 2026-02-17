@@ -12,7 +12,7 @@ interface RequestBody {
 }
 
 const BATCH_SIZE_PHASE1 = 1500; // Phase 1 is lighter, can handle more
-const BATCH_SIZE_PHASE2 = 500;  // Phase 2 XYZ is heavy, smaller batches for stability
+const BATCH_SIZE_PHASE2 = 200;  // Phase 2 XYZ is heavy, small batches to avoid timeout
 
 // Helper to append log entry to the runs table
 async function appendLog(
@@ -166,7 +166,6 @@ serve(async (req) => {
     // Phase 2: XYZ calculation (BATCHED to avoid timeout)
     console.log(`[run-analytics-sql] Phase 2: XYZ calculation (batched)...`);
     const phase2Start = Date.now();
-    let phase2Offset = 0;
     let phase2Total = 0;
 
     while (true) {
@@ -175,24 +174,25 @@ serve(async (req) => {
         progress_message: `Расчёт XYZ: ${phase2Total} артикулов...` 
       }).eq('id', runId);
 
+      // IMPORTANT: Always use offset=0 because the SQL function filters by xyz_group IS NULL,
+      // so already-processed rows are automatically excluded from the next batch
       const { data: batchResult, error: batchError } = await supabase
         .rpc('analytics_phase2_xyz_batch', { 
           p_run_id: runId, 
-          p_offset: phase2Offset, 
+          p_offset: 0, 
           p_limit: BATCH_SIZE_PHASE2 
         });
 
       if (batchError) {
-        throw new Error(`Phase 2 batch failed at offset ${phase2Offset}: ${batchError.message}`);
+        throw new Error(`Phase 2 batch failed at batch ${phase2Total}: ${batchError.message}`);
       }
 
       const processedCount = typeof batchResult === 'number' ? batchResult : 0;
-      console.log(`[run-analytics-sql] Phase 2 batch: offset=${phase2Offset}, processed=${processedCount}`);
+      console.log(`[run-analytics-sql] Phase 2 batch: processed=${processedCount}, total so far=${phase2Total + processedCount}`);
       
       if (processedCount === 0) break;
 
       phase2Total += processedCount;
-      phase2Offset += BATCH_SIZE_PHASE2;
     }
 
     const phase2Time = Date.now() - phase2Start;
