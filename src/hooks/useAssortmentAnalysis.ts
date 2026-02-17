@@ -341,17 +341,17 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
         let profitPerUnit: number | null = null;
         const unitCost = econ?.unit_cost_real_rub ?? null;
         
-        // Use selling price: prefer retail_price_rub, then avg_price from sales
-        const sellingPrice = econ?.retail_price_rub || a.avg_price || 0;
+        // Always prefer actual selling price from sales data for profit calculation
+        const actualAvgPrice = a.avg_price || 0;
         
-        if (econ?.margin_pct !== null && econ?.margin_pct !== undefined) {
-          // Use stored margin if available
+        if (unitCost !== null && unitCost > 0 && actualAvgPrice > 0) {
+          // Calculate profit based on actual selling price, not nominal retail
+          profitPerUnit = actualAvgPrice - unitCost;
+          marginPct = (profitPerUnit / actualAvgPrice) * 100;
+        } else if (econ?.margin_pct !== null && econ?.margin_pct !== undefined) {
+          // Fallback to stored margin when no cost data available
           marginPct = econ.margin_pct;
-          profitPerUnit = econ.profit_per_unit ?? (sellingPrice > 0 && unitCost ? sellingPrice - unitCost : null);
-        } else if (unitCost !== null && unitCost > 0 && sellingPrice > 0) {
-          // Calculate margin from cost and price
-          profitPerUnit = sellingPrice - unitCost;
-          marginPct = (profitPerUnit / sellingPrice) * 100;
+          profitPerUnit = econ.profit_per_unit ?? null;
         }
         
         const totalProfit = profitPerUnit !== null && a.total_quantity 
