@@ -11,7 +11,8 @@ interface RequestBody {
   userId: string;
 }
 
-const BATCH_SIZE = 1500; // Process 1500 articles per batch (~30 sec)
+const BATCH_SIZE_PHASE1 = 1500; // Phase 1 is lighter, can handle more
+const BATCH_SIZE_PHASE2 = 500;  // Phase 2 XYZ is heavy, smaller batches for stability
 
 // Helper to append log entry to the runs table
 async function appendLog(
@@ -139,7 +140,7 @@ serve(async (req) => {
         .rpc('analytics_phase1_batch', { 
           p_run_id: runId, 
           p_offset: phase1Offset, 
-          p_limit: BATCH_SIZE 
+          p_limit: BATCH_SIZE_PHASE1 
         });
 
       if (batchError) {
@@ -152,7 +153,7 @@ serve(async (req) => {
       if (processedCount === 0) break;
 
       phase1Total += processedCount;
-      phase1Offset += BATCH_SIZE;
+      phase1Offset += BATCH_SIZE_PHASE1;
     }
 
     const phase1Time = Date.now() - phase1Start;
@@ -178,7 +179,7 @@ serve(async (req) => {
         .rpc('analytics_phase2_xyz_batch', { 
           p_run_id: runId, 
           p_offset: phase2Offset, 
-          p_limit: BATCH_SIZE 
+          p_limit: BATCH_SIZE_PHASE2 
         });
 
       if (batchError) {
@@ -191,7 +192,7 @@ serve(async (req) => {
       if (processedCount === 0) break;
 
       phase2Total += processedCount;
-      phase2Offset += BATCH_SIZE;
+      phase2Offset += BATCH_SIZE_PHASE2;
     }
 
     const phase2Time = Date.now() - phase2Start;
