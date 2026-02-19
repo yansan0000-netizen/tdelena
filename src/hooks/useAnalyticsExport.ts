@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import { compareSizesAsc } from '@/lib/sizeSort';
 import {
   AnalyticsRow,
   UnitEconData,
@@ -191,7 +192,7 @@ export function useAnalyticsExport(runId: string | undefined) {
       xyzGroups: Array.from(xyzGroups).sort(),
       productGroups: Array.from(productGroups).sort(),
       articles: Array.from(articles).sort(),
-      sizes: Array.from(sizes).sort(),
+      sizes: Array.from(sizes).sort(compareSizesAsc),
     };
   }, [analyticsData, periodSalesData]);
 
