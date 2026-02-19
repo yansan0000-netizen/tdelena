@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { compareSizesAsc } from '../sizeSort';
 import { 
   getAllForecasts, 
   detectSeasonality, 
@@ -247,7 +248,7 @@ export function generateAnalyticsReport(
     });
   }
 
-  // Sort data: group by article (without size), then sort sizes descending
+  // Sort data: group by article (without size), then sort sizes ascending (smallest first)
   const sortedData = [...enrichedData].sort((a, b) => {
     // First sort by base article (without size)
     const aBase = a.article.replace(/[\/\-]\d+$/, '');
@@ -255,10 +256,8 @@ export function generateAnalyticsReport(
     if (aBase !== bBase) {
       return aBase.localeCompare(bBase, 'ru');
     }
-    // Then sort by size descending (larger sizes first)
-    const aSize = parseInt(a.size || '0') || 0;
-    const bSize = parseInt(b.size || '0') || 0;
-    return bSize - aSize;
+    // Then sort by size ascending (smaller sizes first)
+    return compareSizesAsc(a.size, b.size);
   });
 
   // Main data sheet with forecasts
