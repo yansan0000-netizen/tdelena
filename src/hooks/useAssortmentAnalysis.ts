@@ -302,36 +302,44 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
         }
       });
 
-      // Helper to extract base article (e.g., "12208а" from both "М12208а" and "12208а")
-      const getBaseArticle = (article: string): string => {
-        const normalized = article.toLowerCase().trim();
-        // Extract numeric core + optional trailing letter, ignoring leading letter prefix
-        const match = normalized.match(/(\d{4,6}[а-яa-z]{0,3})/i);
-        return match ? match[1] : normalized.replace(/^[а-яa-z]+/i, '').slice(0, 8);
+      // Helper: strip leading "М" prefix from articles
+      const stripMPrefix = (article: string): string => {
+        const s = article.toLowerCase().trim();
+        return (s.startsWith('м') && s.length > 1 && /\d/.test(s.charAt(1)))
+          ? s.substring(1) : s;
       };
 
-      // Create lookup maps: exact match first, then base article match
+      // Create lookup maps: exact, stripped (no М), and entries for prefix matching
       const exactEconMap = new Map(
         unitEcon.map(e => [e.article.toLowerCase().trim(), e])
       );
-      
-      // Group by base article for fuzzy matching
-      const baseEconMap = new Map<string, typeof unitEcon[0]>();
+      const strippedEconMap = new Map<string, typeof unitEcon[0]>();
+      const strippedEntries: [string, typeof unitEcon[0]][] = [];
       unitEcon.forEach(e => {
-        const base = getBaseArticle(e.article);
-        // Prefer entry with unit_cost_real_rub
-        if (!baseEconMap.has(base) || (e.unit_cost_real_rub && !baseEconMap.get(base)?.unit_cost_real_rub)) {
-          baseEconMap.set(base, e);
+        const stripped = stripMPrefix(e.article);
+        if (!strippedEconMap.has(stripped) || (e.unit_cost_real_rub && !strippedEconMap.get(stripped)?.unit_cost_real_rub)) {
+          strippedEconMap.set(stripped, e);
         }
+        strippedEntries.push([stripped, e]);
       });
+
+      const findEcon = (article: string) => {
+        const key = article.toLowerCase().trim();
+        const stripped = stripMPrefix(article);
+        // 1. Exact
+        if (exactEconMap.has(key)) return exactEconMap.get(key)!;
+        // 2. Stripped exact
+        if (strippedEconMap.has(stripped)) return strippedEconMap.get(stripped)!;
+        // 3. Prefix match
+        for (const [sk, item] of strippedEntries) {
+          if (sk.startsWith(stripped) && sk.length > stripped.length) return item;
+        }
+        return null;
+      };
 
       // Merge and calculate recommendations
       const merged: AssortmentProduct[] = filteredAnalytics.map(a => {
-        const articleKey = a.article.toLowerCase().trim();
-        const baseKey = getBaseArticle(a.article);
-        
-        // Try exact match first, then base article match
-        let econ = exactEconMap.get(articleKey) || baseEconMap.get(baseKey) || null;
+        let econ = findEcon(a.article);
         
         // Get forecast data
         const forecast = forecastMap.get(a.article);
