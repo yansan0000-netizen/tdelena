@@ -302,12 +302,12 @@ export function useAssortmentAnalysis(filters: AssortmentFilters) {
         }
       });
 
-      // Helper to extract base article (e.g., "М319114П" from "М319114Пзм")
+      // Helper to extract base article (e.g., "12208а" from both "М12208а" and "12208а")
       const getBaseArticle = (article: string): string => {
         const normalized = article.toLowerCase().trim();
-        // Extract base part: letters/digits up to first lowercase suffix
-        const match = normalized.match(/^([а-яa-z]?\d{5,6}[а-яa-z]?)/i);
-        return match ? match[1] : normalized.slice(0, 8);
+        // Extract numeric core + optional trailing letter, ignoring leading letter prefix
+        const match = normalized.match(/(\d{4,6}[а-яa-z]{0,3})/i);
+        return match ? match[1] : normalized.replace(/^[а-яa-z]+/i, '').slice(0, 8);
       };
 
       // Create lookup maps: exact match first, then base article match
