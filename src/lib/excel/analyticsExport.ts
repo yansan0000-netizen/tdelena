@@ -70,8 +70,10 @@ export interface EnrichedAnalyticsRow extends AnalyticsRow {
  */
 function getBaseArticle(article: string): string {
   const normalized = article.toLowerCase().trim();
-  const match = normalized.match(/^([а-яa-z]?\d{5,6}[а-яa-z]?)/i);
-  return match ? match[1] : normalized.slice(0, 8);
+  // Extract numeric core + optional trailing letter, ignoring leading letter prefix
+  // So both "М12208а" and "12208а" → "12208а"
+  const match = normalized.match(/(\d{4,6}[а-яa-z]{0,3})/i);
+  return match ? match[1] : normalized.replace(/^[а-яa-z]+/i, '').slice(0, 8);
 }
 
 export function enrichAnalyticsWithCosts(
