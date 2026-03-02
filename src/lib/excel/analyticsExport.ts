@@ -66,37 +66,70 @@ export interface EnrichedAnalyticsRow extends AnalyticsRow {
 }
 
 /**
- * Extract base article for fuzzy matching (e.g., "М319114Пзм" → "м319114п")
+ * Strip leading "М"/"м" prefix commonly found in unit economics articles.
+ * "М12004а" → "12004а", "10022" → "10022"
  */
-function getBaseArticle(article: string): string {
-  const normalized = article.toLowerCase().trim();
-  // Extract numeric core + optional trailing letter, ignoring leading letter prefix
-  // So both "М12208а" and "12208а" → "12208а"
-  const match = normalized.match(/(\d{4,6}[а-яa-z]{0,3})/i);
-  return match ? match[1] : normalized.replace(/^[а-яa-z]+/i, '').slice(0, 8);
+function stripMPrefix(article: string): string {
+  const s = article.toLowerCase().trim();
+  return (s.startsWith('м') && s.length > 1 && /\d/.test(s.charAt(1)))
+    ? s.substring(1)
+    : s;
+}
+
+/**
+ * Multi-tier article matching for unit economics lookups.
+ * 1. Exact match (both sides lowered+trimmed)
+ * 2. Stripped match (М prefix removed)
+ * 3. Prefix match (analytics article is prefix of stripped unit_econ article)
+ */
+function buildArticleMatcher<T>(items: T[], getArticle: (item: T) => string, shouldPrefer?: (existing: T, candidate: T) => boolean) {
+  const exactMap = new Map<string, T>();
+  const strippedMap = new Map<string, T>();
+  const strippedEntries: [string, T][] = [];
+
+  items.forEach(item => {
+    const key = getArticle(item).toLowerCase().trim();
+    const stripped = stripMPrefix(getArticle(item));
+
+    if (!exactMap.has(key) || (shouldPrefer && shouldPrefer(exactMap.get(key)!, item))) {
+      exactMap.set(key, item);
+    }
+    if (!strippedMap.has(stripped) || (shouldPrefer && shouldPrefer(strippedMap.get(stripped)!, item))) {
+      strippedMap.set(stripped, item);
+    }
+    strippedEntries.push([stripped, item]);
+  });
+
+  return {
+    find(article: string): T | null {
+      const key = article.toLowerCase().trim();
+      const stripped = stripMPrefix(article);
+
+      // 1. Exact
+      if (exactMap.has(key)) return exactMap.get(key)!;
+      // 2. Stripped exact (e.g., "12004а" = "М12004а" stripped)
+      if (strippedMap.has(stripped)) return strippedMap.get(stripped)!;
+      // 3. Prefix: analytics "10022" matches stripped "10022г"
+      for (const [sk, item] of strippedEntries) {
+        if (sk.startsWith(stripped) && sk.length > stripped.length) return item;
+      }
+      return null;
+    },
+  };
 }
 
 export function enrichAnalyticsWithCosts(
   analytics: AnalyticsRow[],
   costs: UnitEconData[]
 ): EnrichedAnalyticsRow[] {
-  // Exact match map
-  const exactCostMap = new Map<string, UnitEconData>();
-  costs.forEach(c => exactCostMap.set(c.article.toLowerCase().trim(), c));
-
-  // Base article match map (fuzzy)
-  const baseCostMap = new Map<string, UnitEconData>();
-  costs.forEach(c => {
-    const base = getBaseArticle(c.article);
-    if (!baseCostMap.has(base) || (c.unit_cost_real_rub && !baseCostMap.get(base)?.unit_cost_real_rub)) {
-      baseCostMap.set(base, c);
-    }
-  });
+  const matcher = buildArticleMatcher(
+    costs,
+    c => c.article,
+    (existing, candidate) => !existing.unit_cost_real_rub && !!candidate.unit_cost_real_rub,
+  );
 
   return analytics.map(row => {
-    const key = row.article.toLowerCase().trim();
-    const baseKey = getBaseArticle(row.article);
-    const costEntry = exactCostMap.get(key) || baseCostMap.get(baseKey) || null;
+    const costEntry = matcher.find(row.article);
     const unitCost = costEntry?.unit_cost_real_rub || null;
     const avgPriceActual = row.total_quantity > 0 
       ? row.total_revenue / row.total_quantity 
@@ -199,20 +232,12 @@ export function generateAnalyticsReport(
     season: Season;
   }>();
   
-  // Build wholesale price maps: exact + fuzzy (base article)
-  const wholesalePriceExact = new Map<string, number>();
-  const wholesalePriceBase = new Map<string, number>();
-  if (costs) {
-    costs.forEach(c => {
-      if (c.wholesale_price_rub && c.wholesale_price_rub > 0) {
-        wholesalePriceExact.set(c.article.toLowerCase().trim(), c.wholesale_price_rub);
-        const base = getBaseArticle(c.article);
-        if (!wholesalePriceBase.has(base)) {
-          wholesalePriceBase.set(base, c.wholesale_price_rub);
-        }
-      }
-    });
-  }
+  // Build wholesale price matcher using same multi-tier logic
+  const wholesaleCosts = (costs || []).filter(c => c.wholesale_price_rub && c.wholesale_price_rub > 0);
+  const wholesaleMatcher = buildArticleMatcher(
+    wholesaleCosts,
+    c => c.article,
+  );
   
   if (filteredPeriodSales && filteredPeriodSales.length > 0) {
     // Group period sales by article
@@ -265,9 +290,8 @@ export function generateAnalyticsReport(
   // Main data sheet with forecasts
   const reportData = sortedData.map(row => {
     const forecast = forecastMap.get(row.article);
-    const articleKey = row.article.toLowerCase().trim();
-    const baseKey = getBaseArticle(row.article);
-    const wholesalePrice = wholesalePriceExact.get(articleKey) || wholesalePriceBase.get(baseKey);
+    const wholesaleMatch = wholesaleMatcher.find(row.article);
+    const wholesalePrice = wholesaleMatch?.wholesale_price_rub;
     
     // Apply custom rules to get updated recommendation
     const enrichedRow = 'unit_cost_real_rub' in row ? row as EnrichedAnalyticsRow : undefined;
