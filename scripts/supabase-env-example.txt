@@ -1,0 +1,109 @@
+############
+# Supabase Docker Compose Configuration
+# For tdelena.ru deployment
+# Generated: 2024
+############
+
+#################################################
+# Secrets (CRITICAL - Change before first start!)
+#################################################
+
+# PostgreSQL superuser password
+POSTGRES_PASSWORD=aH9#mK2$pL7@vN4&xQ8*wE5^jR3(
+
+# JWT signing secret (min 32 chars)
+JWT_SECRET=cXJ2aXRLdWJlcm5ldGVzU3VwYWJhc2Ujc2VjcmV0
+
+# ANON_KEY - JWT for anonymous users
+# Generated with: {"role":"anon","iss":"supabase","iat":1700000000,"exp":2000000000}
+ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjIwMDAwMDAwMH0.sample_key_replace_with_real
+
+# SERVICE_ROLE_KEY - JWT for admin operations  
+# Generated with: {"role":"service_role","iss":"supabase","iat":1700000000,"exp":2000000000}
+SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UiLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6MjAwMDAwMDAwMH0.sample_key_replace_with_real
+
+#################################################
+# URLs (Replace with your actual domain)
+#################################################
+
+# Your API domain
+API_EXTERNAL_URL=https://api.tdelena.ru
+
+# Public Supabase URL (usually same as API)
+SUPABASE_PUBLIC_URL=https://api.tdelena.ru
+
+# Your frontend domain
+SITE_URL=https://tdelena.ru
+
+# Storage URL
+SUPABASE_STORAGE_URL=https://api.tdelena.ru/storage/v1
+
+#################################################
+# Database Settings
+#################################################
+
+POSTGRES_HOST=db
+POSTGRES_DB=postgres
+POSTGRES_PORT=5432
+POSTGRES_POOL_SIZE=20
+
+#################################################
+# Auth Settings
+#################################################
+
+# Enable/disable signup
+DISABLE_SIGNUP=false
+
+# Session durations
+JWT_EXPIRY=3600
+REFRESH_TOKEN_EXPIRY=604800
+
+# External auth providers (set to empty if not used)
+ENABLE_EMAIL_SIGNUP=true
+ENABLE_EMAIL_AUTOCONFIRM=false
+
+# SMTP for email (configure with your provider)
+SMTP_HOST=
+SMTP_PORT=
+SMTP_USER=
+SMTP_PASS=
+SMTP_SENDER_NAME=TDElena
+SMTP_ADMIN_EMAIL=
+
+#################################################
+# Storage Settings
+#################################################
+
+# 50MB file size limit (important for Excel files)
+STORAGE_FILE_SIZE_LIMIT=52428800
+
+# Storage backends (local file system)
+STORAGE_BACKEND=fs
+
+#################################################
+# Realtime Settings
+#################################################
+
+ENABLE_REALTIME=true
+
+#################################################
+# Additional Settings
+#################################################
+
+# Analytics (disable to save resources)
+ANALYTICS=false
+
+# Logs retention
+LOGFLARE_API_KEY=
+LOGFLARE_SOURCE_TOKEN=
+
+# Functions secrets (your custom secrets)
+LOVABLE_API_KEY=your_lovable_api_key_here
+
+#################################################
+# Ports (don't expose 5432 to internet without firewall!)
+#################################################
+
+KONG_HTTP_PORT=8000
+KONG_HTTPS_PORT=8443
+POSTGRES_PORT=5432
