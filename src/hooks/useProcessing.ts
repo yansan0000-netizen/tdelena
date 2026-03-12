@@ -30,7 +30,7 @@ export function useProcessing() {
   });
   
   const currentRunIdRef = useRef<string | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Cleanup timeout on unmount
   useEffect(() => {
